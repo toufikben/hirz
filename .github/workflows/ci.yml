@@ -14,15 +14,71 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
-      - name: shared
+      - name: Build and test
+        run: ./gradlew --no-daemon :shared:allTests :server:test :sim:test :sim:compileIntegrationTestKotlin :app:testDebugUnitTest :app:assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hirz-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+  node-guards:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Guard tests
+        run: node --test "infra/traccar/tools/*.test.mjs" "tools/forbidden-claims/*.test.mjs"
+      - name: Traccar template
+        run: node infra/traccar/tools/check-config.mjs --template infra/traccar/hirz.template.xml
+      - name: Forbidden claims in app strings
+        run: node tools/forbidden-claims/check.mjs "app/src/**/strings.xml"
+
+  traccar-integration:
+    needs: gradle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Render CI Traccar config
+        # CI-only override: web.address must be reachable from the runner through Docker port mapping.
+        run: |
+          password=$(openssl rand -hex 16)
+          sed -e "s/\${HIRZ_TRACCAR_DB_PASSWORD}/$password/" \
+              -e "s#<entry key='web.address'>127.0.0.1</entry>#<entry key='web.address'>0.0.0.0</entry>#" \
+              infra/traccar/hirz.template.xml > "$RUNNER_TEMP/traccar.xml"
+          grep -q "0.0.0.0" "$RUNNER_TEMP/traccar.xml"
+          ! grep -q '\${' "$RUNNER_TEMP/traccar.xml"
+      - name: Start Traccar 6.16.0
+        run: |
+          docker run -d --name traccar -p 8082:8082 -p 5023:5023 -p 5055:5055 \
+            -v "$RUNNER_TEMP/traccar.xml:/opt/traccar/conf/traccar.xml:ro" traccar/traccar:6.16.0
+          for i in $(seq 1 120); do
+            if curl -fsS http://localhost:8082/api/server > /dev/null; then echo "Traccar up after ${i}s"; exit 0; fi
+            sleep 1
+          done
+          docker logs traccar
+          exit 1
+      - name: Round-trip a simulated GT06 fix
+        env:
+          TRACCAR_URL: http://localhost:8082
+          TRACCAR_GT06_HOST: localhost
+          TRACCAR_GT06_PORT: '5023'
+        run: ./gradlew --no-daemon :sim:integrationTest
+      - name: Integration tests really ran (a skip must fail)
+        run: |
+          report=sim/build/test-results/integrationTest/TEST-dz.hirz.sim.TraccarRoundTripIT.xml
+          cat "$report" | head -3
+          grep -q 'tests="2"' "$report"
+          grep -q 'skipped="0"' "$report"
+          grep -q 'failures="0"' "$report"
+          grep -q 'errors="0"' "$report"
+      - name: Traccar logs
         if: always()
-        run: ./gradlew --no-daemon :shared:allTests
-      - name: server
-        if: always()
-        run: ./gradlew --no-daemon :server:test
-      - name: sim
-        if: always()
-        run: ./gradlew --no-daemon :sim:test :sim:compileIntegrationTestKotlin
-      - name: app
-        if: always()
-        run: ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug
+        run: docker logs traccar 2>&1 | tail -80
