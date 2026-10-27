@@ -39,3 +39,16 @@ test('the CLI fails when the globs match no file', async () => {
   assert.equal(run.status, 1, run.stderr);
   assert.match(run.stderr, /no file matched/);
 });
+
+// Final review (Important #2): Android string escaping and Unicode variants must not hide a claim.
+test('flags the escaped apostrophe Android strings.xml requires', () => {
+  assert.deepEqual(findClaims("Empêche l\'enlèvement"), ["empêche l'enlèvement"]);
+  assert.deepEqual(findClaims('Empêche l&apos;enlèvement'), ["empêche l'enlèvement"]);
+  assert.deepEqual(findClaims('Empêche l&#39;enlèvement'), ["empêche l'enlèvement"]);
+});
+
+test('flags decomposed accents and odd spacing', () => {
+  assert.deepEqual(findClaims('empêche l\'enlèvement'), ["empêche l'enlèvement"]);
+  assert.deepEqual(findClaims('prevents kidnapping'), ['prevents kidnapping']);
+  assert.deepEqual(findClaims('prevents   kidnapping'), ['prevents kidnapping']);
+});

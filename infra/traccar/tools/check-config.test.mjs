@@ -64,3 +64,25 @@ test('rejects self-registration keys', () => {
   const reg = template.replace('</properties>', "    <entry key='web.registration'>true</entry>\n</properties>");
   assert.ok(errorsOf(reg).some((e) => e.includes('web.registration')));
 });
+
+// Final review (Important #1): comments, spaced attributes and CDATA must not hide or fake entries.
+test('a commented-out entry does not count as present', () => {
+  const commented = template.replace("<entry key='geocoder.enable'>false</entry>", "<!-- <entry key='geocoder.enable'>false</entry> -->");
+  assert.ok(errorsOf(commented).includes('geocoder.enable is required'));
+  const web = template.replace("<entry key='web.address'>127.0.0.1</entry>", "<!-- <entry key='web.address'>127.0.0.1</entry> -->");
+  assert.ok(errorsOf(web).includes('web.address is required'));
+});
+
+test('spaces around = are parsed, so a later override is caught', () => {
+  const spaced = template.replace('</properties>', "    <entry key = 'geocoder.enable'>true</entry>\n</properties>");
+  const errors = errorsOf(spaced);
+  assert.ok(errors.includes('geocoder.enable is defined twice in one config'), errors.join('\n'));
+  assert.ok(errors.some((e) => e.startsWith('geocoder.enable:')));
+});
+
+test('an entry the parser cannot read fails instead of being skipped', () => {
+  const cdata = template.replace("<entry key='geocoder.enable'>false</entry>", "<entry key='geocoder.enable'><![CDATA[true]]></entry>");
+  assert.ok(errorsOf(cdata).some((e) => e.includes('unreadable')), errorsOf(cdata).join('\n'));
+  const entity = template.replace("<entry key='geocoder.enable'>false</entry>", "<entry key='geocoder.enable'>&#116;rue</entry>");
+  assert.ok(errorsOf(entity).some((e) => e.includes('unreadable')), errorsOf(entity).join('\n'));
+});

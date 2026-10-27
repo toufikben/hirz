@@ -5,9 +5,16 @@ import { fileURLToPath } from 'node:url';
 
 const PHRASES = JSON.parse(readFileSync(new URL('./phrases.json', import.meta.url), 'utf8'));
 
-/** Strips Arabic diacritics and tatweel, folds alef/yeh variants and apostrophes, lowercases. */
+/**
+ * Decodes Android/XML apostrophe escapes, composes accents (NFC), strips Arabic diacritics and tatweel,
+ * folds alef/yeh variants and apostrophes, collapses whitespace, lowercases.
+ */
 export function normalize(text) {
   return text
+    .replace(/&apos;|&#39;|&#x27;|\\'/gi, "'")
+    .replace(/&quot;|\\"/gi, '"')
+    .normalize('NFC')
+    .replace(/\s+/g, ' ')
     .replace(/[ً-ٰٟـ]/g, '')
     .replace(/[أإآ]/g, 'ا')
     .replace(/ى/g, 'ي')

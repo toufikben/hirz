@@ -32,12 +32,19 @@ export function validateConfig(xml, { allowPlaceholders = false } = {}) {
   const errors = [];
   const entries = new Map();
   const duplicates = new Set();
-  const entryRe = /<entry\s+key=(['"])([^'"]+)\1\s*(?:\/>|>([^<]*?)<\/entry>)/g;
-  for (const match of xml.matchAll(entryRe)) {
+  // Comments are invisible to Traccar, so they must be invisible here too.
+  const body = xml.replace(/<!--[\s\S]*?-->/g, '');
+  const entryRe = /<entry\s+key\s*=\s*(['"])([^'"]+)\1\s*(?:\/>|>([^<&]*?)<\/entry>)/g;
+  let parsed = 0;
+  for (const match of body.matchAll(entryRe)) {
+    parsed += 1;
     const key = match[2];
     if (entries.has(key)) duplicates.add(key);
     entries.set(key, (match[3] ?? '').trim());
   }
+  // Anything we cannot read (CDATA, entities, odd markup) could carry a value Traccar would load.
+  const declared = (body.match(/<entry\b/g) ?? []).length;
+  if (declared !== parsed) errors.push(`${declared - parsed} unreadable entry(ies): use plain values without CDATA or entities`);
 
   for (const key of duplicates) errors.push(`${key} is defined twice in one config`);
 
