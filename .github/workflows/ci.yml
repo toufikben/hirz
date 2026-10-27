@@ -23,3 +23,6 @@ jobs:
       - name: sim
         if: always()
         run: ./gradlew --no-daemon :sim:test :sim:compileIntegrationTestKotlin
+      - name: app
+        if: always()
+        run: ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug
