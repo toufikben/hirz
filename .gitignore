@@ -1,0 +1,22 @@
+# Gradle / Kotlin
+.gradle/
+build/
+.kotlin/
+local.properties
+# Android
+*.apk
+*.aab
+*.keystore
+*.jks
+captures/
+# IDE
+.idea/
+*.iml
+.vscode/
+# Node
+node_modules/
+# Traccar local data
+infra/traccar/data/
+infra/traccar/logs/
+# Superpowers workspaces
+.superpowers/

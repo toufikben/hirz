@@ -1,0 +1,7 @@
+Additional confirmations from the follow-up checks (fold into sections above):
+
+- **No README exists** at the repo root — build/run knowledge lives only in `package.json` scripts and the Arabic docs; the server (`npm run server`, port 8787 per `server/index.mjs:6`) has no documented consumer.
+- **Dead theme key drift:** `PrivacyDataService` manages/clears `kidguard_theme` (`src/services/PrivacyDataService.ts:10`), but the theme state is never persisted anywhere (`src/App.tsx:89` — plain `useState('dark')` with no `useEffect` writer, unlike role/lang at `:146-160`). Small but representative of the store-vs-state mismatches in this codebase.
+- **ChildView SOS is countdown-gated manual UI** (`src/components/ChildView.tsx:55-62`), reinforcing that "child side" is just another screen on the same handset — there is no child-device process the parent phone could talk to.
+
+The report in my previous message stands as the final deliverable: single-phone architecture, genuinely tested local safety logic, fake cross-device pairing, non-deployed 72-line sink server, unregistered SMS plugin, and a concrete keep/discard list for the parent-side redesign (keep GeofenceMonitor/RiskEngine/GpsFreshness/ProtectionState/OfflineQueue + tests + CI signing + store assets; discard the role-toggle premise, localStorage-as-record, `server/index.mjs`, DirectSms path, BootReceiver UI launch, and simulation switch).
