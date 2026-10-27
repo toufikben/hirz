@@ -15,4 +15,4 @@ dependencyResolutionManagement {
     }
 }
 
-include(":shared")
+include(":shared", ":server")
