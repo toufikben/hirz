@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Hirz</string>
+    <string name="tagline">Vous aide à détecter tôt et à signaler vite</string>
+    <string name="mode_guardian">Tuteur / propriétaire</string>
+    <string name="mode_companion">Accompagnateur</string>
+    <string name="mode_sms_gateway">Passerelle SMS</string>
+</resources>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Hirz</string>
+    <string name="tagline">Helps you detect early and report fast</string>
+    <string name="mode_guardian">Guardian / owner</string>
+    <string name="mode_companion">Companion</string>
+    <string name="mode_sms_gateway">SMS gateway</string>
+</resources>
