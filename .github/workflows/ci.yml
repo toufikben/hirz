@@ -20,3 +20,6 @@ jobs:
       - name: server
         if: always()
         run: ./gradlew --no-daemon :server:test
+      - name: sim
+        if: always()
+        run: ./gradlew --no-daemon :sim:test :sim:compileIntegrationTestKotlin
