@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <!DOCTYPE properties SYSTEM 'http://java.sun.com/dtd/properties.dtd'>
-<!-- Hirz Traccar config template. Checked by tools/check-config.mjs; render ${...} placeholders before use. -->
+<!-- Hirz Traccar config template. Checked by tools/check-config.mjs; render the placeholders before use. -->
 <properties>
     <entry key='database.driver'>org.h2.Driver</entry>
     <entry key='database.url'>jdbc:h2:./data/database</entry>
