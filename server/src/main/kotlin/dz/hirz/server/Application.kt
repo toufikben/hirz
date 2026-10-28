@@ -4,6 +4,9 @@ import dz.hirz.server.auth.FirebaseTokenVerifier
 import dz.hirz.server.auth.MEMBER_AUTH
 import dz.hirz.server.auth.SOURCE_AUTH
 import dz.hirz.server.auth.installAuth
+import dz.hirz.server.circles.CircleEvents
+import dz.hirz.server.circles.CircleService
+import dz.hirz.server.circles.circleRoutes
 import dz.hirz.server.config.AppConfig
 import dz.hirz.server.db.connectDatabase
 import dz.hirz.server.notify.DisabledNotifier
@@ -36,9 +39,13 @@ fun Application.module(deps: Deps) {
         exception<IllegalArgumentException> { call, e -> call.respond(HttpStatusCode.BadRequest, ApiErrorDto("invalid", e.message)) }
     }
     installAuth(deps.db, deps.verifier)
+    val circles = CircleService(deps.db, deps.clock, CircleEvents.NONE)
     routing {
         healthRoutes(System.getProperty("hirz.version") ?: "dev")
-        authenticate(MEMBER_AUTH) { meRoutes(deps) }
+        authenticate(MEMBER_AUTH) {
+            meRoutes(deps)
+            circleRoutes(circles)
+        }
         authenticate(SOURCE_AUTH) { sourceSelfRoutes(deps) }
     }
 }
