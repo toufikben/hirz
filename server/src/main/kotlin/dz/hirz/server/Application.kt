@@ -14,6 +14,8 @@ import dz.hirz.server.circles.circleRoutes
 import dz.hirz.server.config.AppConfig
 import dz.hirz.server.db.connectDatabase
 import dz.hirz.server.notify.DisabledNotifier
+import dz.hirz.server.places.PlaceService
+import dz.hirz.server.places.placeRoutes
 import dz.hirz.shared.api.ApiErrorDto
 import dz.hirz.shared.rules.RuleConfig
 import io.ktor.http.HttpStatusCode
@@ -45,6 +47,7 @@ fun Application.module(deps: Deps) {
     installAuth(deps.db, deps.verifier)
     val circles = CircleService(deps.db, deps.clock, CircleEvents.NONE)
     val assets = AssetService(deps.db, deps.clock, circles)
+    val places = PlaceService(deps.db, circles, deps.rules.placeMinMarginM)
     routing {
         healthRoutes(System.getProperty("hirz.version") ?: "dev")
         pairRoutes(assets)
@@ -52,6 +55,7 @@ fun Application.module(deps: Deps) {
             meRoutes(deps)
             circleRoutes(circles)
             assetRoutes(assets)
+            placeRoutes(places)
         }
         authenticate(SOURCE_AUTH) {
             sourceSelfRoutes(deps)
