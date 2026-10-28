@@ -13,12 +13,13 @@ import dz.hirz.server.circles.CircleService
 import dz.hirz.server.circles.circleRoutes
 import dz.hirz.server.config.AppConfig
 import dz.hirz.server.db.connectDatabase
+import dz.hirz.server.incidents.IncidentService
+import dz.hirz.server.incidents.incidentRoutes
 import dz.hirz.server.ingest.IngestService
 import dz.hirz.server.ingest.ingestRoutes
 import dz.hirz.server.jobs.SilenceScanner
-import dz.hirz.server.notify.DisabledNotifier
+import dz.hirz.server.notify.FcmNotifier
 import dz.hirz.server.rules.FindingRecorder
-import dz.hirz.server.rules.IncidentSink
 import dz.hirz.server.rules.RulesEngine
 import dz.hirz.server.places.PlaceService
 import dz.hirz.server.places.placeRoutes
@@ -54,7 +55,8 @@ fun Application.module(deps: Deps) {
     val circles = CircleService(deps.db, deps.clock, CircleEvents.NONE)
     val assets = AssetService(deps.db, deps.clock, circles)
     val places = PlaceService(deps.db, circles, deps.rules.placeMinMarginM)
-    val recorder = FindingRecorder(deps.db, deps.clock, IncidentSink.NONE)
+    val incidents = IncidentService(deps.db, deps.clock, deps.notifier, circles)
+    val recorder = FindingRecorder(deps.db, deps.clock, incidents)
     val engine = RulesEngine(deps.db, deps.rules, recorder)
     val ingest = IngestService(deps.db, deps.clock, deps.rules, listOf(engine) + deps.extraIngestListeners)
     if (deps.startJobs) SilenceScanner(deps.db, deps.clock, deps.rules, recorder).start(this)
@@ -66,6 +68,7 @@ fun Application.module(deps: Deps) {
             circleRoutes(circles)
             assetRoutes(assets)
             placeRoutes(places)
+            incidentRoutes(incidents)
         }
         authenticate(SOURCE_AUTH) {
             sourceSelfRoutes(deps)
@@ -77,12 +80,13 @@ fun Application.module(deps: Deps) {
 
 fun main() {
     val cfg = AppConfig.fromEnv()
-    val verifier = cfg.firebaseProjectId?.let { FirebaseTokenVerifier(FirebaseTokenVerifier.firebaseApp(it)) }
-        ?: error("HIRZ_FIREBASE_PROJECT_ID is required: members sign in with Firebase")
+    val firebase = FirebaseTokenVerifier.firebaseApp(
+        cfg.firebaseProjectId ?: error("HIRZ_FIREBASE_PROJECT_ID is required: members sign in with Firebase"),
+    )
     val deps = Deps(
         db = connectDatabase(cfg),
-        verifier = verifier,
-        notifier = DisabledNotifier,
+        verifier = FirebaseTokenVerifier(firebase),
+        notifier = FcmNotifier(firebase),
         clock = Clock.systemUTC(),
         rules = RuleConfig.DEFAULT,
     )
