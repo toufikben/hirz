@@ -7,6 +7,19 @@ on:
 jobs:
   gradle:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: hirz
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      HIRZ_TEST_DB_URL: jdbc:postgresql://localhost:5432/hirz
+      HIRZ_TEST_DB_USER: postgres
+      HIRZ_TEST_DB_PASSWORD: postgres
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -14,8 +27,15 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
-      - name: Build and test
-        run: ./gradlew --no-daemon :shared:allTests :server:test :sim:test :sim:compileIntegrationTestKotlin :app:testDebugUnitTest :app:assembleDebug
+      - name: shared
+        if: always()
+        run: ./gradlew --no-daemon :shared:allTests
+      - name: server
+        if: always()
+        run: ./gradlew --no-daemon :server:test
+      - name: sim and app
+        if: always()
+        run: ./gradlew --no-daemon :sim:test :sim:compileIntegrationTestKotlin :app:testDebugUnitTest :app:assembleDebug
       - uses: actions/upload-artifact@v4
         with:
           name: hirz-debug-apk
