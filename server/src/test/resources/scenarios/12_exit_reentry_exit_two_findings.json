@@ -1,0 +1,72 @@
+{
+  "name": "12_exit_reentry_exit_two_findings",
+  "places": [
+    {
+      "name": "School",
+      "kind": "school",
+      "shape": {
+        "type": "circle",
+        "center": {
+          "lat": 36.7538,
+          "lon": 3.0588
+        },
+        "radiusM": 100
+      },
+      "marginM": 50
+    }
+  ],
+  "signals": [
+    {
+      "t": 0,
+      "n": 0
+    },
+    {
+      "t": 10,
+      "n": 0
+    },
+    {
+      "t": 20,
+      "n": 200
+    },
+    {
+      "t": 30,
+      "n": 200
+    },
+    {
+      "t": 40,
+      "n": 200
+    },
+    {
+      "t": 50,
+      "n": 0
+    },
+    {
+      "t": 60,
+      "n": 0
+    },
+    {
+      "t": 70,
+      "n": 200
+    },
+    {
+      "t": 80,
+      "n": 200
+    },
+    {
+      "t": 90,
+      "n": 200
+    }
+  ],
+  "expect": [
+    {
+      "rule": "PLACE_EXIT",
+      "tier": "P1",
+      "atSignal": 4
+    },
+    {
+      "rule": "PLACE_EXIT",
+      "tier": "P1",
+      "atSignal": 9
+    }
+  ]
+}

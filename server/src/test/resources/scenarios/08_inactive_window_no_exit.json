@@ -1,0 +1,50 @@
+{
+  "name": "08_inactive_window_no_exit",
+  "places": [
+    {
+      "name": "School",
+      "kind": "school",
+      "shape": {
+        "type": "circle",
+        "center": {
+          "lat": 36.7538,
+          "lon": 3.0588
+        },
+        "radiusM": 100
+      },
+      "marginM": 50,
+      "activeHours": [
+        {
+          "daysOfWeek": [
+            1
+          ],
+          "startMinute": 0,
+          "endMinute": 1440
+        }
+      ]
+    }
+  ],
+  "signals": [
+    {
+      "t": 0,
+      "n": 0
+    },
+    {
+      "t": 10,
+      "n": 0
+    },
+    {
+      "t": 20,
+      "n": 250
+    },
+    {
+      "t": 30,
+      "n": 250
+    },
+    {
+      "t": 40,
+      "n": 250
+    }
+  ],
+  "expect": []
+}

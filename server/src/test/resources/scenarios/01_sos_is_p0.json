@@ -1,0 +1,34 @@
+{
+  "name": "01_sos_is_p0",
+  "places": [
+    {
+      "name": "School",
+      "kind": "school",
+      "shape": {
+        "type": "circle",
+        "center": {
+          "lat": 36.7538,
+          "lon": 3.0588
+        },
+        "radiusM": 100
+      },
+      "marginM": 50
+    }
+  ],
+  "signals": [
+    {
+      "t": 0,
+      "n": 0,
+      "alarms": [
+        "sos"
+      ]
+    }
+  ],
+  "expect": [
+    {
+      "rule": "SOS",
+      "tier": "P0",
+      "atSignal": 0
+    }
+  ]
+}
