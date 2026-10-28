@@ -15,7 +15,11 @@ import dz.hirz.server.config.AppConfig
 import dz.hirz.server.db.connectDatabase
 import dz.hirz.server.ingest.IngestService
 import dz.hirz.server.ingest.ingestRoutes
+import dz.hirz.server.jobs.SilenceScanner
 import dz.hirz.server.notify.DisabledNotifier
+import dz.hirz.server.rules.FindingRecorder
+import dz.hirz.server.rules.IncidentSink
+import dz.hirz.server.rules.RulesEngine
 import dz.hirz.server.places.PlaceService
 import dz.hirz.server.places.placeRoutes
 import dz.hirz.shared.api.ApiErrorDto
@@ -50,7 +54,10 @@ fun Application.module(deps: Deps) {
     val circles = CircleService(deps.db, deps.clock, CircleEvents.NONE)
     val assets = AssetService(deps.db, deps.clock, circles)
     val places = PlaceService(deps.db, circles, deps.rules.placeMinMarginM)
-    val ingest = IngestService(deps.db, deps.clock, deps.rules, deps.extraIngestListeners)
+    val recorder = FindingRecorder(deps.db, deps.clock, IncidentSink.NONE)
+    val engine = RulesEngine(deps.db, deps.rules, recorder)
+    val ingest = IngestService(deps.db, deps.clock, deps.rules, listOf(engine) + deps.extraIngestListeners)
+    if (deps.startJobs) SilenceScanner(deps.db, deps.clock, deps.rules, recorder).start(this)
     routing {
         healthRoutes(System.getProperty("hirz.version") ?: "dev")
         pairRoutes(assets)
