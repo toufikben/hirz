@@ -26,7 +26,7 @@ import kotlin.math.cos
 import kotlin.test.assertEquals
 
 /**
- * Replays recorded scenarios (server/src/test/resources/scenarios/*.json) through the real HTTP ingest,
+ * Replays recorded scenarios (the JSON files in server/src/test/resources/scenarios) through the real HTTP ingest,
  * moving the clock signal by signal, then compares the findings the engine stored with `expect`.
  */
 class ReplayTest {
