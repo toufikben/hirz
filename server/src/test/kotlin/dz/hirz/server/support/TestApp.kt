@@ -22,7 +22,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.util.concurrent.CopyOnWriteArrayList
-import javax.sql.DataSource
+import com.zaxxer.hikari.HikariDataSource
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -56,7 +56,7 @@ class FakeNotifier(
 }
 
 class TestEnv(
-    val db: DataSource = TestDb.fresh(),
+    val db: HikariDataSource = TestDb.fresh(),
     val clock: MutableClock = MutableClock(),
     val notifier: FakeNotifier = FakeNotifier(),
     val rules: RuleConfig = RuleConfig.DEFAULT,
@@ -67,11 +67,17 @@ class TestEnv(
 val testJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
 /** Runs a Ktor test application wired to [env]; [block] gets a JSON-aware client. */
-fun withApp(env: TestEnv = TestEnv(), block: suspend ApplicationTestBuilder.(HttpClient, TestEnv) -> Unit) = testApplication {
-    application { module(env.deps) }
-    val client = createClient {
-        install(ContentNegotiation) { json(testJson) }
-        install(WebSockets)
+fun withApp(env: TestEnv = TestEnv(), block: suspend ApplicationTestBuilder.(HttpClient, TestEnv) -> Unit) {
+    try {
+        testApplication {
+            application { module(env.deps) }
+            val client = createClient {
+                install(ContentNegotiation) { json(testJson) }
+                install(WebSockets)
+            }
+            block(client, env)
+        }
+    } finally {
+        env.db.close()
     }
-    block(client, env)
 }

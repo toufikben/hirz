@@ -12,13 +12,14 @@ import javax.sql.DataSource
  * Opens the pool and migrates. [schema] isolates a database inside one Postgres (tests use one schema each);
  * PostGIS types resolve through `public` and `extensions` (Supabase installs extensions there).
  */
-fun connectDatabase(cfg: AppConfig, schema: String? = null): DataSource {
+fun connectDatabase(cfg: AppConfig, schema: String? = null, poolSize: Int = 10): HikariDataSource {
     val searchPath = listOfNotNull(schema, "public", "extensions").joinToString(",")
     val pool = HikariDataSource(HikariConfig().apply {
         jdbcUrl = cfg.dbUrl
         username = cfg.dbUser
         password = cfg.dbPassword
-        maximumPoolSize = 10
+        maximumPoolSize = poolSize
+        minimumIdle = 0
         connectionInitSql = "SET search_path TO $searchPath"
     })
     Flyway.configure()

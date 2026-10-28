@@ -4,7 +4,7 @@ import dz.hirz.server.config.AppConfig
 import dz.hirz.server.db.connectDatabase
 import java.sql.DriverManager
 import java.util.UUID
-import javax.sql.DataSource
+import com.zaxxer.hikari.HikariDataSource
 
 /**
  * Database for server tests. CI provides a PostGIS service container through HIRZ_TEST_DB_URL;
@@ -17,9 +17,10 @@ object TestDb {
     private val user = System.getenv("HIRZ_TEST_DB_USER") ?: "postgres"
     private val password = System.getenv("HIRZ_TEST_DB_PASSWORD") ?: "postgres"
 
-    fun fresh(): DataSource {
+    /** A small pool on a new schema; callers close it (withApp does) so CI Postgres never runs out of connections. */
+    fun fresh(): HikariDataSource {
         val schema = "t_" + UUID.randomUUID().toString().replace("-", "")
         DriverManager.getConnection(url, user, password).use { it.createStatement().execute("CREATE SCHEMA $schema") }
-        return connectDatabase(AppConfig(url, user, password, firebaseProjectId = null), schema = schema)
+        return connectDatabase(AppConfig(url, user, password, firebaseProjectId = null), schema = schema, poolSize = 3)
     }
 }

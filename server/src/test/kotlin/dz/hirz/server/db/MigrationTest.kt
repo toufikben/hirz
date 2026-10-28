@@ -17,7 +17,7 @@ class MigrationTest {
 
     @Test
     fun migratesCleanDatabase() {
-        TestDb.fresh().connection.use { c ->
+        TestDb.fresh().use { ds -> ds.connection.use { c ->
             c.createStatement().executeQuery("SELECT postgis_version()").use { assertTrue(it.next()) }
             val present = mutableSetOf<String>()
             c.createStatement().executeQuery(
@@ -26,11 +26,12 @@ class MigrationTest {
             val missing = expectedTables.filterNot { it in present }
             assertTrue(missing.isEmpty(), "missing tables: $missing")
         }
+        }
     }
 
     @Test
     fun seedsAlgerianEmergencyNumbers() {
-        TestDb.fresh().connection.use { c ->
+        TestDb.fresh().use { ds -> ds.connection.use { c ->
             c.createStatement().executeQuery(
                 "SELECT count(*), count(verified_at) FROM emergency_numbers WHERE country = 'DZ'",
             ).use { rs ->
@@ -39,15 +40,17 @@ class MigrationTest {
                 assertEquals(0, rs.getInt(2), "no number may be marked verified until confirmed on first run")
             }
         }
+        }
     }
 
     @Test
     fun positionsAreIdempotentPerSourceAndClientId() {
-        TestDb.fresh().connection.use { c ->
+        TestDb.fresh().use { ds -> ds.connection.use { c ->
             c.createStatement().executeQuery(
                 """SELECT count(*) FROM pg_indexes WHERE schemaname = current_schema()
                    AND tablename = 'positions' AND indexdef LIKE '%UNIQUE%source_id%client_id%'""",
             ).use { rs -> rs.next(); assertEquals(1, rs.getInt(1)) }
+        }
         }
     }
 }
