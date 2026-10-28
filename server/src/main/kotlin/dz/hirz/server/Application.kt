@@ -1,5 +1,9 @@
 package dz.hirz.server
 
+import dz.hirz.server.assets.AssetService
+import dz.hirz.server.assets.assetRoutes
+import dz.hirz.server.assets.pairRoutes
+import dz.hirz.server.assets.sourcePushRoutes
 import dz.hirz.server.auth.FirebaseTokenVerifier
 import dz.hirz.server.auth.MEMBER_AUTH
 import dz.hirz.server.auth.SOURCE_AUTH
@@ -40,13 +44,19 @@ fun Application.module(deps: Deps) {
     }
     installAuth(deps.db, deps.verifier)
     val circles = CircleService(deps.db, deps.clock, CircleEvents.NONE)
+    val assets = AssetService(deps.db, deps.clock, circles)
     routing {
         healthRoutes(System.getProperty("hirz.version") ?: "dev")
+        pairRoutes(assets)
         authenticate(MEMBER_AUTH) {
             meRoutes(deps)
             circleRoutes(circles)
+            assetRoutes(assets)
         }
-        authenticate(SOURCE_AUTH) { sourceSelfRoutes(deps) }
+        authenticate(SOURCE_AUTH) {
+            sourceSelfRoutes(deps)
+            sourcePushRoutes(assets)
+        }
     }
 }
 
