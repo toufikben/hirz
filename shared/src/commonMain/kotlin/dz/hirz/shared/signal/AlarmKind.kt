@@ -1,7 +1,16 @@
 package dz.hirz.shared.signal
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-/** Device-raised alarms carried by the signal contract (design §3). */
+/** Device-raised alarms carried by the signal contract (design §3). Wire names follow §3. */
 @Serializable
-enum class AlarmKind { SOS, TAMPER, REMOVAL, POWER_CUT, JAMMING, FALL, DURESS }
+enum class AlarmKind {
+    @SerialName("sos") SOS,
+    @SerialName("tamper") TAMPER,
+    @SerialName("removal") REMOVAL,
+    @SerialName("powerCut") POWER_CUT,
+    @SerialName("jamming") JAMMING,
+    @SerialName("fall") FALL,
+    @SerialName("duress") DURESS,
+}
