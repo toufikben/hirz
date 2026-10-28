@@ -77,7 +77,7 @@ class IngestService(
                 .apply { setObject(1, p.sourceId) }.executeQuery().use { it.next(); Pins(it.getString(1), it.getString(2)) }
             for (s in ordered) {
                 if (s.clientId.isBlank() || s.clientId.length > 64) { rejected += Rejection(s.clientId, "bad_client_id"); continue }
-                if (s.fixTimeMs != null && s.fixTimeMs > now.toEpochMilli() + MAX_FUTURE_MS) {
+                if ((s.fixTimeMs ?: Long.MIN_VALUE) > now.toEpochMilli() + MAX_FUTURE_MS) {
                     rejected += Rejection(s.clientId, "future_fix"); continue
                 }
                 if (s.fixTimeMs != null && s.position == null) { rejected += Rejection(s.clientId, "fix_time_without_position"); continue }
@@ -146,7 +146,8 @@ class IngestService(
 
     /** Implied speed from the previous good fix (by fix time) above the configured limit. */
     private fun isImpossibleJump(c: Connection, sourceId: UUID, s: IngestSignal, fixTime: Instant): Boolean {
-        val point = "SRID=4326;POINT(${s.position!!.lon} ${s.position.lat})"
+        val pos = s.position ?: return false
+        val point = "SRID=4326;POINT(${pos.lon} ${pos.lat})"
         return c.prepareStatement(
             """SELECT ST_Distance(geog, ST_GeogFromText(?)), fix_time FROM positions
                WHERE source_id = ? AND quality = 'ok' AND geog IS NOT NULL AND fix_time <= ?
