@@ -2,8 +2,10 @@ package dz.hirz.shared.api
 
 import kotlinx.serialization.Serializable
 
+// Convention: every nullable DTO field defaults to null, because the server omits nulls on the wire.
+
 @Serializable
-data class MeDto(val memberId: String, val displayName: String?, val lang: String)
+data class MeDto(val memberId: String, val displayName: String? = null, val lang: String)
 
 @Serializable
 data class ApiErrorDto(val error: String, val message: String? = null)
@@ -15,8 +17,8 @@ data class SourceStatusDto(
     val assetId: String,
     val assetName: String,
     val circleName: String,
-    val lastHeartbeatAtMs: Long?,
-    val lastFixAtMs: Long?,
+    val lastHeartbeatAtMs: Long? = null,
+    val lastFixAtMs: Long? = null,
 )
 
 @Serializable

@@ -26,10 +26,10 @@ import javax.sql.DataSource
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
-/** Accepts tokens of the form `test:<uid>`; anything else is rejected. */
+/** Accepts tokens of the form `test.<uid>` (bearer token68 has no colon); anything else is rejected. */
 class FakeTokenVerifier : TokenVerifier {
     override suspend fun verify(idToken: String): VerifiedIdentity? =
-        idToken.removePrefix("test:").takeIf { idToken.startsWith("test:") && it.isNotBlank() }
+        idToken.removePrefix("test.").takeIf { idToken.startsWith("test.") && it.isNotBlank() }
             ?.let { VerifiedIdentity(uid = it, email = "$it@hirz.test", name = it) }
 }
 

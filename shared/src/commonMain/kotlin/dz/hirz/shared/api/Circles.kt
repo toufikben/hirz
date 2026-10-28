@@ -21,7 +21,7 @@ data class CircleDto(val id: String, val name: String, val myRole: Role)
 @Serializable
 data class MemberDto(
     val memberId: String,
-    val displayName: String?,
+    val displayName: String? = null,
     val role: Role,
     val priority: Int,
     val expiresAtMs: Long? = null,

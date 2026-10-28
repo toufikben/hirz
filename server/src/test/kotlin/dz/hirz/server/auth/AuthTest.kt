@@ -23,8 +23,8 @@ class AuthTest {
 
     @Test
     fun meUpsertsMemberOnce() = withApp { client, env ->
-        val first: MeDto = client.get("/v1/me") { bearerAuth("test:u1") }.body()
-        val second: MeDto = client.get("/v1/me") { bearerAuth("test:u1") }.body()
+        val first: MeDto = client.get("/v1/me") { bearerAuth("test.u1") }.body()
+        val second: MeDto = client.get("/v1/me") { bearerAuth("test.u1") }.body()
         assertEquals(first.memberId, second.memberId)
         env.db.connection.use { c ->
             c.createStatement().executeQuery("SELECT count(*) FROM members WHERE firebase_uid = 'u1'").use {
