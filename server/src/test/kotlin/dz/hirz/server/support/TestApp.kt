@@ -3,6 +3,7 @@ package dz.hirz.server.support
 import dz.hirz.server.Deps
 import dz.hirz.server.auth.TokenVerifier
 import dz.hirz.server.auth.VerifiedIdentity
+import dz.hirz.server.ingest.IngestListener
 import dz.hirz.server.module
 import dz.hirz.server.notify.AlertMessage
 import dz.hirz.server.notify.Notifier
@@ -60,8 +61,12 @@ class TestEnv(
     val clock: MutableClock = MutableClock(),
     val notifier: FakeNotifier = FakeNotifier(),
     val rules: RuleConfig = RuleConfig.DEFAULT,
+    val ingestListeners: List<IngestListener> = emptyList(),
 ) {
-    val deps = Deps(db = db, verifier = FakeTokenVerifier(), notifier = notifier, clock = clock, rules = rules, startJobs = false)
+    val deps = Deps(
+        db = db, verifier = FakeTokenVerifier(), notifier = notifier, clock = clock, rules = rules,
+        startJobs = false, extraIngestListeners = ingestListeners,
+    )
 }
 
 val testJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
