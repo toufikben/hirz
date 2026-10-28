@@ -1,6 +1,7 @@
 package dz.hirz.server
 
 import dz.hirz.server.auth.TokenVerifier
+import dz.hirz.server.ingest.IngestListener
 import dz.hirz.server.notify.Notifier
 import dz.hirz.shared.rules.RuleConfig
 import io.ktor.http.HttpStatusCode
@@ -15,6 +16,8 @@ data class Deps(
     val clock: Clock,
     val rules: RuleConfig,
     val startJobs: Boolean = true,
+    /** Extra observers of accepted signals (tests); the rules engine and live hub are wired inside the module. */
+    val extraIngestListeners: List<IngestListener> = emptyList(),
 )
 
 /** A failure with a stable machine code for clients, rendered by StatusPages. */

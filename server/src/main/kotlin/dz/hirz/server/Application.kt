@@ -13,6 +13,8 @@ import dz.hirz.server.circles.CircleService
 import dz.hirz.server.circles.circleRoutes
 import dz.hirz.server.config.AppConfig
 import dz.hirz.server.db.connectDatabase
+import dz.hirz.server.ingest.IngestService
+import dz.hirz.server.ingest.ingestRoutes
 import dz.hirz.server.notify.DisabledNotifier
 import dz.hirz.server.places.PlaceService
 import dz.hirz.server.places.placeRoutes
@@ -48,6 +50,7 @@ fun Application.module(deps: Deps) {
     val circles = CircleService(deps.db, deps.clock, CircleEvents.NONE)
     val assets = AssetService(deps.db, deps.clock, circles)
     val places = PlaceService(deps.db, circles, deps.rules.placeMinMarginM)
+    val ingest = IngestService(deps.db, deps.clock, deps.rules, deps.extraIngestListeners)
     routing {
         healthRoutes(System.getProperty("hirz.version") ?: "dev")
         pairRoutes(assets)
@@ -60,6 +63,7 @@ fun Application.module(deps: Deps) {
         authenticate(SOURCE_AUTH) {
             sourceSelfRoutes(deps)
             sourcePushRoutes(assets)
+            ingestRoutes(ingest)
         }
     }
 }
