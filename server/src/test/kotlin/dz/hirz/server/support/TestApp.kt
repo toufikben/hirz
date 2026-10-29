@@ -62,9 +62,10 @@ class TestEnv(
     val notifier: FakeNotifier = FakeNotifier(),
     val rules: RuleConfig = RuleConfig.DEFAULT,
     val ingestListeners: List<IngestListener> = emptyList(),
+    val notifierOverride: Notifier? = null,
 ) {
     val deps = Deps(
-        db = db, verifier = FakeTokenVerifier(), notifier = notifier, clock = clock, rules = rules,
+        db = db, verifier = FakeTokenVerifier(), notifier = notifierOverride ?: notifier, clock = clock, rules = rules,
         startJobs = false, extraIngestListeners = ingestListeners,
     )
 }
