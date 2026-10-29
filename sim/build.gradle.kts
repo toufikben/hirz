@@ -34,6 +34,8 @@ val integrationTest by tasks.registering(Test::class) {
     useJUnitPlatform()
     outputs.upToDateWhen { false }
     environment("CORE_URL", System.getenv("CORE_URL") ?: "")
+    System.getenv("TRACCAR_USER")?.let { environment("TRACCAR_USER", it) }
+    System.getenv("TRACCAR_PASSWORD")?.let { environment("TRACCAR_PASSWORD", it) }
     val url = System.getenv("TRACCAR_URL")
     onlyIf("TRACCAR_URL is set") {
         if (url.isNullOrBlank()) println("integrationTest skipped: TRACCAR_URL is not set")

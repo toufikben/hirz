@@ -113,14 +113,18 @@ class EndToEndIT {
             c.login(imei)
             c.send(Gt06Fix(36.7538, 3.0588, 0, 0, Instant.now(), 8))
             api.await("claim activation") { api.ok("GET", "/v1/trackers/claims/$claimId").takeIf { api.string(it, "state") == "active" } }
-            repeat(20) { i ->
+            // GT06 times have 1 s resolution; real trackers report every 10 s or more, so one fix per 1.1 s is generous.
+            repeat(12) { i ->
                 c.send(Gt06Fix(36.7538 + i * 0.0001, 3.0588, 5, 90, Instant.now(), 8))
-                Thread.sleep(300)
+                Thread.sleep(1_100)
             }
         }
-        val rows = api.await("21 fixes in Core", timeoutSec = 15) {
-            api.ok("GET", "/v1/assets/$assetId/positions?sinceMs=0").jsonArray.takeIf { it.size >= 21 }
-        }
+        var seen = 0
+        val rows = try {
+            api.await("13 fixes in Core", timeoutSec = 30) {
+                api.ok("GET", "/v1/assets/$assetId/positions?sinceMs=0").jsonArray.also { seen = it.size }.takeIf { it.size >= 13 }
+            }
+        } catch (e: AssertionError) { throw AssertionError("${e.message}; Core had $seen") }
         val delays = rows.map { r -> r.jsonObject.let { it.getValue("serverTimeMs").jsonPrimitive.long - it.getValue("fixTimeMs").jsonPrimitive.long } }.sorted()
         val p95 = delays[(delays.size * 95 / 100).coerceAtMost(delays.size - 1)]
         println("e2e source→Core delay p95 = ${p95} ms over ${delays.size} fixes")

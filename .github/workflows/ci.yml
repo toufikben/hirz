@@ -125,6 +125,8 @@ jobs:
         env:
           TRACCAR_URL: http://localhost:8082
           CORE_URL: http://localhost:8080
+          TRACCAR_USER: ${{ env.E2E_TRACCAR_USER }}
+          TRACCAR_PASSWORD: ${{ env.E2E_TRACCAR_PASSWORD }}
           TRACCAR_GT06_HOST: localhost
           TRACCAR_GT06_PORT: '5023'
         run: ./gradlew --no-daemon :sim:integrationTest
