@@ -36,3 +36,7 @@ data class InviteDto(val code: String, val deepLink: String, val expiresAtMs: Lo
 
 @Serializable
 data class UpdateMemberRequest(val role: Role? = null, val priority: Int? = null)
+
+/** A no-app contact (grandmother, neighbour) reached by SMS; [phone] is E.164 or a local 0XXXXXXXXX number. */
+@Serializable
+data class ContactRequest(val name: String, val phone: String, val lang: String = "ar")
