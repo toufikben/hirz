@@ -28,7 +28,11 @@ class RulesEngine(
             )
         }
         if (s.cancelPin) recorder.appendToOpen(s.assetId, dz.hirz.shared.api.Reason("cancel_pin_entered"), RuleId.SOS)
-        boundaries(s, at).forEach(recorder::record)
+        val findings = boundaries(s, at)
+        if (findings.isEmpty()) return
+        // Only PLACE_EXIT can be muted, and only by a handover that says so; SOS, duress and silence never are.
+        val muted = findings.any { it.rule == RuleId.PLACE_EXIT } && db.connection.use { c -> dz.hirz.server.custody.Custody.muted(c, s.assetId, at) }
+        findings.forEach { f -> if (muted && f.rule == RuleId.PLACE_EXIT) recorder.recordMuted(f) else recorder.record(f) }
     }
 
     private fun boundaries(s: IngestedSignal, at: Instant): List<Finding> {

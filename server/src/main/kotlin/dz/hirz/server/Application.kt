@@ -1,5 +1,7 @@
 package dz.hirz.server
 
+import dz.hirz.server.custody.CustodyService
+import dz.hirz.server.custody.custodyRoutes
 import dz.hirz.server.sms.GatewayService
 import dz.hirz.server.sms.gatewayMemberRoutes
 import dz.hirz.server.sms.gatewayPairRoutes
@@ -86,6 +88,7 @@ fun Application.module(deps: Deps) {
     val codeWords = dz.hirz.server.circles.CodeWordService(deps.db, circles, dz.hirz.server.crypto.DataCipher(deps.dataKey))
     val emergency = dz.hirz.server.emergency.EmergencyService(deps.db, deps.clock, circles)
     val media = AssetMediaService(deps.db, deps.clock, circles)
+    val custody = CustodyService(deps.db, deps.clock, circles, deps.notifier)
     val gateways = GatewayService(deps.db, deps.clock, circles, incidents)
     installGatewayAuth(gateways)
     val shares = ShareService(deps.db, deps.clock, circles, deps.publicBaseUrl)
@@ -131,6 +134,7 @@ fun Application.module(deps: Deps) {
             exportRoutes(policePack)
             shareRoutes(shares)
             gatewayMemberRoutes(gateways)
+            custodyRoutes(custody)
             historyRoutes(deps, circles)
         }
         authenticate(SOURCE_AUTH) {
