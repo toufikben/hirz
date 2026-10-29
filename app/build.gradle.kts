@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.multiplatform)
     alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 kotlin {
@@ -18,12 +19,19 @@ kotlin {
             implementation(compose.foundation)
             implementation(compose.material3)
             implementation(compose.components.resources)
+            implementation(libs.ktor.client.core)
+            implementation(libs.ktor.client.content.negotiation)
+            implementation(libs.ktor.client.websockets)
+            implementation(libs.ktor.serialization.kotlinx.json)
+            implementation(libs.kotlinx.serialization.json)
         }
         androidMain.dependencies {
             implementation(libs.androidx.activity.compose)
         }
         androidUnitTest.dependencies {
             implementation(libs.kotlin.test)
+            implementation(libs.ktor.client.mock)
+            implementation(libs.kotlinx.coroutines.test)
         }
     }
 }
