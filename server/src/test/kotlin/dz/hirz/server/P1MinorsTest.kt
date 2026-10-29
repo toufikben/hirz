@@ -48,7 +48,8 @@ class P1MinorsTest {
             val a: PairResponse = client.pair(client.pairingCode("test.mom", asset.id).code).body()
             val b: PairResponse = client.pair(client.pairingCode("test.mom", asset.id).code).body()
             val t0 = env.clock.millis()
-            client.postJson("/v1/ingest", a.sourceToken, IngestBatch(listOf(IngestSignal("in", t0 - 60_000, SCHOOL, 10.0))))
+            // Two readings inside first: the boundary starts UNKNOWN and needs them to be INSIDE.
+            client.postJson("/v1/ingest", a.sourceToken, IngestBatch(listOf(IngestSignal("in1", t0 - 60_000, SCHOOL, 10.0), IngestSignal("in2", t0 - 50_000, SCHOOL, 10.0))))
             // Both sources report the same exit at the same moments, concurrently: a stress check of the per-asset lock.
             coroutineScope {
                 listOf(a.sourceToken, b.sourceToken).map { token ->
