@@ -14,6 +14,9 @@ expect fun shareText(text: String)
 
 expect fun copyText(text: String)
 
+/** Opens the user's SMS app with [text] addressed to [to]; the user sends it. The app needs no SMS permission. */
+expect fun composeSms(to: String?, text: String)
+
 /** Saves [bytes] to Downloads; returns false when the platform refused. */
 expect fun saveDownload(name: String, mime: String, bytes: ByteArray): Boolean
 

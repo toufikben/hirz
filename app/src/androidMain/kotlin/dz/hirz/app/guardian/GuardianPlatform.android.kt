@@ -57,6 +57,11 @@ actual fun shareText(text: String) {
     app.startActivity(Intent.createChooser(send, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 }
 
+actual fun composeSms(to: String?, text: String) {
+    val intent = Intent(Intent.ACTION_SENDTO, android.net.Uri.parse("smsto:" + (to ?: ""))).putExtra("sms_body", text)
+    app.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+}
+
 actual fun copyText(text: String) {
     (app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Hirz", text))
 }
