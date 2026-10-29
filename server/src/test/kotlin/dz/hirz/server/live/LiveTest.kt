@@ -24,6 +24,7 @@ import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readText
 import kotlinx.coroutines.withTimeout
+import kotlin.time.Duration.Companion.seconds
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -56,6 +57,7 @@ class LiveTest {
             val asset = snapshot.assets.single()
             assertEquals(assetId, asset.assetId)
             assertEquals(LatLon(36.75, 3.05), asset.last?.position)
+            env.clock.advance(60.seconds) // 1.1 km in 60 s is plausible; at the same instant it would be an impossible jump
             client.postJson("/v1/ingest", paired.sourceToken, IngestBatch(listOf(IngestSignal("b", env.clock.millis(), LatLon(36.76, 3.05), 9.0))))
             val update = assertIs<LiveEvent.PositionUpdate>(nextEvent())
             assertEquals(LatLon(36.76, 3.05), update.position.position)
