@@ -41,7 +41,15 @@ jobs:
         run: ./gradlew --no-daemon :server:test
       - name: sim and app
         if: always()
-        run: ./gradlew --no-daemon :sim:test :sim:compileIntegrationTestKotlin :app:testDebugUnitTest :app:assembleDebug
+        run: ./gradlew --no-daemon :sim:test :sim:compileIntegrationTestKotlin :app:testPlayDebugUnitTest :app:assemblePlayDebug :app:assembleGatewayDebug
+      - name: Only the gateway build declares SMS permissions
+        run: |
+          play=$(find app/build/intermediates -path "*merged_manifest*" -path "*playDebug*" -name AndroidManifest.xml | head -1)
+          gateway=$(find app/build/intermediates -path "*merged_manifest*" -path "*gatewayDebug*" -name AndroidManifest.xml | head -1)
+          echo "play: $play"; echo "gateway: $gateway"
+          test -n "$play" && test -n "$gateway"
+          if grep -Eq "android.permission.(SEND|RECEIVE)_SMS" "$play"; then echo "play build declares SMS permissions"; exit 1; fi
+          grep -q "android.permission.SEND_SMS" "$gateway"
       - name: Debug signing fingerprint (register this SHA-1 in Firebase)
         run: keytool -list -v -keystore app/debug.keystore -storepass android | grep -E "SHA1|SHA256"
       - name: Package Hirz Core
@@ -54,7 +62,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: hirz-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: app/build/outputs/apk/*/debug/*.apk
           if-no-files-found: error
 
   node-guards:

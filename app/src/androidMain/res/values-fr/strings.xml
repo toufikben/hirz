@@ -10,4 +10,14 @@
     <string name="checkin_title">Ça va ?</string>
     <string name="checkin_yes">Oui</string>
     <string name="checkin_no">Non, aidez-moi</string>
+    <string name="sos_confirm">Appuyez sur « Confirmer SOS » dans les 10 s</string>
+    <string name="sos_confirm_action">Confirmer SOS</string>
+    <string name="ring_title">Hirz : la famille cherche ce téléphone</string>
+    <string name="ring_stop">Arrêter</string>
+    <string name="close_confirm_title">Confirmez la fermeture : %1$s</string>
+    <string name="close_confirm_body">Ouvrez Hirz et appuyez sur « Confirmer la fermeture » dans les 2 minutes</string>
+    <string name="notice_custody">Garde partagée modifiée : %1$s</string>
+    <string name="notice_gateway_silent">Passerelle SMS silencieuse : %1$s</string>
+    <string name="gateway_channel">Passerelle SMS</string>
+    <string name="gateway_running">Hirz : passerelle SMS active</string>
 </resources>

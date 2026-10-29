@@ -323,6 +323,7 @@ private fun CircleTab(env: AppEnvironment, client: HirzClient, circle: CircleDto
                 enabled = assetName.isNotBlank()) { Text(stringResource(Res.string.add_asset)) }
         }
         item { HorizontalDivider(); CodeWordCard(client, circle) }
+        item { ContactsCard(client, circle) }
         item { SignOutButton(client, { platformPushToken() }, { env.auth.signOut() }) }
     }
 }

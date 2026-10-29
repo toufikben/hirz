@@ -68,6 +68,14 @@ android {
         buildConfigField("String", "HIRZ_BASE_URL", "\"http://10.0.2.2:8080\"")
     }
     buildFeatures { buildConfig = true }
+    // Play policy: only a default SMS app may hold SMS permissions. The `gateway` build is installed by hand on the
+    // family phone that relays SMS; the `play` build declares no SMS permission at all (design §12.3.3).
+    flavorDimensions += "dist"
+    productFlavors {
+        create("play") { dimension = "dist" }
+        create("gateway") { dimension = "dist"; versionNameSuffix = "-gateway" }
+    }
+    sourceSets.getByName("gateway").manifest.srcFile("src/gateway/AndroidManifest.xml")
     // One committed debug key (debug only, never for release): every CI build has the same SHA-1, so Google
     // sign-in keeps working and `adb install -r` upgrades in place (P1 review #5).
     signingConfigs {

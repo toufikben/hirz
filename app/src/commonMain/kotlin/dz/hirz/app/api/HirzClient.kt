@@ -8,12 +8,17 @@ import dz.hirz.shared.api.CircleDto
 import dz.hirz.shared.api.CloseReason
 import dz.hirz.shared.api.CloseRequest
 import dz.hirz.shared.api.CodeWordDto
+import dz.hirz.shared.api.ContactRequest
 import dz.hirz.shared.api.CreateAssetRequest
 import dz.hirz.shared.api.CreateCircleRequest
 import dz.hirz.shared.api.CreateInviteRequest
 import dz.hirz.shared.api.CreatePairingRequest
 import dz.hirz.shared.api.CreatePlaceRequest
 import dz.hirz.shared.api.EmergencyNumberDto
+import dz.hirz.shared.api.GatewayCodeDto
+import dz.hirz.shared.api.GatewayPairRequest
+import dz.hirz.shared.api.GatewayPairResponse
+import dz.hirz.shared.api.InboundSmsRequest
 import dz.hirz.shared.api.IncidentDto
 import dz.hirz.shared.api.IngestBatch
 import dz.hirz.shared.api.IngestResult
@@ -23,6 +28,7 @@ import dz.hirz.shared.api.LiveEvent
 import dz.hirz.shared.api.MeDto
 import dz.hirz.shared.api.MemberDto
 import dz.hirz.shared.api.MyLocationRequest
+import dz.hirz.shared.api.OutboxItemDto
 import dz.hirz.shared.api.PairRequest
 import dz.hirz.shared.api.PairResponse
 import dz.hirz.shared.api.PairingCodeDto
@@ -35,6 +41,7 @@ import dz.hirz.shared.api.ReviewRequest
 import dz.hirz.shared.api.ShareDto
 import dz.hirz.shared.api.ShareRequest
 import dz.hirz.shared.api.SheetDto
+import dz.hirz.shared.api.SmsResultRequest
 import dz.hirz.shared.api.SourceStatusDto
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -157,6 +164,9 @@ class HirzClient(
         member { t -> http.put("$base/v1/circles/$circleId/code-word") { auth(t); json(CodeWordDto(word)) } }.done()
     suspend fun emergencyNumbers(circleId: String, country: String = "DZ"): List<EmergencyNumberDto> =
         member { t -> http.get("$base/v1/emergency-numbers") { auth(t); parameter("country", country); parameter("circleId", circleId) } }.ok()
+    suspend fun gatewayCode(circleId: String): GatewayCodeDto = member { t -> http.post("$base/v1/circles/$circleId/gateways") { auth(t) } }.ok()
+    suspend fun addContact(circleId: String, name: String, phone: String, lang: String): MemberDto =
+        member { t -> http.post("$base/v1/circles/$circleId/contacts") { auth(t); json(ContactRequest(name, phone, lang)) } }.ok()
     /** Sign-out removes this install's token first, so a signed-out phone never rings (P1 minor #20). */
     suspend fun deletePushToken(token: String) =
         member { t -> http.delete("$base/v1/me/push-token/${token.encodeURLPathPart()}") { auth(t) } }.done()
@@ -179,4 +189,14 @@ class HirzClient(
     suspend fun sourceMe(sourceToken: String): SourceStatusDto = http.get("$base/v1/sources/me") { auth(sourceToken) }.ok()
     suspend fun setSourcePushToken(sourceToken: String, token: String) =
         http.put("$base/v1/sources/me/push-token") { auth(sourceToken); json(PushTokenDto(token)) }.done()
+
+    // ---- SMS gateway ----
+    suspend fun gatewayPair(code: String, pushToken: String?): GatewayPairResponse =
+        http.post("$base/v1/gateways/pair") { json(GatewayPairRequest(code, pushToken)) }.ok()
+    suspend fun gatewayOutbox(gatewayToken: String): List<OutboxItemDto> = http.get("$base/v1/gateways/me/outbox") { auth(gatewayToken) }.ok()
+    suspend fun gatewayResult(gatewayToken: String, id: Long, status: String, error: String?) =
+        http.post("$base/v1/gateways/me/outbox/$id/result") { auth(gatewayToken); json(SmsResultRequest(status, error)) }.done()
+    suspend fun gatewayInbox(gatewayToken: String, from: String, body: String, receivedAtMs: Long) =
+        http.post("$base/v1/gateways/me/inbox") { auth(gatewayToken); json(InboundSmsRequest(from, body, receivedAtMs)) }.done()
+    suspend fun gatewayHeartbeat(gatewayToken: String) = http.post("$base/v1/gateways/me/heartbeat") { auth(gatewayToken) }.done()
 }

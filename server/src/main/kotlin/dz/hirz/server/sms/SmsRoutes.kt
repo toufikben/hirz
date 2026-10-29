@@ -57,6 +57,11 @@ fun Route.gatewayRoutes(service: GatewayService) {
             service.result(call.gateway(), id, req.status, req.error)
             call.respond(HttpStatusCode.NoContent)
         }
+        // Authentication already recorded last_seen_at; the heartbeat only proves the gateway is alive.
+        post("/v1/gateways/me/heartbeat") {
+            call.gateway()
+            call.respond(HttpStatusCode.NoContent)
+        }
         post("/v1/gateways/me/inbox") {
             val req = call.receive<InboundSmsRequest>()
             service.inbox(call.gateway(), req.from, req.body, Instant.ofEpochMilli(req.receivedAtMs))

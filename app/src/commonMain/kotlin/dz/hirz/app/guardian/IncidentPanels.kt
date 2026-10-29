@@ -234,3 +234,37 @@ fun SignOutButton(client: HirzClient, pushToken: suspend () -> String?, signOut:
         }
     }, { Text(t(lang, "تأكيد: لن تصلك التنبيهات على هذا الهاتف", "Confirmer : plus d'alertes sur ce téléphone", "Confirm: no more alerts on this phone")) })
 }
+
+/** Contacts without the app get SMS at the contacts stage (design §5.3); the owner adds them and pairs the SMS gateway. */
+@Composable
+fun ContactsCard(client: HirzClient, circle: CircleDto) {
+    if (circle.myRole != Role.OWNER) return
+    val scope = rememberCoroutineScope()
+    val lang = currentLang()
+    var name by remember { mutableStateOf("") }
+    var phone by remember { mutableStateOf("") }
+    var smsLang by remember { mutableStateOf("ar") }
+    var note by remember { mutableStateOf<String?>(null) }
+    var code by remember { mutableStateOf<String?>(null) }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(t(lang, "جهات اتصال بلا تطبيق (SMS)", "Contacts sans l'application (SMS)", "Contacts without the app (SMS)"), style = MaterialTheme.typography.titleMedium)
+            OutlinedTextField(name, { name = it.take(80) }, label = { Text(t(lang, "الاسم", "Nom", "Name")) }, singleLine = true)
+            OutlinedTextField(phone, { phone = it.filter { c -> c.isDigit() || c == '+' }.take(16) }, label = { Text(t(lang, "الهاتف", "Téléphone", "Phone")) }, singleLine = true)
+            androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                listOf("ar", "fr", "en").forEach { l -> FilterChip(smsLang == l, { smsLang = l }, { Text(l) }) }
+            }
+            Button({
+                scope.launch {
+                    note = runCatching { client.addContact(circle.id, name.trim(), phone, smsLang) }
+                        .fold({ name = ""; phone = ""; t(lang, "أُضيفت", "Ajouté", "Added") }, { t(lang, "رقم غير صالح", "Numéro invalide", "Invalid number") })
+                }
+            }, enabled = name.isNotBlank() && phone.length >= 9) { Text(t(lang, "إضافة", "Ajouter", "Add")) }
+            note?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            OutlinedButton({ scope.launch { code = runCatching { client.gatewayCode(circle.id).code }.getOrNull() } }) {
+                Text(t(lang, "رمز ربط بوابة الرسائل", "Code de la passerelle SMS", "SMS gateway pairing code"))
+            }
+            code?.let { Text(it, style = MaterialTheme.typography.titleLarge) }
+        }
+    }
+}

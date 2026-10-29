@@ -65,6 +65,7 @@ fun App(env: AppEnvironment) {
                 mode == null -> ModePicker(env) { showSettings = true }
                 mode == AppMode.GUARDIAN -> GuardianGate(env, url)
                 mode == AppMode.COMPANION -> CompanionRoot(env, url)
+                mode == AppMode.SMS_GATEWAY -> dz.hirz.app.gateway.GatewayRoot(env, url)
                 else -> ModePicker(env) { showSettings = true }
             }
         }
@@ -80,8 +81,8 @@ private fun ModePicker(env: AppEnvironment, openSettings: () -> Unit) {
         Text(stringResource(Res.string.choose_mode), style = MaterialTheme.typography.titleMedium)
         Button({ scope.launch { env.modes.set(AppMode.GUARDIAN) } }, Modifier.fillMaxWidth()) { Text(stringResource(AppMode.GUARDIAN.label)) }
         Button({ scope.launch { env.modes.set(AppMode.COMPANION) } }, Modifier.fillMaxWidth()) { Text(stringResource(AppMode.COMPANION.label)) }
-        OutlinedButton({}, Modifier.fillMaxWidth(), enabled = false) {
-            Text("${stringResource(AppMode.SMS_GATEWAY.label)} — ${stringResource(Res.string.coming_soon)}")
+        if (env.gateway.supported) OutlinedButton({ scope.launch { env.modes.set(AppMode.SMS_GATEWAY) } }, Modifier.fillMaxWidth()) {
+            Text(stringResource(AppMode.SMS_GATEWAY.label))
         }
         TextButton(openSettings) { Text(stringResource(Res.string.settings)) }
     }
