@@ -109,7 +109,8 @@ class GatewayService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (GatewayVault(this).token() == null || !hasSmsPermissions(this)) { stopSelf(); return START_NOT_STICKY }
-        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0
+        // specialUse, not dataSync: Android 15 stops dataSync services after 6 h a day, and a gateway must run all day (review #7).
+        val type = if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0
         if (runCatching { ServiceCompat.startForeground(this, 7_010, notification(), type) }.isFailure) { stopSelf(); return START_NOT_STICKY }
         if (loop == null) loop = scope.launch { run() }
         kicks.trySend(Unit)
@@ -154,6 +155,11 @@ class GatewayService : Service() {
     private fun ensureChannel() {
         val nm = getSystemService(NotificationManager::class.java)
         if (nm.getNotificationChannel(CHANNEL) == null) nm.createNotificationChannel(NotificationChannel(CHANNEL, getString(R.string.gateway_channel), NotificationManager.IMPORTANCE_LOW))
+    }
+
+    /** Should the system still time the service out, stop cleanly; the next push or boot starts it again. */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        stopSelf()
     }
 
     override fun onDestroy() {

@@ -4,13 +4,17 @@
 
     <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <application>
         <service
             android:name="dz.hirz.app.gateway.GatewayService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Relays family safety alerts by SMS to contacts without the app, and their replies." />
+        </service>
 
         <receiver
             android:name="dz.hirz.app.gateway.SmsReceiver"

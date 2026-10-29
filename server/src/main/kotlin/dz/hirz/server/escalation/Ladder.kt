@@ -128,8 +128,9 @@ object Ladder {
 
     private fun contest(st: LadderState, ev: LadderEvent.Contested, cfg: RuleConfig): Pair<LadderState, List<LadderAction>> {
         if (st.order.isEmpty()) return st to listOf(LadderAction.Log("contested", ev.member))
-        val base = st.order.indexOf(st.owner ?: st.current).coerceAtLeast(0)
-        val s = startCandidate(st, (base + 1) % st.order.size, ev.at, cfg)
+        // From the contacts stage, or after a contact owned it, the first-ranked guardian is asked again.
+        val base = st.order.indexOf(st.owner ?: st.current)
+        val s = startCandidate(st, if (base < 0) 0 else (base + 1) % st.order.size, ev.at, cfg)
         return s to listOf(LadderAction.Log("contested", ev.member), LadderAction.NotifyMember(s.current!!))
     }
 }

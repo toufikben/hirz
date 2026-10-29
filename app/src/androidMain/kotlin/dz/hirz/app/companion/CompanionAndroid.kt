@@ -322,6 +322,9 @@ fun hasLocationPermission(context: Context): Boolean =
 /** Restarts sharing after a reboot when this phone is paired. */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == Intent.ACTION_BOOT_COMPLETED && CompanionVault(context).credentials() != null) LocationService.start(context)
+        if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
+        if (CompanionVault(context).credentials() != null) LocationService.start(context)
+        // The gateway build restarts its SMS relay too; in the Play build there is never a gateway token.
+        dz.hirz.app.gateway.GatewayService.start(context)
     }
 }

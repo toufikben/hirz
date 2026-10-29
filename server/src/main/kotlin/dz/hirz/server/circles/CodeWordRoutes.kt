@@ -30,7 +30,7 @@ class CodeWordService(private val db: DataSource, private val circles: CircleSer
     }
 
     fun get(circleId: UUID, memberId: UUID): CodeWordDto = db.tx { c ->
-        circles.requireRole(c, circleId, memberId, setOf(Role.OWNER, Role.GUARDIAN, Role.VIEWER, Role.TEMPORARY))
+        circles.requireRole(c, circleId, memberId, setOf(Role.OWNER, Role.GUARDIAN, Role.VIEWER))
         val blob = c.prepareStatement("SELECT code_word_enc FROM circles WHERE id = ?").apply { setObject(1, circleId) }
             .executeQuery().use { if (it.next()) it.getBytes(1) else null } ?: notFound()
         audit(c, circleId, memberId, "code_word_viewed")

@@ -91,7 +91,7 @@ fun Application.module(deps: Deps) {
     val custody = CustodyService(deps.db, deps.clock, circles, deps.notifier)
     val gateways = GatewayService(deps.db, deps.clock, circles, incidents)
     installGatewayAuth(gateways)
-    val shares = ShareService(deps.db, deps.clock, circles, deps.publicBaseUrl)
+    val shares = ShareService(deps.db, deps.clock, circles, deps.publicBaseUrl, deps.dataKey)
     val sheets = SheetService(deps.db, deps.clock, circles, incidents, emergency).also { it.shareActiveUntil = shares::activeUntil }
     val policePack = PolicePack(deps.db, deps.clock, circles, incidents, System.getProperty("hirz.version") ?: "dev")
     hub = LiveHub(deps.db, incidents, deps.clock)

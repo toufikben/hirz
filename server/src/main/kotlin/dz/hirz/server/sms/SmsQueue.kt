@@ -56,12 +56,22 @@ class GatewayService(
         if (used as Boolean) gone("pairing_code_used")
         if (expired as Boolean) gone("pairing_code_expired")
         c.prepareStatement("UPDATE gateway_codes SET used_at = ? WHERE id = ?").apply { setTimestamp(1, now.ts()); setObject(2, codeId) }.executeUpdate()
+        // One gateway per circle: a new phone replaces the old one, whose token stops working at once.
+        c.prepareStatement("UPDATE gateways SET revoked_at = ? WHERE circle_id = ? AND revoked_at IS NULL").apply { setTimestamp(1, now.ts()); setObject(2, circleId) }.executeUpdate()
         val token = Codes.newSourceToken()
         c.prepareStatement("INSERT INTO gateways (circle_id, token_hash, push_token, created_at) VALUES (?, ?, ?, ?)").apply {
             setObject(1, circleId); setString(2, Codes.hash(token)); setString(3, pushToken?.takeIf { it.isNotBlank() }); setTimestamp(4, now.ts())
         }.executeUpdate()
         audit(c, circleId as UUID, null, "gateway_paired")
         GatewayPairResponse(token, circleId.toString())
+    }
+
+    /** A lost or stolen gateway: the owner revokes it; its token can no longer read the outbox or post replies. */
+    fun revokeAll(circleId: UUID, memberId: UUID) = db.tx { c ->
+        circles.requireRole(c, circleId, memberId, setOf(Role.OWNER))
+        c.prepareStatement("UPDATE gateways SET revoked_at = ? WHERE circle_id = ? AND revoked_at IS NULL")
+            .apply { setTimestamp(1, clock.instant().ts()); setObject(2, circleId) }.executeUpdate()
+        audit(c, circleId, memberId, "gateway_revoked")
     }
 
     fun find(token: String): GatewayPrincipal? = db.connection.use { c ->
@@ -124,7 +134,9 @@ class GatewayService(
             c.prepareStatement(
                 "INSERT INTO inbound_sms (circle_id, gateway_id, from_phone, body, received_at, member_id, incident_id, action) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             ).apply {
-                setObject(1, g.circleId); setObject(2, g.gatewayId); setString(3, phone); setString(4, body.take(500)); setTimestamp(5, receivedAt.ts())
+                // A stranger's SMS (bank codes, private messages) is never stored; a contact's reply is kept short.
+                val kept = if (target.member == null) "" else text.take(160)
+                setObject(1, g.circleId); setObject(2, g.gatewayId); setString(3, phone); setString(4, kept); setTimestamp(5, receivedAt.ts())
                 setObject(6, target.member); setObject(7, target.incident); setString(8, action)
             }.executeUpdate()
         }

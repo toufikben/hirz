@@ -56,6 +56,7 @@ fun IncidentCard(client: HirzClient, inc: IncidentDto, view: CircleView, numbers
     var message by remember(inc.id) { mutableStateOf<String?>(null) }
     var sheetOpen by remember(inc.id) { mutableStateOf(false) }
     var shareUrl by remember(inc.id) { mutableStateOf<String?>(null) }
+    var confirmContest by remember(inc.id) { mutableStateOf(false) }
     fun act(block: suspend () -> IncidentDto?) = scope.launch {
         runCatching { block() }.onSuccess { it?.let(onUpdate) }.onFailure { e ->
             message = when ((e as? HirzApiException)?.code) {
@@ -68,9 +69,11 @@ fun IncidentCard(client: HirzClient, inc: IncidentDto, view: CircleView, numbers
     }
 
     LaunchedEffect(inc.id, inc.state) {
+        // The loop lives as long as the open incident is on screen; it only sends while the app is in front, so a
+        // call to 1548 (which backgrounds the app) pauses the reports instead of ending them.
         LocationReporter.run(
-            active = { isActive && LocationReporter.shouldRun(inc.state == "open", appInForeground()) },
-            send = { currentLocation()?.let { (p, acc) -> client.myLocation(inc.id, p, acc) } },
+            active = { isActive && inc.state == "open" },
+            send = { if (LocationReporter.shouldRun(open = true, visible = appInForeground())) currentLocation()?.let { (p, acc) -> client.myLocation(inc.id, p, acc) } },
             wait = { delay(it) },
         )
     }
@@ -88,7 +91,11 @@ fun IncidentCard(client: HirzClient, inc: IncidentDto, view: CircleView, numbers
             }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button({ act { client.claim(inc.id) } }) { Text(t(lang, "أتولّاها", "Je m'en occupe", "I'll handle it")) }
-                OutlinedButton({ act { client.contest(inc.id) } }) { Text(t(lang, "لا أستطيع", "Je ne peux pas", "I can't")) }
+                // Contest means "not convinced": it removes the current owner, so it asks first when someone owns it.
+                OutlinedButton({ if (inc.ownerMemberId == null || confirmContest) { confirmContest = false; act { client.contest(inc.id) } } else confirmContest = true }) {
+                    Text(if (confirmContest) t(lang, "تأكيد: إزالة المتولّي", "Confirmer : retirer le responsable", "Confirm: remove the owner")
+                        else t(lang, "غير مقتنع", "Pas convaincu", "Not convinced"))
+                }
                 OutlinedButton({ sheetOpen = true }) { Text(t(lang, "البطاقة", "Fiche", "Sheet")) }
             }
             Text(t(lang, "اتصلت بـ", "J'ai appelé", "I called"), style = MaterialTheme.typography.labelLarge)

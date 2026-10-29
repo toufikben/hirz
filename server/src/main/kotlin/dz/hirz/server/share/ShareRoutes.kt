@@ -53,7 +53,14 @@ class ShareService(
     private val clock: Clock,
     private val circles: CircleService,
     private val baseUrl: String,
+    /** Keys the IP hash, so a stored hash cannot be reversed by trying every address. */
+    private val ipKey: ByteArray = ByteArray(32),
 ) {
+    private fun ipHash(ip: String): String {
+        val mac = javax.crypto.Mac.getInstance("HmacSHA256").apply { init(javax.crypto.spec.SecretKeySpec(ipKey, "HmacSHA256")) }
+        return mac.doFinal(ip.toByteArray()).joinToString("") { "%02x".format(it) }
+    }
+
     private val random = SecureRandom()
     private val page: String = ShareService::class.java.getResource("/share/page.html")!!.readText()
 
@@ -110,7 +117,7 @@ class ShareService(
                 .use { if (it.next()) Link(it.getObject(1, UUID::class.java), it.getString(2), it.getTimestamp(3).toInstant()) else null }
                 ?: return@tx null
             c.prepareStatement("INSERT INTO share_views (token_hash, at, ip_hash, user_agent) VALUES (?, ?, ?, ?)").apply {
-                setString(1, hash); setTimestamp(2, now.ts()); setString(3, ip?.let { sha256("hirz-share:$it") }); setString(4, userAgent?.take(200))
+                setString(1, hash); setTimestamp(2, now.ts()); setString(3, ip?.let(::ipHash)); setString(4, userAgent?.take(200))
             }.executeUpdate()
             val track = c.prepareStatement(
                 """SELECT $POSITION_COLUMNS FROM positions p WHERE p.asset_id = ? AND p.quality = 'ok' AND p.geog IS NOT NULL
@@ -167,13 +174,13 @@ fun Route.shareRoutes(service: ShareService) {
 /** Public routes: no account, no third-party scripts. */
 fun Route.publicShareRoutes(service: ShareService) {
     get("/s/{token}") {
-        val data = service.open(call.parameters["token"].orEmpty(), call.request.origin.remoteHost, call.request.headers[HttpHeaders.UserAgent])
+        val data = service.open(call.parameters["token"].orEmpty(), call.request.origin.remoteAddress, call.request.headers[HttpHeaders.UserAgent])
         call.noStore()
         if (data == null) call.respondText("Not found", ContentType.Text.Plain, HttpStatusCode.NotFound)
         else call.respondText(service.html(data), ContentType.Text.Html.withParameter("charset", "utf-8"))
     }
     get("/s/{token}/data") {
-        val data = service.open(call.parameters["token"].orEmpty(), call.request.origin.remoteHost, call.request.headers[HttpHeaders.UserAgent])
+        val data = service.open(call.parameters["token"].orEmpty(), call.request.origin.remoteAddress, call.request.headers[HttpHeaders.UserAgent])
         call.noStore()
         if (data == null) call.respond(HttpStatusCode.NotFound, mapOf("error" to "not_found")) else call.respond(data)
     }

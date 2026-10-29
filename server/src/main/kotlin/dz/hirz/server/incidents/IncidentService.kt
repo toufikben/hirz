@@ -102,9 +102,9 @@ class IncidentService(
         }
         if (isNew && finding.tier != Tier.P2) {
             // P0: every source reports every 15 s until close (design §6.2). Never under duress: the carrier's phone gets nothing.
+            escalation?.onOpened(incidentId, finding.circleId, finding.tier)
             if (finding.tier == Tier.P0 && !finding.silent) pushToSources(finding.assetId, "high_rate")
             fanOut(incidentId, finding)
-            escalation?.onOpened(incidentId, finding.circleId, finding.tier)
         }
         notifyChanged(finding.circleId, incidentId)
     }
@@ -412,10 +412,15 @@ class IncidentService(
             val circleId = c.prepareStatement("SELECT circle_id FROM assets WHERE id = ?").apply { setObject(1, assetId) }
                 .executeQuery().use { if (it.next()) it.getObject(1, UUID::class.java) else notFound() }
             circles.requireRole(c, circleId, memberId, EDITORS)
-            record(c)
+            // Under duress nothing a guardian taps may reach the carrier's phone (review #1).
+            val duress = c.prepareStatement("SELECT EXISTS (SELECT 1 FROM incidents WHERE asset_id = ? AND state = 'open' AND silent)")
+                .apply { setObject(1, assetId) }.executeQuery().use { it.next(); it.getBoolean(1) }
+            if (duress) conflict("duress_active")
             circleId
         }
         val sent = pushToSources(assetId, kind)
+        // A command that reached no device is not recorded: an undelivered check-in must never raise an alarm.
+        if (sent > 0) db.connection.use { record(it) }
         db.connection.use { audit(it, circleId, memberId, "${kind}_sent", """{"asset":"$assetId","sent":$sent}""") }
         return CheckInSentDto(sent)
     }

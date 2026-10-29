@@ -129,7 +129,8 @@ class HirzMessagingService : FirebaseMessagingService() {
                 if (AlarmPolicy.isAlarm(push)) AlarmNotifier.show(applicationContext, push)
             }
             is Push.CheckIn -> CompanionNotifications.showCheckIn(applicationContext, push.assetName)
-            is Push.Ring -> startActivity(Intent(applicationContext, RingActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            // Android 10+ blocks activity starts from the background: a full-screen alarm notification opens it (review #6).
+            is Push.Ring -> RingNotifier.show(applicationContext)
             is Push.Rate -> dz.hirz.app.companion.CompanionEngine.cadence.serverSaysHighRate(push.high, System.currentTimeMillis())
             Push.SmsPending -> dz.hirz.app.gateway.GatewayService.kick(applicationContext)
             is Push.CloseConfirm -> QuietNotices.show(applicationContext, push.incidentId.hashCode(),
@@ -179,6 +180,27 @@ class AlarmActivity : ComponentActivity() {
     private fun openApp() {
         startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP))
         finish()
+    }
+}
+
+object RingNotifier {
+    private const val ID = 7_020
+
+    fun show(context: Context) {
+        AlarmNotifier.ensureChannel(context)
+        val intent = Intent(context, RingActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val pending = PendingIntent.getActivity(context, ID, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val n = NotificationCompat.Builder(context, ALARM_CHANNEL)
+            .setSmallIcon(android.R.drawable.stat_sys_warning)
+            .setContentTitle(context.getString(R.string.ring_title))
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setFullScreenIntent(pending, true)
+            .setContentIntent(pending)
+            .setTimeoutAfter(30_000)
+            .setAutoCancel(true)
+            .build()
+        context.getSystemService(NotificationManager::class.java).notify(ID, n)
     }
 }
 

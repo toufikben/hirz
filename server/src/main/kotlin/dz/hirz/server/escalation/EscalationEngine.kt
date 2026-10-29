@@ -88,8 +88,12 @@ class EscalationEngine(
         val now = clock.instant()
         db.tx { c ->
             val state = Ladder.open(tier, ordering.order(c, incidentId, circleId, now), now, cfg)
-            save(c, incidentId, state)
-            logRow(c, incidentId, "opened", null, now)
+            val inserted = c.prepareStatement(
+                "INSERT INTO escalation_state (incident_id, data, next_check_at) VALUES (?, ?::jsonb, ?) ON CONFLICT (incident_id) DO NOTHING",
+            ).apply {
+                setObject(1, incidentId); setString(2, ladderJson.encodeToString(LadderState.serializer(), state)); setTimestamp(3, state.nextCheck.ts())
+            }.executeUpdate() == 1
+            if (inserted) logRow(c, incidentId, "opened", null, now)
         }
     }
 
@@ -114,6 +118,14 @@ class EscalationEngine(
     /** Advances every ladder whose next check is due. Rows are locked, so two servers never double-escalate. */
     fun tick() {
         val now = clock.instant()
+        // An open P0/P1 without a ladder (a crash between the incident commit and onOpened) gets one now (review #2).
+        db.connection.use { c ->
+            c.prepareStatement(
+                """SELECT i.id, i.circle_id, i.tier FROM incidents i WHERE i.state = 'open' AND i.tier IN ('P0', 'P1') AND i.opened_at <= ?
+                   AND NOT EXISTS (SELECT 1 FROM escalation_state e WHERE e.incident_id = i.id)""",
+            ).apply { setTimestamp(1, now.minusSeconds(5).ts()) }.executeQuery()
+                .toList { Triple(it.getObject(1, UUID::class.java), it.getObject(2, UUID::class.java), Tier.valueOf(it.getString(3))) }
+        }.forEach { (id, circle, tier) -> onOpened(id, circle, tier) }
         val due = db.connection.use { c ->
             c.prepareStatement("SELECT incident_id FROM escalation_state WHERE next_check_at <= ?").apply { setTimestamp(1, now.ts()) }
                 .executeQuery().toList { it.getObject(1, UUID::class.java) }
@@ -133,7 +145,19 @@ class EscalationEngine(
                 val tried = state.order.take(state.index + 1)
                 state.copy(order = tried + ordering.order(c, incidentId, circleOf(c, incidentId), now).filter { it !in tried })
             } else state
-            val (next, actions) = Ladder.next(ranked, event, cfg)
+            // The incident row is the truth: a close or an ownership change whose ladder event was lost still applies (review #2).
+            val (dbState, dbOwner) = c.prepareStatement("SELECT state, owner_member FROM incidents WHERE id = ?").apply { setObject(1, incidentId) }
+                .executeQuery().use { if (it.next()) it.getString(1) to it.getObject(2, UUID::class.java) else "closed" to null }
+            val effective = when {
+                dbState == "closed" -> LadderEvent.Closed(now)
+                event !is LadderEvent.Tick -> event
+                dbOwner != null && state.stage != Stage.CLAIMED -> LadderEvent.Claimed(dbOwner, now)
+                dbOwner == null && state.stage == Stage.CLAIMED -> LadderEvent.Contested(state.owner ?: incidentId, now)
+                else -> event
+            }
+            val (computed, actions) = Ladder.next(ranked, effective, cfg)
+            // A claimed ladder is rechecked against the incident row now and then instead of being parked forever.
+            val next = if (computed.stage == Stage.CLAIMED && !computed.nextCheck.isAfter(now)) computed.copy(nextCheck = now.plusMillis(cfg.escalationRetryMs)) else computed
             if (next != state) save(c, incidentId, next)
             actions.filterIsInstance<LadderAction.Log>().forEach { logRow(c, incidentId, it.kind, it.member, now) }
             if (LadderAction.NotifyContacts in actions || LadderAction.RetryAll in actions) queueContactSms(c, incidentId, now)
@@ -170,7 +194,7 @@ class EscalationEngine(
                ON CONFLICT (incident_id) DO UPDATE SET data = EXCLUDED.data, next_check_at = EXCLUDED.next_check_at""",
         ).apply {
             setObject(1, incidentId); setString(2, ladderJson.encodeToString(LadderState.serializer(), st))
-            setTimestamp(3, (if (st.stage == Stage.CLAIMED || st.stage == Stage.CLOSED) Instant.parse("9999-01-01T00:00:00Z") else st.nextCheck).ts())
+            setTimestamp(3, (if (st.stage == Stage.CLOSED) Instant.parse("9999-01-01T00:00:00Z") else st.nextCheck).ts())
         }.executeUpdate()
     }
 

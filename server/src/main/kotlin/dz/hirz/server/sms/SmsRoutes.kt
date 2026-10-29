@@ -16,6 +16,7 @@ import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.RoutingCall
+import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import java.time.Instant
@@ -35,6 +36,10 @@ private fun RoutingCall.gateway(): GatewayPrincipal = principal<GatewayPrincipal
 fun Route.gatewayMemberRoutes(service: GatewayService) {
     post("/v1/circles/{id}/gateways") {
         call.respond(service.createCode(uuidOrNotFound(call.parameters["id"]), call.member().memberId))
+    }
+    delete("/v1/circles/{id}/gateways") {
+        service.revokeAll(uuidOrNotFound(call.parameters["id"]), call.member().memberId)
+        call.respond(HttpStatusCode.NoContent)
     }
 }
 

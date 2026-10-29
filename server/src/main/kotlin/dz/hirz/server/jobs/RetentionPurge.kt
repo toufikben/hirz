@@ -39,6 +39,9 @@ class RetentionPurge(private val db: DataSource, private val clock: Clock) {
         ).apply { setTimestamp(1, now); setTimestamp(2, now) }.executeUpdate()
         c.prepareStatement("DELETE FROM location_views WHERE at < ?::timestamptz - interval '180 days'")
             .apply { setTimestamp(1, now) }.executeUpdate()
+        // SMS hold phone numbers and replies: 30 days, like positions (review #5).
+        c.prepareStatement("DELETE FROM inbound_sms WHERE received_at < ?::timestamptz - interval '30 days'").apply { setTimestamp(1, now) }.executeUpdate()
+        c.prepareStatement("DELETE FROM outbound_sms WHERE created_at < ?::timestamptz - interval '30 days'").apply { setTimestamp(1, now) }.executeUpdate()
         log.info("retention purge removed {} positions", positions)
         positions
     }

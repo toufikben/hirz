@@ -39,8 +39,8 @@ import javax.sql.DataSource
 
 private val ALGIERS: ZoneId = ZoneId.of("Africa/Algiers")
 private const val WINDOW_BEFORE_S = 2 * 3600L
-/** Silence longer than this between two stored fixes is a gap; nothing is ever interpolated across it. */
-const val GAP_THRESHOLD_S = 300L
+/** Silence longer than twice the normal 60 s cadence is a gap; nothing is ever interpolated across it. */
+const val GAP_THRESHOLD_S = 120L
 private const val CSV_HEADER =
     "fix_time_utc,fix_time_algiers,server_time_utc,lat,lon,accuracy_m,accuracy_estimated,fix_source,speed_kmh,heading,battery,source_id,source_kind,device_model,quality"
 
@@ -132,12 +132,17 @@ class PolicePack(
         appendLine("first_fix_utc=${rows.firstOrNull()?.fixTime ?: "none"}")
         appendLine("last_fix_utc=${rows.lastOrNull()?.fixTime ?: "none"}")
         appendLine("gap_threshold_s=$GAP_THRESHOLD_S")
-        val gaps = rows.zipWithNext().mapNotNull { (a, b) ->
-            val s = b.fixTime.epochSecond - a.fixTime.epochSecond
-            if (s > GAP_THRESHOLD_S) Triple(a.fixTime, b.fixTime, s) else null
+        // The silence before the first fix and after the last one count too: a phone that died is the case that matters.
+        val points = listOf(Pair(from, "window_start")) + rows.map { Pair(it.fixTime, "") } + listOf(Pair(to, "window_end"))
+        val gaps = points.zipWithNext().mapNotNull { (a, b) ->
+            val s = b.first.epochSecond - a.first.epochSecond
+            if (s > GAP_THRESHOLD_S) listOf(a, b) to s else null
         }
         appendLine("gaps=${gaps.size}")
-        gaps.forEach { (a, b, s) -> appendLine("gap start=$a end=$b duration_s=$s") }
+        gaps.forEach { (ab, s) ->
+            val edge = ab.map { it.second }.filter { it.isNotEmpty() }.joinToString(",")
+            appendLine("gap start=${ab[0].first} end=${ab[1].first} duration_s=$s" + if (edge.isNotEmpty()) " edge=$edge" else "")
+        }
         appendLine("note=positions are only those received; nothing between two fixes is estimated or interpolated")
     }
 
