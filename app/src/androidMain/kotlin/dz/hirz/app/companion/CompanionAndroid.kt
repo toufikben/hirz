@@ -20,6 +20,7 @@ import android.os.IBinder
 import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import androidx.core.util.AtomicFile
 import androidx.core.content.ContextCompat
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
@@ -32,6 +33,7 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import dz.hirz.app.MainActivity
 import dz.hirz.app.R
+import dz.hirz.app.api.HirzApiException
 import dz.hirz.app.push.backgroundClient
 import dz.hirz.shared.api.CheckInReply
 import dz.hirz.shared.api.IngestBatch
@@ -84,14 +86,21 @@ object CompanionEngine {
     private var queue: SignalQueue? = null
     val cadence = CompanionCadence()
 
-    private fun file(context: Context) = File(context.filesDir, "companion-queue.json")
+    /** AtomicFile: a crash mid-write keeps the previous complete queue instead of a truncated one (P1 review #10). */
+    private fun file(context: Context) = AtomicFile(File(context.filesDir, "companion-queue.json"))
 
     private fun load(context: Context): SignalQueue =
-        queue ?: SignalQueue.fromJson(file(context).takeIf { it.exists() }?.readText()).also { queue = it }
+        queue ?: SignalQueue.fromJson(runCatching { String(file(context).readFully()) }.getOrNull()).also { queue = it }
+
+    private fun persist(context: Context) {
+        val f = file(context)
+        val stream = f.startWrite()
+        runCatching { stream.write(load(context).toJson().toByteArray()); f.finishWrite(stream) }.onFailure { f.failWrite(stream) }
+    }
 
     suspend fun enqueue(context: Context, s: IngestSignal) = mutex.withLock {
         load(context).add(s)
-        file(context).writeText(load(context).toJson())
+        persist(context)
     }
 
     /** Uploads queued signals batch by batch; stops at the first failure and keeps the rest for later. */
@@ -101,11 +110,14 @@ object CompanionEngine {
         while (true) {
             val batch = mutex.withLock { load(context).nextBatch() }
             if (batch.isEmpty()) return
-            val result = runCatching { client.ingest(creds.sourceToken, IngestBatch(batch)) }.getOrNull() ?: return
-            cadence.serverSaysHighRate(result.highRate, System.currentTimeMillis())
+            val attempt = runCatching { client.ingest(creds.sourceToken, IngestBatch(batch)) }
+            val rejectedForGood = (attempt.exceptionOrNull() as? HirzApiException)?.status in setOf(400, 413, 422)
+            if (attempt.isFailure && !rejectedForGood) return
+            // A batch the server rejects as malformed is dropped, or it would block every later signal (P1 review #15).
+            attempt.getOrNull()?.let { cadence.serverSaysHighRate(it.highRate, System.currentTimeMillis()) }
             mutex.withLock {
                 load(context).acknowledge(batch.map { it.clientId }.toSet())
-                file(context).writeText(load(context).toJson())
+                persist(context)
             }
         }
     }
@@ -206,9 +218,10 @@ class LocationService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (CompanionVault(this).credentials() == null) { stopSelf(); return START_NOT_STICKY }
+        if (CompanionVault(this).credentials() == null || !hasLocationPermission(this)) { stopSelf(); return START_NOT_STICKY }
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION else 0
-        ServiceCompat.startForeground(this, 7_001, CompanionNotifications.sharing(this), type)
+        val started = runCatching { ServiceCompat.startForeground(this, 7_001, CompanionNotifications.sharing(this), type) }
+        if (started.isFailure) { stopSelf(); return START_NOT_STICKY }
         if (loop == null) loop = scope.launch { run() }
         return START_STICKY
     }
@@ -218,16 +231,17 @@ class LocationService : Service() {
         while (scope.isActive) {
             val now = System.currentTimeMillis()
             val interval = CompanionEngine.cadence.intervalMs(now)
-            if (interval != subscribedMs) { subscribe(interval); subscribedMs = interval }
+            if (interval != subscribedMs && subscribe(interval)) subscribedMs = interval
             val (battery, charging) = CompanionEngine.battery(this)
             CompanionEngine.sendNow(this, CompanionSignals.heartbeat(battery, charging, now))
             delay(interval)
         }
     }
 
+    /** False when location is not (yet) granted, so the loop retries instead of sending heartbeats only (P1 review #6). */
     @SuppressLint("MissingPermission")
-    private fun subscribe(intervalMs: Long) {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return
+    private fun subscribe(intervalMs: Long): Boolean {
+        if (!hasLocationPermission(this)) return false
         unsubscribe()
         val hasPlay = GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(this) == ConnectionResult.SUCCESS
         if (hasPlay) {
@@ -244,6 +258,7 @@ class LocationService : Service() {
             platformListener = listener
             getSystemService(LocationManager::class.java).requestLocationUpdates(LocationManager.GPS_PROVIDER, intervalMs, 0f, listener, Looper.getMainLooper())
         }
+        return true
     }
 
     private fun unsubscribe() {
@@ -269,9 +284,16 @@ class LocationService : Service() {
     }
 
     companion object {
-        fun start(context: Context) = ContextCompat.startForegroundService(context, Intent(context, LocationService::class.java))
+        /** Starts only with location permission: Android 14 kills a location FGS started without it (P1 review #1). */
+        fun start(context: Context) {
+            if (hasLocationPermission(context)) ContextCompat.startForegroundService(context, Intent(context, LocationService::class.java))
+        }
     }
 }
+
+fun hasLocationPermission(context: Context): Boolean =
+    ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
 /** Restarts sharing after a reboot when this phone is paired. */
 class BootReceiver : BroadcastReceiver() {

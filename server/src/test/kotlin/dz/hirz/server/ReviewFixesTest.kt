@@ -142,7 +142,8 @@ class ReviewFixesTest {
             env.clock.advance(1.hours + 1.seconds)
             client.postJson("/v1/ingest", paired.sourceToken, IngestBatch(listOf(IngestSignal("p", env.clock.millis(), LatLon(36.75, 3.05), 10.0))))
             val next = withTimeoutOrNull(3_000) { incoming.receive() }
-            assertTrue(next == null || next is Frame.Close, "no position may reach an expired member: $next")
+            val text = (next as? Frame.Text)?.readText()
+            assertTrue(next == null || next is Frame.Close || text?.contains("member_removed") == true, "no position may reach an expired member: $text")
         }
     }
 }

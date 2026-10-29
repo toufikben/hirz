@@ -17,6 +17,7 @@ import dz.hirz.shared.signal.FixSource
 import dz.hirz.shared.signal.Position
 import dz.hirz.shared.signal.Signal
 import io.ktor.http.HttpStatusCode
+import org.slf4j.LoggerFactory
 import java.security.MessageDigest
 import java.sql.Connection
 import java.time.Clock
@@ -61,6 +62,7 @@ class IngestService(
     private val listeners: List<IngestListener>,
 ) {
     private data class Pins(val cancel: String?, val duress: String?)
+    private val log = LoggerFactory.getLogger(IngestService::class.java)
 
     fun ingest(p: SourcePrincipal, batch: IngestBatch): IngestResult {
         if (batch.signals.isEmpty()) badRequest("empty_batch")
@@ -69,7 +71,8 @@ class IngestService(
         // Fix-time order, so rules see the asset's story in the order it happened.
         val ordered = batch.signals.sortedBy { it.fixTimeMs ?: now.toEpochMilli() }
         val rejected = mutableListOf<Rejection>()
-        val accepted = mutableListOf<IngestedSignal>()
+        val toEvaluate = mutableListOf<Pair<Long, IngestedSignal>>()
+        var accepted = 0
         var duplicates = 0
 
         db.tx { c ->
@@ -82,14 +85,27 @@ class IngestService(
                 }
                 if (s.fixTimeMs != null && s.position == null) { rejected += Rejection(s.clientId, "fix_time_without_position"); continue }
                 val stored = store(c, p, s, pins, now)
-                if (stored == null) duplicates++ else accepted += stored
+                if (stored.duplicate) duplicates++ else accepted++
+                stored.pending?.let { toEvaluate += stored.positionId to it }
             }
         }
-        accepted.forEach { signal -> listeners.forEach { it.onIngested(signal) } }
-        return IngestResult(accepted.size, duplicates, rejected, highRate(p.assetId))
+        // Alarms first, so nothing in front of an SOS can delay or block it; each listener isolated (P1 review #3).
+        for ((positionId, signal) in toEvaluate.sortedBy { if (it.second.signal.alarms.isEmpty()) 1 else 0 }) {
+            val ok = listeners.map { l -> runCatching { l.onIngested(signal) }.onFailure { log.error("listener failed for ${signal.clientId}", it) } }
+                .all { it.isSuccess }
+            if (ok) markEvaluated(positionId)
+        }
+        return IngestResult(accepted, duplicates, rejected, highRate(p.assetId))
     }
 
-    private fun store(c: Connection, p: SourcePrincipal, s: IngestSignal, pins: Pins, now: Instant): IngestedSignal? {
+    private fun markEvaluated(positionId: Long) = db.connection.use { c ->
+        c.prepareStatement("UPDATE positions SET evaluated_at = ? WHERE id = ?").apply { setTimestamp(1, clock.instant().ts()); setLong(2, positionId) }.executeUpdate()
+    }
+
+    /** A stored signal: [pending] is set when listeners still have to see it (new, or stored but never evaluated). */
+    private class Stored(val positionId: Long, val duplicate: Boolean, val pending: IngestedSignal?)
+
+    private fun store(c: Connection, p: SourcePrincipal, s: IngestSignal, pins: Pins, now: Instant): Stored {
         val alarms = s.alarms.toMutableSet()
         var reply = s.checkInReply
         s.pinHash?.let { typed ->
@@ -117,8 +133,8 @@ class IngestService(
             setArray(15, c.createArrayOf("text", alarms.map { apiJson.encodeToString(AlarmKind.serializer(), it).trim('"') }.toTypedArray()))
             setString(16, quality)
             setString(17, reply?.let { apiJson.encodeToString(CheckInReply.serializer(), it).trim('"') })
-        }.executeQuery().use { it.next() }
-        if (!inserted) return null
+        }.executeQuery().use { if (it.next()) it.getLong(1) else null }
+        if (inserted == null) return duplicate(c, p, s, fixTime, alarms, reply)
 
         // last_fix_at only moves forward; the previous value tells whether this fix is backlog.
         val previousLastFix = c.prepareStatement(
@@ -141,7 +157,28 @@ class IngestService(
             ignition = null, motion = null, tilt = null, alarms = alarms,
         )
         val isLatest = fixTime != null && (previousLastFix == null || !fixTime.isBefore(previousLastFix))
-        return IngestedSignal(s.clientId, p.sourceId, p.assetId, p.circleId, signal, quality, reply, isLatest)
+        return Stored(inserted, duplicate = false, IngestedSignal(s.clientId, p.sourceId, p.assetId, p.circleId, signal, quality, reply, isLatest))
+    }
+
+    /** A resent signal: evaluated before → nothing to do; stored but never evaluated → evaluate it now. */
+    private fun duplicate(c: Connection, p: SourcePrincipal, s: IngestSignal, fixTime: Instant?, alarms: Set<AlarmKind>, reply: CheckInReply?): Stored {
+        data class Row(val id: Long, val quality: String, val evaluated: Boolean, val serverMs: Long, val accuracy: Double?, val estimated: Boolean)
+        val row = c.prepareStatement(
+            "SELECT id, quality, evaluated_at IS NOT NULL, server_time, accuracy_m, accuracy_estimated FROM positions WHERE source_id = ? AND client_id = ?",
+        ).apply { setObject(1, p.sourceId); setString(2, s.clientId) }.executeQuery().use {
+            it.next(); Row(it.getLong(1), it.getString(2), it.getBoolean(3), it.getTimestamp(4).time, it.getDouble(5).takeUnless { _ -> it.wasNull() }, it.getBoolean(6))
+        }
+        if (row.evaluated) return Stored(row.id, duplicate = true, pending = null)
+        val lastFix = c.prepareStatement("SELECT last_fix_at FROM sources WHERE id = ?").apply { setObject(1, p.sourceId) }
+            .executeQuery().use { it.next(); it.getTimestamp(1)?.toInstant() }
+        val signal = Signal(
+            sourceId = p.sourceId.toString(), assetId = p.assetId.toString(), fixTimeMs = s.fixTimeMs, serverTimeMs = row.serverMs,
+            position = s.position?.let { Position(it.lat, it.lon, row.accuracy, row.estimated) }, fixSource = s.fixSource,
+            speedKmh = s.speedKmh, heading = s.heading, heartbeat = s.heartbeat, battery = s.battery, charging = s.charging,
+            externalPower = null, ignition = null, motion = null, tilt = null, alarms = alarms,
+        )
+        val isLatest = fixTime != null && (lastFix == null || !fixTime.isBefore(lastFix))
+        return Stored(row.id, duplicate = true, IngestedSignal(s.clientId, p.sourceId, p.assetId, p.circleId, signal, row.quality, reply, isLatest))
     }
 
     /** Implied speed from the previous good fix (by fix time) above the configured limit. */

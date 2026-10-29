@@ -29,6 +29,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.jsonObject
 import java.sql.Connection
@@ -43,6 +44,7 @@ fun interface IncidentEvents {
     fun changed(circleId: UUID, incidentId: UUID)
 }
 
+private const val SEND_TIMEOUT_MS = 10_000L
 private val RECIPIENT_ROLES = listOf("owner", "guardian", "viewer", "temporary")
 private val EDITORS = setOf(Role.OWNER, Role.GUARDIAN)
 private val reasonsSerializer = ListSerializer(Reason.serializer())
@@ -74,7 +76,9 @@ class IncidentService(
                 setString(6, apiJson.encodeToString(reasonsSerializer, finding.reasons)); setTimestamp(7, finding.at.ts())
             }.executeQuery().use { if (it.next()) it.getObject(1, UUID::class.java) else null }
             val id = inserted ?: c.prepareStatement("SELECT id FROM incidents WHERE asset_id = ? AND rule = ? AND state = 'open'")
-                .apply { setObject(1, finding.assetId); setString(2, finding.rule.name) }.executeQuery().use { it.next(); it.getObject(1, UUID::class.java) }
+                .apply { setObject(1, finding.assetId); setString(2, finding.rule.name) }.executeQuery()
+                .use { if (it.next()) it.getObject(1, UUID::class.java) else null }
+                ?: throw IllegalStateException("incident closed concurrently; the finding is retried by the next evaluation")
             c.prepareStatement("UPDATE findings SET incident_id = ? WHERE id = ?").apply { setObject(1, id); setLong(2, findingId) }.executeUpdate()
             event(c, id, if (inserted != null) "opened" else "finding", null,
                 apiJson.encodeToString(reasonsSerializer, finding.reasons).let { """{"reasons":$it}""" }, now)
@@ -99,11 +103,15 @@ class IncidentService(
             val name = c.prepareStatement("SELECT name FROM assets WHERE id = ?").apply { setObject(1, f.assetId) }
                 .executeQuery().use { it.next(); it.getString(1) }
             val list = c.prepareStatement(
-                """SELECT cm.member_id, pt.token FROM circle_members cm LEFT JOIN push_tokens pt ON pt.member_id = cm.member_id
+                // A token also registered by one of the asset's own sources is the carrier's phone: never alert it.
+                """SELECT cm.member_id, pt.token FROM circle_members cm
+                   LEFT JOIN push_tokens pt ON pt.member_id = cm.member_id
+                     AND pt.token NOT IN (SELECT push_token FROM sources WHERE asset_id = ? AND push_token IS NOT NULL)
                    WHERE cm.circle_id = ? AND cm.role = ANY(?) AND (cm.expires_at IS NULL OR cm.expires_at > ?)
                    ORDER BY cm.priority""",
             ).apply {
-                setObject(1, f.circleId); setArray(2, c.createArrayOf("text", RECIPIENT_ROLES.toTypedArray())); setTimestamp(3, now.ts())
+                setObject(1, f.assetId); setObject(2, f.circleId)
+                setArray(3, c.createArrayOf("text", RECIPIENT_ROLES.toTypedArray())); setTimestamp(4, now.ts())
             }.executeQuery().toList { Recipient(it.getObject(1, UUID::class.java), it.getString(2)) }
             name to list
         }
@@ -111,9 +119,7 @@ class IncidentService(
         val results = runBlocking(Dispatchers.IO) {
             coroutineScope {
                 recipients.map { r ->
-                    async {
-                        r to (r.token?.let { notifier.send(PushTarget(r.member, it), message) })
-                    }
+                    async { r to r.token?.let { safeSend(PushTarget(r.member, it), message) } }
                 }.awaitAll()
             }
         }
@@ -137,6 +143,11 @@ class IncidentService(
             }
         }
     }
+
+    /** One send can neither throw into nor stall the others (P1 review #4). */
+    private suspend fun safeSend(to: PushTarget, message: AlertMessage): SendResult =
+        runCatching { withTimeout(SEND_TIMEOUT_MS) { notifier.send(to, message) } }
+            .getOrElse { SendResult.Failed(it.message ?: it::class.simpleName ?: "send_error", tokenInvalid = false) }
 
     // ---- member-facing operations -------------------------------------------------------------------------------
 
@@ -204,7 +215,7 @@ class IncidentService(
             ).apply { setObject(1, assetId) }.executeQuery().toList { Target(it.getString(1), it.getString(2)) }
         }
         val sent = runBlocking(Dispatchers.IO) {
-            targets.map { t -> async { notifier.send(PushTarget(null, t.token), AlertMessage("checkin", null, null, t.assetName, null)) } }.awaitAll()
+            targets.map { t -> async { safeSend(PushTarget(null, t.token), AlertMessage("checkin", null, null, t.assetName, null)) } }.awaitAll()
         }.count { it is SendResult.Ok }
         db.connection.use { audit(it, circleId, memberId, "checkin_sent", """{"asset":"$assetId","sent":$sent}""") }
         return CheckInSentDto(sent)

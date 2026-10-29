@@ -21,7 +21,6 @@ import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.websocket.webSocket
 import io.ktor.websocket.CloseReason
-import io.ktor.websocket.Frame
 import io.ktor.websocket.close
 import java.sql.Connection
 import java.sql.ResultSet
@@ -53,11 +52,11 @@ fun Route.liveRoutes(deps: Deps, hub: LiveHub, incidents: IncidentService) {
             return@webSocket
         }
         val now = deps.clock.instant()
-        val circles = hub.circlesOf(member.memberId, now.toEpochMilli())
-        val handle = hub.register(member.memberId, this, circles)
+        val handle = hub.register(member.memberId, this)
         try {
-            val snapshot = deps.db.connection.use { c -> snapshot(c, member.memberId, circles, incidents, now) }
-            send(Frame.Text(apiJson.encodeToString(LiveEvent.serializer(), snapshot)))
+            val circles = hub.circlesOf(member.memberId, now.toEpochMilli())
+            hub.setCircles(handle, circles)
+            hub.send(handle, deps.db.connection.use { c -> snapshot(c, member.memberId, circles, incidents, now) })
             for (frame in incoming) { /* the app sends nothing; reading keeps the socket open until it closes */ }
         } finally {
             hub.unregister(handle)

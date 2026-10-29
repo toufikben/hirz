@@ -111,8 +111,10 @@ actual fun AlarmReadinessCard() {
 actual fun CompanionPermissionsCard() {
     val context = LocalContext.current
     tick()
-    val foreground = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {}
-    val background = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    // Sharing starts as soon as location is granted (it never starts without it: P1 review #1).
+    val restart = { LocationService.start(context.applicationContext) }
+    val foreground = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { restart() }
+    val background = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { restart() }
     val rows = buildList {
         val fine = granted(context, Manifest.permission.ACCESS_FINE_LOCATION)
         val needed = buildList {

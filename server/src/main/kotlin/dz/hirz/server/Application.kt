@@ -64,7 +64,7 @@ fun Application.module(deps: Deps) {
     val assets = AssetService(deps.db, deps.clock, circles)
     val places = PlaceService(deps.db, circles, deps.rules.placeMinMarginM)
     val incidents = IncidentService(deps.db, deps.clock, deps.notifier, circles)
-    hub = LiveHub(deps.db, incidents)
+    hub = LiveHub(deps.db, incidents, deps.clock)
     incidents.subscribe(hub)
     val recorder = FindingRecorder(deps.db, deps.clock, incidents)
     val engine = RulesEngine(deps.db, deps.rules, recorder)

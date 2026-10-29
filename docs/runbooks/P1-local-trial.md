@@ -8,7 +8,7 @@
 - رمز الإكراه يُطلق P0 والشاشة عند المرافق عادية.
 
 ## 0) المتطلبات (Task 0)
-- مشروع Firebase اسمه `hirz`، فيه تطبيق Android بالحزمة `dz.hirz.app` وبصمة SHA-1 للنسخة التجريبية، و**Authentication → Google** مفعّل.
+- مشروع Firebase اسمه `hirz`، فيه تطبيق Android بالحزمة `dz.hirz.app` وبصمة SHA-1 للنسخة التجريبية `00:52:77:62:D9:52:81:D8:26:7C:4E:2F:E1:67:CC:81:D9:CC:10:3B` (مفتاح التطوير الثابت في `app/debug.keystore`، تطبعه CI أيضًا)، و**Authentication → Google** مفعّل.
 - ملف `google-services.json` محفوظ في سرّ GitHub باسم `GOOGLE_SERVICES_JSON`، مرمّزًا base64:
   ```bash
   base64 -w0 google-services.json | gh secret set GOOGLE_SERVICES_JSON --repo toufikben/hirz
@@ -17,6 +17,10 @@
 - مفتاح حساب الخدمة (service account) خارج المستودع، مثلًا `C:\Users\Administrator\hirz-secrets\firebase-admin.json`.
 - قاعدة Supabase مع امتداد `postgis` مفعّل، ورابط الاتصال (session pooler).
 - `cloudflared` مثبّت، وJDK 21 أو أحدث (JDK 25 موجود على الحاسوب ويعمل).
+
+**تنبيهات قبل البدء:**
+- كل إعادة تشغيل لـ`cloudflared` تعطي عنوانًا جديدًا يجب إدخاله في الهاتفين.
+- يُنصح بشبكة جيدة للخادم: إن تأخر إرسال الإشعارات أكثر من 10 ثوانٍ قد يعيد المرافق إرسال SOS، والخادم يتجاهل التكرار.
 
 ## 1) تشغيل الخادم
 1. نزّل الخادم والتطبيق من آخر تشغيل CI ناجح:

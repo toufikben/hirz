@@ -68,6 +68,16 @@ android {
         buildConfigField("String", "HIRZ_BASE_URL", "\"http://10.0.2.2:8080\"")
     }
     buildFeatures { buildConfig = true }
+    // One committed debug key (debug only, never for release): every CI build has the same SHA-1, so Google
+    // sign-in keeps working and `adb install -r` upgrades in place (P1 review #5).
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

@@ -22,7 +22,8 @@ class FcmNotifier(app: FirebaseApp) : Notifier {
         try {
             SendResult.Ok(messaging.send(fcm))
         } catch (e: FirebaseMessagingException) {
-            val invalid = e.messagingErrorCode in setOf(MessagingErrorCode.UNREGISTERED, MessagingErrorCode.INVALID_ARGUMENT)
+            // Only UNREGISTERED proves the token is dead; INVALID_ARGUMENT can be our payload's fault.
+            val invalid = e.messagingErrorCode == MessagingErrorCode.UNREGISTERED
             SendResult.Failed(e.messagingErrorCode?.name ?: e.message ?: "fcm_error", tokenInvalid = invalid)
         }
     }
