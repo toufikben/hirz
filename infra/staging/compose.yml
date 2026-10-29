@@ -1,0 +1,48 @@
+# Hirz staging (design §9): one ARM VM, Core + Traccar + Caddy. The database is the Supabase project.
+# Secrets live in /opt/hirz/core.env (mode 600), never here. Only 80/443 (Caddy) and the device ports are public;
+# Traccar's web/API port 8082 stays on the private network (humans reach it through an SSH tunnel).
+name: hirz
+
+services:
+  core:
+    image: ghcr.io/toufikben/hirz-core:${HIRZ_CORE_TAG}
+    env_file: /opt/hirz/core.env
+    restart: unless-stopped
+    volumes:
+      - /opt/hirz/firebase-admin.json:/opt/hirz-secrets/firebase-admin.json:ro
+    networks: [hirz]
+
+  traccar:
+    image: traccar/traccar:6.16.0
+    restart: unless-stopped
+    ports:
+      - "5023:5023"
+      - "5013:5013"
+    volumes:
+      - /opt/hirz/traccar.xml:/opt/traccar/conf/traccar.xml:ro
+      - traccar-data:/opt/traccar/data
+      - traccar-logs:/opt/traccar/logs
+    networks: [hirz]
+
+  caddy:
+    image: caddy:2.8.4
+    restart: unless-stopped
+    environment:
+      HIRZ_HOST: ${HIRZ_HOST}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [hirz]
+
+networks:
+  hirz: {}
+
+volumes:
+  traccar-data: {}
+  traccar-logs: {}
+  caddy-data: {}
+  caddy-config: {}

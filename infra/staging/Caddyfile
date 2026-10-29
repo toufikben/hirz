@@ -1,0 +1,13 @@
+# HTTPS for Core with automatic Let's Encrypt certificates (design §8.1). Traccar's web UI is not served here.
+{$HIRZ_HOST} {
+	encode gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		-Server
+	}
+	# The Traccar forward endpoints are private: Traccar reaches Core directly on the Docker network.
+	@traccar path /v1/traccar/*
+	respond @traccar 404
+	reverse_proxy core:8080
+}
