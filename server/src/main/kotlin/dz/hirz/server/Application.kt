@@ -1,5 +1,8 @@
 package dz.hirz.server
 
+import dz.hirz.server.share.ShareService
+import dz.hirz.server.share.publicShareRoutes
+import dz.hirz.server.share.shareRoutes
 import dz.hirz.server.exports.PolicePack
 import dz.hirz.server.exports.exportRoutes
 import dz.hirz.server.assets.AssetMediaService
@@ -78,7 +81,8 @@ fun Application.module(deps: Deps) {
     val codeWords = dz.hirz.server.circles.CodeWordService(deps.db, circles, dz.hirz.server.crypto.DataCipher(deps.dataKey))
     val emergency = dz.hirz.server.emergency.EmergencyService(deps.db, deps.clock, circles)
     val media = AssetMediaService(deps.db, deps.clock, circles)
-    val sheets = SheetService(deps.db, deps.clock, circles, incidents, emergency)
+    val shares = ShareService(deps.db, deps.clock, circles, deps.publicBaseUrl)
+    val sheets = SheetService(deps.db, deps.clock, circles, incidents, emergency).also { it.shareActiveUntil = shares::activeUntil }
     val policePack = PolicePack(deps.db, deps.clock, circles, incidents, System.getProperty("hirz.version") ?: "dev")
     hub = LiveHub(deps.db, incidents, deps.clock)
     val escalation = dz.hirz.server.escalation.EscalationEngine(deps.db, deps.clock, deps.notifier, deps.rules, circles)
@@ -102,6 +106,7 @@ fun Application.module(deps: Deps) {
     routing {
         healthRoutes(System.getProperty("hirz.version") ?: "dev")
         pairRoutes(assets)
+        publicShareRoutes(shares)
         liveRoutes(deps, hub, incidents)
         authenticate(MEMBER_AUTH) {
             meRoutes(deps)
@@ -114,6 +119,7 @@ fun Application.module(deps: Deps) {
             assetMediaRoutes(media)
             sheetRoutes(sheets)
             exportRoutes(policePack)
+            shareRoutes(shares)
             historyRoutes(deps, circles)
         }
         authenticate(SOURCE_AUTH) {
@@ -136,6 +142,7 @@ fun main() {
         clock = Clock.systemUTC(),
         rules = RuleConfig.DEFAULT,
         dataKey = cfg.dataKey,
+        publicBaseUrl = cfg.publicBaseUrl,
     )
     val port = System.getenv("PORT")?.toIntOrNull() ?: 8080
     embeddedServer(Netty, port = port) { module(deps) }.start(wait = true)

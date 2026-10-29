@@ -17,6 +17,8 @@ data class Deps(
     val rules: RuleConfig,
     /** 32-byte key for secrets at rest (HIRZ_DATA_KEY). */
     val dataKey: ByteArray,
+    /** Where public share links point, e.g. https://hirz.example; no trailing slash needed. */
+    val publicBaseUrl: String = "http://localhost:8080",
     val startJobs: Boolean = true,
     /** Extra observers of accepted signals (tests); the rules engine and live hub are wired inside the module. */
     val extraIngestListeners: List<IngestListener> = emptyList(),

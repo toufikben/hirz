@@ -34,8 +34,8 @@ class SheetService(
     private val incidents: IncidentService,
     private val emergency: EmergencyService,
 ) {
-    /** The live share link, once Task 7 provides one. */
-    var shareUrl: (UUID) -> String? = { null }
+    /** When the incident's public share link expires, if one is active. */
+    var shareActiveUntil: (UUID) -> java.time.Instant? = { null }
 
     fun sheet(incidentId: UUID, memberId: UUID): SheetDto {
         val now = clock.instant()
@@ -79,7 +79,7 @@ class SheetService(
                 lastFixAgeS = last?.let { (now.toEpochMilli() - it.fixTimeMs) / 1000 },
                 track = track,
                 sources = sources,
-                shareUrl = shareUrl(incidentId),
+                shareActiveUntilMs = shareActiveUntil(incidentId)?.toEpochMilli(),
             ).let { Triple(it, circleId, country) }
         }
         return base.copy(emergencyNumbers = emergency.list(country, circleId, memberId))

@@ -8,6 +8,7 @@ data class AppConfig(
     val firebaseProjectId: String?,
     /** 32 random bytes, base64; encrypts the family code word. Generate once and keep it with the other secrets. */
     val dataKey: ByteArray,
+    val publicBaseUrl: String = "http://localhost:8080",
 ) {
     companion object {
         fun fromEnv(env: Map<String, String> = System.getenv()): AppConfig = AppConfig(
@@ -18,6 +19,7 @@ data class AppConfig(
             dataKey = (env["HIRZ_DATA_KEY"] ?: error("HIRZ_DATA_KEY is required (32 random bytes, base64)"))
                 .let { java.util.Base64.getDecoder().decode(it.trim()) }
                 .also { require(it.size == 32) { "HIRZ_DATA_KEY must decode to 32 bytes" } },
+            publicBaseUrl = env["HIRZ_PUBLIC_BASE_URL"] ?: "http://localhost:${env["PORT"] ?: "8080"}",
         )
     }
 }

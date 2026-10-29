@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="30">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Hirz — {{NAME}}</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 16px; max-width: 640px; margin-inline: auto; line-height: 1.5; }
+  h1 { font-size: 1.4rem; margin: 0 0 8px; }
+  .last { font-size: 1.1rem; padding: 12px; border: 2px solid #c62828; border-radius: 8px; }
+  .muted { opacity: .7; font-size: .9rem; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: .9rem; }
+  td, th { padding: 4px 6px; border-bottom: 1px solid #8884; text-align: start; }
+  a { color: inherit; }
+</style>
+</head>
+<body>
+<h1>{{NAME}}</h1>
+<div class="last">{{LAST}}</div>
+<p class="muted">يتحدّث كل 30 ثانية · Mise à jour toutes les 30 s · Refreshes every 30 s · {{EXPIRES}}</p>
+<table>
+<thead><tr><th>UTC</th><th>lat, lon</th><th>±m</th></tr></thead>
+<tbody>
+{{ROWS}}
+</tbody>
+</table>
+</body>
+</html>

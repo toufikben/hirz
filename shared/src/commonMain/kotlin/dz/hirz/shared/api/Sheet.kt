@@ -28,5 +28,6 @@ data class SheetDto(
     val track: List<PositionDto> = emptyList(),
     val sources: List<SheetSourceDto> = emptyList(),
     val emergencyNumbers: List<EmergencyNumberDto> = emptyList(),
-    val shareUrl: String? = null,
+    /** When the active public share link expires; the link itself is shown only once, at creation. */
+    val shareActiveUntilMs: Long? = null,
 )
