@@ -30,6 +30,10 @@ data class IngestSignal(
     val heartbeat: Boolean = true,
     val checkInReply: CheckInReply? = null,
     val pinHash: String? = null,
+    /** Vehicle and tracker fields (design §3); null when the source does not report them. */
+    val externalPower: Boolean? = null,
+    val ignition: Boolean? = null,
+    val motion: Boolean? = null,
 )
 
 @Serializable
