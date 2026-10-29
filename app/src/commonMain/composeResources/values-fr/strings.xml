@@ -5,4 +5,15 @@
     <string name="mode_guardian">Tuteur / propriétaire</string>
     <string name="mode_companion">Accompagnateur</string>
     <string name="mode_sms_gateway">Passerelle SMS</string>
+    <string name="choose_mode">Comment utiliserez-vous ce téléphone ?</string>
+    <string name="sign_in_google">Se connecter avec Google</string>
+    <string name="sign_in_failed">Connexion impossible. Réessayez.</string>
+    <string name="settings">Paramètres</string>
+    <string name="base_url">Adresse du serveur</string>
+    <string name="save">Enregistrer</string>
+    <string name="coming_soon">Bientôt</string>
+    <string name="back">Retour</string>
+    <string name="sign_out">Se déconnecter</string>
+    <string name="loading">Chargement…</string>
+    <string name="error_generic">Une erreur est survenue. Vérifiez la connexion.</string>
 </resources>

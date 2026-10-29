@@ -5,4 +5,15 @@
     <string name="mode_guardian">وليّ / مالك</string>
     <string name="mode_companion">مرافق</string>
     <string name="mode_sms_gateway">بوابة رسائل SMS</string>
+    <string name="choose_mode">كيف ستستعمل هذا الهاتف؟</string>
+    <string name="sign_in_google">الدخول بحساب Google</string>
+    <string name="sign_in_failed">تعذّر الدخول. حاول مرة أخرى.</string>
+    <string name="settings">الإعدادات</string>
+    <string name="base_url">عنوان الخادم</string>
+    <string name="save">حفظ</string>
+    <string name="coming_soon">قريبًا</string>
+    <string name="back">رجوع</string>
+    <string name="sign_out">خروج</string>
+    <string name="loading">جارٍ التحميل…</string>
+    <string name="error_generic">حدث خطأ. تحقّق من الاتصال.</string>
 </resources>
