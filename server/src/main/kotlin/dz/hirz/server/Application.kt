@@ -169,13 +169,16 @@ private fun traccarAdmin(cfg: AppConfig): dz.hirz.server.traccar.TraccarAdmin {
 
 fun main() {
     val cfg = AppConfig.fromEnv()
-    val firebase = FirebaseTokenVerifier.firebaseApp(
+    // The end-to-end CI stack has no Firebase: `test.<uid>` tokens and logged pushes, refused outside HIRZ_ENV=ci.
+    val testAuth = System.getenv("HIRZ_TEST_AUTH") == "true"
+    if (testAuth) require(System.getenv("HIRZ_ENV") == "ci") { "HIRZ_TEST_AUTH is allowed only with HIRZ_ENV=ci" }
+    val firebase = if (testAuth) null else FirebaseTokenVerifier.firebaseApp(
         cfg.firebaseProjectId ?: error("HIRZ_FIREBASE_PROJECT_ID is required: members sign in with Firebase"),
     )
     val deps = Deps(
         db = connectDatabase(cfg),
-        verifier = FirebaseTokenVerifier(firebase),
-        notifier = FcmNotifier(firebase),
+        verifier = firebase?.let { FirebaseTokenVerifier(it) } ?: dz.hirz.server.auth.CiTokenVerifier,
+        notifier = firebase?.let { FcmNotifier(it) } ?: dz.hirz.server.notify.LogNotifier,
         clock = Clock.systemUTC(),
         rules = RuleConfig.DEFAULT,
         dataKey = cfg.dataKey,

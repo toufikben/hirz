@@ -79,6 +79,141 @@ jobs:
       - name: Forbidden claims in app strings
         run: node tools/forbidden-claims/check.mjs "app/src/**/strings.xml"
 
+  e2e:
+    needs: gradle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Package Hirz Core
+        run: ./gradlew --no-daemon :server:installDist
+      - name: Render CI secrets and the Traccar config
+        # CI-only: Traccar binds 0.0.0.0 inside Docker and its port is mapped for the round-trip test.
+        run: |
+          secret=$(openssl rand -hex 32)
+          {
+            echo "E2E_TRACCAR_SECRET=$secret"
+            echo "E2E_DATA_KEY=$(openssl rand -base64 32)"
+            echo "E2E_TRACCAR_USER=admin@hirz.test"
+            echo "E2E_TRACCAR_PASSWORD=$(openssl rand -hex 16)"
+            echo "E2E_TRACCAR_XML=$RUNNER_TEMP/traccar.xml"
+          } >> "$GITHUB_ENV"
+          sed -e "s/\${HIRZ_TRACCAR_DB_PASSWORD}/$(openssl rand -hex 16)/" -e "s/\${HIRZ_TRACCAR_SECRET}/$secret/g" \
+              -e "s#<entry key='web.address'>127.0.0.1</entry>#<entry key='web.address'>0.0.0.0</entry>#" \
+              infra/traccar/hirz.template.xml > "$RUNNER_TEMP/traccar.xml"
+          node infra/traccar/tools/check-config.mjs --container "$RUNNER_TEMP/traccar.xml"
+      - name: Start PostGIS and Traccar 6.16.0, then Traccar's first (admin) account
+        run: |
+          docker compose -f infra/ci/compose.e2e.yml up -d postgres traccar
+          for i in $(seq 1 120); do curl -fsS http://localhost:8082/api/server > /dev/null && break; sleep 1; done
+          curl -fsS -X POST http://localhost:8082/api/users -H 'Content-Type: application/json' \
+            -d "{\"name\":\"admin\",\"email\":\"$E2E_TRACCAR_USER\",\"password\":\"$E2E_TRACCAR_PASSWORD\"}" > /dev/null
+      - name: Start Core
+        run: |
+          docker compose -f infra/ci/compose.e2e.yml up -d --build core
+          for i in $(seq 1 90); do
+            if curl -fsS http://localhost:8080/health > /dev/null; then echo "Core up after ${i}s"; exit 0; fi
+            sleep 1
+          done
+          docker compose -f infra/ci/compose.e2e.yml logs core | tail -80
+          exit 1
+      - name: End-to-end tests (simulated GT06 → Traccar → Core)
+        env:
+          TRACCAR_URL: http://localhost:8082
+          CORE_URL: http://localhost:8080
+          TRACCAR_GT06_HOST: localhost
+          TRACCAR_GT06_PORT: '5023'
+        run: ./gradlew --no-daemon :sim:integrationTest
+      - name: Integration tests really ran (a skip must fail)
+        run: |
+          for t in TraccarRoundTripIT:2 EndToEndIT:3; do
+            report="sim/build/test-results/integrationTest/TEST-dz.hirz.sim.${t%%:*}.xml"
+            head -3 "$report"
+            grep -q "tests=\"${t##*:}\"" "$report"
+            grep -q 'skipped="0"' "$report"
+            grep -q 'failures="0"' "$report"
+            grep -q 'errors="0"' "$report"
+          done
+      - name: Stack logs
+        if: always()
+        run: |
+          docker compose -f infra/ci/compose.e2e.yml logs core 2>&1 | tail -120
+          docker compose -f infra/ci/compose.e2e.yml logs traccar 2>&1 | tail -80
+
+  image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: hirz
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      HIRZ_TEST_DB_URL: jdbc:postgresql://localhost:5432/hirz
+      HIRZ_TEST_DB_USER: postgres
+      HIRZ_TEST_DB_PASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Firebase config (real secret when available, otherwise a non-functional dummy)
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then echo "$GOOGLE_SERVICES_JSON" | base64 -d > app/google-services.json; echo "using real Firebase config"
+          else cp app/google-services.ci.json app/google-services.json; echo "using dummy Firebase config (sign-in will not work in this build)"; fi
+      - name: shared
+        if: always()
+        run: ./gradlew --no-daemon :shared:allTests
+      - name: server
+        if: always()
+        run: ./gradlew --no-daemon :server:test
+      - name: sim and app
+        if: always()
+        run: ./gradlew --no-daemon :sim:test :sim:compileIntegrationTestKotlin :app:testPlayDebugUnitTest :app:assemblePlayDebug :app:assembleGatewayDebug
+      - name: Only the gateway build declares SMS permissions
+        run: |
+          play=$(find app/build/intermediates -path "*merged_manifest*" -path "*playDebug*" -name AndroidManifest.xml | head -1)
+          gateway=$(find app/build/intermediates -path "*merged_manifest*" -path "*gatewayDebug*" -name AndroidManifest.xml | head -1)
+          echo "play: $play"; echo "gateway: $gateway"
+          test -n "$play" && test -n "$gateway"
+          if grep -Eq "android.permission.(SEND|RECEIVE)_SMS" "$play"; then echo "play build declares SMS permissions"; exit 1; fi
+          grep -q "android.permission.SEND_SMS" "$gateway"
+      - name: Debug signing fingerprint (register this SHA-1 in Firebase)
+        run: keytool -list -v -keystore app/debug.keystore -storepass android | grep -E "SHA1|SHA256"
+      - name: Package Hirz Core
+        run: ./gradlew --no-daemon :server:installDist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hirz-core
+          path: server/build/install/server/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hirz-debug-apk
+          path: app/build/outputs/apk/*/debug/*.apk
+          if-no-files-found: error
+
+  node-guards:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Guard tests
+        run: node --test "infra/traccar/tools/*.test.mjs" "infra/staging/*.test.mjs" "tools/forbidden-claims/*.test.mjs" "tools/latency/*.test.mjs"
+      - name: Traccar template
+        run: node infra/traccar/tools/check-config.mjs --template infra/traccar/hirz.template.xml
+      - name: Forbidden claims in app strings
+        run: node tools/forbidden-claims/check.mjs "app/src/**/strings.xml"
+
   traccar-integration:
     needs: gradle
     runs-on: ubuntu-latest

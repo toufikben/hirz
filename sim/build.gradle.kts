@@ -33,6 +33,7 @@ val integrationTest by tasks.registering(Test::class) {
     classpath = sourceSets["integrationTest"].runtimeClasspath
     useJUnitPlatform()
     outputs.upToDateWhen { false }
+    environment("CORE_URL", System.getenv("CORE_URL") ?: "")
     val url = System.getenv("TRACCAR_URL")
     onlyIf("TRACCAR_URL is set") {
         if (url.isNullOrBlank()) println("integrationTest skipped: TRACCAR_URL is not set")

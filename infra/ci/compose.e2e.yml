@@ -1,0 +1,44 @@
+# End-to-end CI stack (P3 Task 7): PostGIS + Core (built from this workspace) + Traccar 6.16.0 forwarding to Core.
+# Core runs with HIRZ_TEST_AUTH in HIRZ_ENV=ci: `test.<uid>` tokens, pushes logged. Never used outside CI.
+name: hirz-e2e
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: hirz
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      retries: 30
+
+  traccar:
+    image: traccar/traccar:6.16.0
+    volumes:
+      - ${E2E_TRACCAR_XML}:/opt/traccar/conf/traccar.xml:ro
+    ports:
+      - "8082:8082"
+      - "5023:5023"
+
+  core:
+    build:
+      context: ../..
+      dockerfile: server/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      HIRZ_ENV: ci
+      HIRZ_TEST_AUTH: "true"
+      HIRZ_DATABASE_URL: jdbc:postgresql://postgres:5432/hirz
+      HIRZ_DATABASE_USER: postgres
+      HIRZ_DATABASE_PASSWORD: postgres
+      HIRZ_DATA_KEY: ${E2E_DATA_KEY}
+      HIRZ_TRACCAR_SECRET: ${E2E_TRACCAR_SECRET}
+      HIRZ_TRACCAR_URL: http://traccar:8082
+      HIRZ_TRACCAR_USER: ${E2E_TRACCAR_USER}
+      HIRZ_TRACCAR_PASSWORD: ${E2E_TRACCAR_PASSWORD}
+      HIRZ_DEVICE_HOST: localhost
+    ports:
+      - "8080:8080"

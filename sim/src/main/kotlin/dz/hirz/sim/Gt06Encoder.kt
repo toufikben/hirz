@@ -17,6 +17,9 @@ data class Gt06Fix(
     val positioned: Boolean = true,
 )
 
+/** GT06 alarm codes in the terminal-info bits 3..5 and the alarm byte of a 0x16 packet. */
+enum class Gt06Alarm(val terminalBits: Int, val alarmByte: Int) { SOS(4, 0x01), POWER_CUT(2, 0x02), VIBRATION(1, 0x03) }
+
 /** Encodes GT06 (Concox) frames: `78 78 <len> <proto> <payload> <serial:2> <crc:2> 0D 0A`. */
 object Gt06Encoder {
     private const val MCC_ALGERIA = 603
@@ -41,7 +44,21 @@ object Gt06Encoder {
         return frame(0x13, payload, serial)
     }
 
-    fun location(fix: Gt06Fix, serial: Int): ByteArray {
+    fun location(fix: Gt06Fix, serial: Int): ByteArray = frame(0x12, gpsAndLbs(fix, lbsLength = false), serial)
+
+    /** 0x16 "GPS + LBS + status" alarm packet: GPS, LBS with its length byte, terminal info, voltage, GSM, alarm, language. */
+    fun alarm(fix: Gt06Fix, alarm: Gt06Alarm, serial: Int): ByteArray {
+        val out = ByteArrayOutputStream()
+        out.write(gpsAndLbs(fix, lbsLength = true))
+        out.write(0x40 or (alarm.terminalBits shl 3)) // GPS tracking on + alarm bits
+        out.write(6) // voltage level
+        out.write(4) // GSM signal
+        out.write(alarm.alarmByte)
+        out.write(0x02) // language: English
+        return frame(0x16, out.toByteArray(), serial)
+    }
+
+    private fun gpsAndLbs(fix: Gt06Fix, lbsLength: Boolean): ByteArray {
         val time = fix.utc.atOffset(ZoneOffset.UTC)
         val out = ByteArrayOutputStream()
         out.write(byteArrayOf(
@@ -57,11 +74,12 @@ object Gt06Encoder {
         if (fix.lon < 0) status = status or (1 shl 11)
         if (fix.positioned) status = status or (1 shl 12)
         out.writeInt16(status)
+        if (lbsLength) out.write(9) // LBS length: itself + MCC(2) + MNC(1) + LAC(2) + cell(3)
         out.writeInt16(MCC_ALGERIA)
         out.write(MNC)
         out.writeInt16(0) // LAC
         out.write(byteArrayOf(0, 0, 0)) // cell id
-        return frame(0x12, out.toByteArray(), serial)
+        return out.toByteArray()
     }
 
     /** GT06 coordinate unit: |degrees| × 60 × 30000. The hemisphere lives in the course/status word. */
