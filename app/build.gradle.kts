@@ -38,6 +38,7 @@ kotlin {
             implementation(libs.googleid)
             implementation(libs.androidx.datastore)
             implementation(libs.androidx.security.crypto)
+            implementation(libs.maplibre.android)
         }
         androidUnitTest.dependencies {
             implementation(libs.kotlin.test)
