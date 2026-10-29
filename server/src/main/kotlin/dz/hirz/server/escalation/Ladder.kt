@@ -76,10 +76,9 @@ object Ladder {
     }
 
     private fun tick(st: LadderState, now: Instant, cfg: RuleConfig): Pair<LadderState, List<LadderAction>> = when (st.stage) {
-        Stage.GUARDIANS -> {
+        Stage.GUARDIANS -> if (st.current == null) toContacts(st, now, cfg) else {
             val actions = mutableListOf<LadderAction>()
             var s = st
-            if (s.current == null) return toContacts(s, now, cfg)
             if (s.windowStart == null && !now.isBefore(s.stageStart.plusMillis(cfg.ackFallbackMs))) {
                 s = s.copy(windowStart = s.stageStart, windowFrom = WindowFrom.SENT, nextCheck = s.stageStart.plusMillis(windowMs(s.tier, cfg)))
                 actions += LadderAction.Log("window_from_sent", s.current)
