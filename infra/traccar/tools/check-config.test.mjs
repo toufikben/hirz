@@ -41,8 +41,8 @@ test('a duplicated key is rejected and the last definition is the one judged', (
 
 // New Hirz rules.
 test('rejectsUnknownProtocols', () => {
-  const errors = errorsOf(set(template, 'protocols.enable', 'gt06,osmand,h02'));
-  assert.ok(errors.some((e) => e.includes('protocols.enable') && e.includes('h02')), errors.join('\n'));
+  const errors = errorsOf(set(template, 'protocols.enable', 'gt06,osmand,teltonika'));
+  assert.ok(errors.some((e) => e.includes('protocols.enable') && e.includes('teltonika')), errors.join('\n'));
 });
 
 test('rejectsPublicWebAddress', () => {

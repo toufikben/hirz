@@ -13,6 +13,10 @@ data class TrackerClaimRequest(
     val simPhone: String? = null,
     val apn: String? = null,
     val intervalS: Int = 60,
+    /** The device's current password; the catalogue default when null. */
+    val devicePassword: String? = null,
+    /** Number the tracker calls or texts on SOS; that setup SMS is skipped when null. */
+    val sosPhone: String? = null,
 )
 
 /** One SMS the owner sends from their own phone to the tracker's SIM; [purpose] is password, server, apn, interval, sos_number or status. */

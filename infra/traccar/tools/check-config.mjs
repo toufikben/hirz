@@ -5,7 +5,8 @@ import { resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readFile } from 'node:fs/promises';
 
-const ALLOWED_PROTOCOLS = ['gt06', 'osmand'];
+// Every protocol a catalogue model uses (shared/.../devices/DeviceCatalog.kt), and nothing else.
+const ALLOWED_PROTOCOLS = ['gt06', 'h02', 'osmand'];
 
 const RULES = {
   'database.registerUnknown': (v) => v === 'false'
@@ -16,7 +17,7 @@ const RULES = {
   'protocols.enable': (v) => {
     const listed = v.split(',').map((p) => p.trim()).filter(Boolean);
     const unknown = listed.filter((p) => !ALLOWED_PROTOCOLS.includes(p));
-    if (unknown.length > 0) return `only ${ALLOWED_PROTOCOLS.join(',')} may be open in P0; remove ${unknown.join(',')}`;
+    if (unknown.length > 0) return `only ${ALLOWED_PROTOCOLS.join(',')} may be open ; remove ${unknown.join(',')}`;
     if (listed.length === 0) return 'at least one protocol must be enabled';
     return true;
   },

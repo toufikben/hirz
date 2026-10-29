@@ -13,6 +13,9 @@ import dz.hirz.shared.api.Role
 import dz.hirz.shared.api.SmsCommandDto
 import dz.hirz.shared.api.TrackerClaimDto
 import dz.hirz.shared.api.TrackerClaimRequest
+import dz.hirz.shared.devices.DeviceCatalog
+import dz.hirz.shared.devices.DeviceModel
+import dz.hirz.shared.devices.SupportLevel
 import org.slf4j.LoggerFactory
 import java.sql.Connection
 import java.time.Clock
@@ -45,11 +48,28 @@ class TrackerService(
     private val clock: Clock,
     private val circles: CircleService,
     private val admin: TraccarAdmin,
+    /** Public host the setup SMS points trackers at (HIRZ_DEVICE_HOST). */
+    private val deviceHost: String = "localhost",
 ) {
+    private val random = java.security.SecureRandom()
     private val log = LoggerFactory.getLogger(TrackerService::class.java)
 
-    /** The SMS a claim returns; Task 4's catalogue fills it. */
-    var commands: (TrackerClaimRequest) -> List<SmsCommandDto> = { emptyList() }
+    /**
+     * The setup SMS for this claim, from the catalogue. The new device password is generated here, shown once in the
+     * password command, and never stored: only the owner keeps it.
+     */
+    private fun commands(model: DeviceModel, req: TrackerClaimRequest): List<SmsCommandDto> {
+        val needed = model.commands.filter { it.purpose != "sos_number" || req.sosPhone != null }
+        if (needed.any { "{apn}" in it.template } && req.apn.isNullOrBlank()) unprocessable("apn_required")
+        val values = buildMap {
+            put("host", deviceHost); put("port", model.port.toString()); put("seconds", req.intervalS.toString())
+            put("password", req.devicePassword?.trim()?.takeIf { it.isNotEmpty() } ?: model.defaultPassword.orEmpty())
+            put("newPassword", (0 until 6).joinToString("") { random.nextInt(10).toString() })
+            req.apn?.trim()?.let { put("apn", it) }
+            req.sosPhone?.trim()?.let { put("phone", it) }
+        }
+        return DeviceCatalog.render(model.copy(commands = needed), values, req.simPhone?.trim())
+    }
 
     private fun circleOfAsset(c: Connection, assetId: UUID): UUID =
         c.prepareStatement("SELECT circle_id FROM assets WHERE id = ?").apply { setObject(1, assetId) }
@@ -62,6 +82,8 @@ class TrackerService(
             circles.requireRole(c, circleOfAsset(c, assetId), memberId, EDITORS)
             if (!isValidImei(imei)) unprocessable("invalid_imei")
             if (req.intervalS !in 30..600) unprocessable("invalid_interval")
+            val model = DeviceCatalog.byId(req.model) ?: notFound()
+            if (model.level == SupportLevel.REJECTED) conflict("model_rejected")
             closeExpired(c, now, imei)
             val taken = c.prepareStatement(
                 """SELECT EXISTS (SELECT 1 FROM sources WHERE device_uid = ? AND revoked_at IS NULL)
@@ -69,7 +91,7 @@ class TrackerService(
             ).apply { setString(1, imei); setString(2, imei) }.executeQuery().use { it.next(); it.getBoolean(1) }
             if (taken) conflict("imei_in_use")
         }
-        val rendered = commands(req)
+        val rendered = commands(DeviceCatalog.byId(req.model)!!, req)
         val id = UUID.randomUUID()
         val deviceId = admin.createDevice(imei, "hirz-" + id.toString().take(8))
         runCatching {

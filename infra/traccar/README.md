@@ -10,6 +10,7 @@ Hirz uses Traccar **only as the device gateway**. Zones, rules and notifications
 |---|---|
 | 8082 | Web/REST API (bound to 127.0.0.1; reached through the reverse proxy only) |
 | 5023 | GT06 family devices (TCP) |
+| 5013 | H02 devices, e.g. SinoTrack ST-901 (TCP) |
 | 5055 | OsmAnd protocol (HTTP) |
 
 ## Run locally

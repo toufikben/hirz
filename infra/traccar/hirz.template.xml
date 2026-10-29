@@ -11,8 +11,9 @@
     <entry key='web.address'>127.0.0.1</entry>
     <entry key='web.port'>8082</entry>
 
-    <entry key='protocols.enable'>gt06,osmand</entry>
+    <entry key='protocols.enable'>gt06,h02,osmand</entry>
     <entry key='gt06.port'>5023</entry>
+    <entry key='h02.port'>5013</entry>
     <entry key='osmand.port'>5055</entry>
 
     <entry key='geocoder.enable'>false</entry>

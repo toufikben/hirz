@@ -22,6 +22,8 @@ data class Deps(
     /** Shared secret Traccar's forwarders send (HIRZ_TRACCAR_SECRET); null refuses every forward. */
     val traccarSecret: String? = null,
     val traccar: dz.hirz.server.traccar.TraccarAdmin = dz.hirz.server.traccar.TraccarAdmin.NONE,
+    /** Public host trackers are told to report to (HIRZ_DEVICE_HOST). */
+    val deviceHost: String = "localhost",
     val startJobs: Boolean = true,
     /** Extra observers of accepted signals (tests); the rules engine and live hub are wired inside the module. */
     val extraIngestListeners: List<IngestListener> = emptyList(),

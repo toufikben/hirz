@@ -20,8 +20,9 @@ import io.ktor.server.routing.post
 import kotlinx.serialization.json.JsonPrimitive
 import java.security.MessageDigest
 
-/** Member routes: claim, follow and release trackers. */
+/** Member routes: the model catalogue, and claiming, following and releasing trackers. */
 fun Route.trackerRoutes(trackers: TrackerService) {
+    get("/v1/device-models") { call.respond(dz.hirz.shared.devices.DeviceCatalog.models) }
     post("/v1/assets/{id}/trackers") {
         call.respond(trackers.claim(uuidOrNotFound(call.parameters["id"]), call.member().memberId, call.receive<TrackerClaimRequest>()))
     }
