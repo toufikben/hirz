@@ -115,7 +115,12 @@ class EscalationEngine(
             val state = c.prepareStatement("SELECT data::text FROM escalation_state WHERE incident_id = ? FOR UPDATE${if (wait) "" else " SKIP LOCKED"}")
                 .apply { setObject(1, incidentId) }.executeQuery().use { if (it.next()) ladderJson.decodeFromString(LadderState.serializer(), it.getString(1)) else null }
                 ?: return@tx emptyList()
-            val (next, actions) = Ladder.next(state, event, cfg)
+            // Untried candidates are re-ranked at every tick (nearest guardian, custodian); the current owner never changes here.
+            val ranked = if (event is LadderEvent.Tick && state.stage == Stage.GUARDIANS) {
+                val tried = state.order.take(state.index + 1)
+                state.copy(order = tried + ordering.order(c, incidentId, circleOf(c, incidentId), now).filter { it !in tried })
+            } else state
+            val (next, actions) = Ladder.next(ranked, event, cfg)
             if (next != state) save(c, incidentId, next)
             actions.filterIsInstance<LadderAction.Log>().forEach { logRow(c, incidentId, it.kind, it.member, now) }
             if (LadderAction.NotifyContacts in actions || LadderAction.RetryAll in actions) queueContactSms(c, incidentId, now)

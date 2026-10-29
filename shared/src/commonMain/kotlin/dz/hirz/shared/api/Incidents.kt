@@ -72,3 +72,7 @@ data class IncidentDto(
 
 @Serializable
 data class CheckInSentDto(val sent: Int)
+
+/** A guardian's own position, sent only while an incident they can see is open (design §5.11). */
+@Serializable
+data class MyLocationRequest(val position: LatLon, val accuracyM: Double? = null)

@@ -209,8 +209,21 @@ class IncidentService(
             "UPDATE incidents SET state = 'closed', closed_at = ?, close_reason = ?, closed_by = ? WHERE id = ? AND state = 'open'",
         ).apply { setTimestamp(1, now.ts()); setString(2, wire); setObject(3, memberId); setObject(4, incidentId) }.executeUpdate()
         if (n == 0) conflict("already_closed")
+        c.prepareStatement("DELETE FROM member_locations WHERE incident_id = ?").apply { setObject(1, incidentId) }.executeUpdate()
         event(c, incidentId, "closed", memberId, """{"reason":"$wire"}""", now)
     }.also { escalation?.onClosed(incidentId) }
+
+    /** Accepted only while the incident is an open P0/P1; otherwise 409 (design §5.11). */
+    fun recordMyLocation(incidentId: UUID, memberId: UUID, req: dz.hirz.shared.api.MyLocationRequest) = db.tx { c ->
+        circles.requireRole(c, circleOf(c, incidentId), memberId)
+        val open = c.prepareStatement("SELECT state = 'open' AND tier IN ('P0', 'P1') FROM incidents WHERE id = ?")
+            .apply { setObject(1, incidentId) }.executeQuery().use { it.next(); it.getBoolean(1) }
+        if (!open) conflict("incident_not_active")
+        c.prepareStatement("INSERT INTO member_locations (incident_id, member_id, geog, accuracy_m, at) VALUES (?, ?, ST_GeogFromText(?), ?, ?)").apply {
+            setObject(1, incidentId); setObject(2, memberId); setString(3, "SRID=4326;POINT(${req.position.lon} ${req.position.lat})")
+            setObject(4, req.accuracyM); setTimestamp(5, clock.instant().ts())
+        }.executeUpdate()
+    }
 
     fun setMemberPushToken(memberId: UUID, token: String, platform: String) {
         require(token.isNotBlank() && token.length <= 4096) { "invalid push token" }

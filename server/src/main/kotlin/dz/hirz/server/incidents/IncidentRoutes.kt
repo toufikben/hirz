@@ -40,6 +40,10 @@ fun Route.incidentRoutes(service: IncidentService) {
         service.close(id, call.member().memberId, call.receive<CloseRequest>().reason)
         call.respond(service.get(id, call.member().memberId))
     }
+    post("/v1/incidents/{id}/my-location") {
+        service.recordMyLocation(uuidOrNotFound(call.parameters["id"]), call.member().memberId, call.receive<dz.hirz.shared.api.MyLocationRequest>())
+        call.respond(HttpStatusCode.NoContent)
+    }
     put("/v1/me/push-token") {
         val body = call.receive<PushTokenDto>()
         service.setMemberPushToken(call.member().memberId, body.token, body.platform)

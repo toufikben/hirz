@@ -66,6 +66,7 @@ fun Application.module(deps: Deps) {
     val incidents = IncidentService(deps.db, deps.clock, deps.notifier, circles)
     hub = LiveHub(deps.db, incidents, deps.clock)
     val escalation = dz.hirz.server.escalation.EscalationEngine(deps.db, deps.clock, deps.notifier, deps.rules, circles)
+    escalation.ordering = dz.hirz.server.escalation.NearestOrdering(deps.rules)
     incidents.escalation = escalation
     incidents.subscribe(hub)
     val recorder = FindingRecorder(deps.db, deps.clock, incidents)
