@@ -10,6 +10,10 @@ data class AppConfig(
     val dataKey: ByteArray,
     val publicBaseUrl: String = "http://localhost:8080",
     val traccarSecret: String? = null,
+    /** Traccar admin API (all three or none). */
+    val traccarUrl: String? = null,
+    val traccarUser: String? = null,
+    val traccarPassword: String? = null,
 ) {
     companion object {
         fun fromEnv(env: Map<String, String> = System.getenv()): AppConfig = AppConfig(
@@ -21,6 +25,9 @@ data class AppConfig(
                 .let { java.util.Base64.getDecoder().decode(it.trim()) }
                 .also { require(it.size == 32) { "HIRZ_DATA_KEY must decode to 32 bytes" } },
             publicBaseUrl = env["HIRZ_PUBLIC_BASE_URL"] ?: "http://localhost:${env["PORT"] ?: "8080"}",
+            traccarUrl = env["HIRZ_TRACCAR_URL"],
+            traccarUser = env["HIRZ_TRACCAR_USER"],
+            traccarPassword = env["HIRZ_TRACCAR_PASSWORD"],
             traccarSecret = env["HIRZ_TRACCAR_SECRET"]?.also { require(it.length >= 32) { "HIRZ_TRACCAR_SECRET must be at least 32 characters" } },
         )
     }

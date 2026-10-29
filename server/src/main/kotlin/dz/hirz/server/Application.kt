@@ -106,6 +106,7 @@ fun Application.module(deps: Deps) {
     val engine = RulesEngine(deps.db, deps.rules, recorder)
     val ingest = IngestService(deps.db, deps.clock, deps.rules, listOf(engine, hub) + deps.extraIngestListeners)
     val trackers = TrackerService(deps.db, deps.clock, circles, deps.traccar)
+    if (deps.startJobs) dz.hirz.server.traccar.TraccarSync(deps.db, deps.clock, deps.traccar, ingest).start(this)
     if (deps.startJobs) {
         SilenceScanner(deps.db, deps.clock, deps.rules, recorder).start(this)
         dz.hirz.server.rules.CheckInScanner(deps.db, deps.clock, recorder).start(this)
@@ -158,6 +159,14 @@ fun Application.module(deps: Deps) {
     }
 }
 
+/** The Traccar admin client when all three settings are present; none of them means no Traccar (local runs). */
+private fun traccarAdmin(cfg: AppConfig): dz.hirz.server.traccar.TraccarAdmin {
+    val parts = listOf(cfg.traccarUrl, cfg.traccarUser, cfg.traccarPassword)
+    if (parts.all { it == null }) return dz.hirz.server.traccar.TraccarAdmin.NONE
+    require(parts.none { it.isNullOrBlank() }) { "HIRZ_TRACCAR_URL, HIRZ_TRACCAR_USER and HIRZ_TRACCAR_PASSWORD go together" }
+    return dz.hirz.server.traccar.TraccarHttpAdmin(cfg.traccarUrl!!, cfg.traccarUser!!, cfg.traccarPassword!!, io.ktor.client.engine.cio.CIO.create())
+}
+
 fun main() {
     val cfg = AppConfig.fromEnv()
     val firebase = FirebaseTokenVerifier.firebaseApp(
@@ -172,6 +181,7 @@ fun main() {
         dataKey = cfg.dataKey,
         publicBaseUrl = cfg.publicBaseUrl,
         traccarSecret = cfg.traccarSecret,
+        traccar = traccarAdmin(cfg),
     )
     val port = System.getenv("PORT")?.toIntOrNull() ?: 8080
     embeddedServer(Netty, port = port) { module(deps) }.start(wait = true)
