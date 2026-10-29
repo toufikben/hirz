@@ -33,8 +33,9 @@ object TraccarMapper {
         fun num(key: String) = (a[key] as? JsonPrimitive)?.doubleOrNull
         val hasFix = p.valid && !p.outdated && p.fixTime != null
         val alarmText = listOfNotNull((a["alarm"] as? JsonPrimitive)?.content, eventAlarm).joinToString(",")
+        val alarms = alarms(alarmText)
         return IngestSignal(
-            clientId = "tc-${p.id}",
+            clientId = clientId(p, alarms),
             fixTimeMs = if (hasFix) instantMs(p.fixTime!!) else null,
             position = if (hasFix) LatLon(p.latitude, p.longitude) else null,
             accuracyM = if (hasFix) p.accuracy.takeIf { it > 0 } else null,
@@ -43,13 +44,25 @@ object TraccarMapper {
             heading = if (hasFix) p.course else null,
             battery = num("batteryLevel")?.toInt()?.coerceIn(0, 100),
             charging = bool("charge"),
-            alarms = alarms(alarmText),
+            alarms = alarms,
             heartbeat = true,
             // A supply voltage above zero proves external power; zero proves nothing (the power-cut alarm carries that).
             externalPower = num("power")?.takeIf { it > 0 }?.let { true },
             ignition = bool("ignition"),
             motion = bool("motion"),
         )
+    }
+
+    /**
+     * Traccar forwards a position before it stores it, so `position.id` is 0 on the forward path. The key is therefore
+     * the device and the device's own time, plus any alarm: the forward, the event forward and the REST backup sync all
+     * produce the same key for the same report, and an alarm in the same second as a fix is never lost as a duplicate.
+     */
+    fun clientId(p: TraccarPosition, alarms: Set<AlarmKind>): String {
+        val at = listOfNotNull(p.fixTime, p.deviceTime, p.serverTime).firstNotNullOfOrNull { runCatching { instantMs(it) }.getOrNull() }
+            ?: return "tc-${p.id}"
+        val suffix = if (alarms.isEmpty()) "" else "-" + alarms.map { it.name.lowercase() }.sorted().joinToString("+")
+        return "tc-${p.deviceId}-$at$suffix"
     }
 
     fun alarms(text: String): Set<AlarmKind> = text.split(',').mapNotNull { ALARMS[it.trim()] }.toSet()

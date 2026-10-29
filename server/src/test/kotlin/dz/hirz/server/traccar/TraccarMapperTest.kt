@@ -19,7 +19,7 @@ class TraccarMapperTest {
         val f = position("gt06_fix.json")
         assertEquals("359339075123456", f.device.uniqueId)
         val s = TraccarMapper.toSignal(f.position)
-        assertEquals("tc-1234", s.clientId)
+        assertEquals("tc-7-${Instant.parse("2026-11-01T08:00:00Z").toEpochMilli()}", s.clientId, "Traccar forwards before storing: id is 0 there")
         assertEquals(LatLon(36.7538, 3.0588), s.position)
         assertEquals(Instant.parse("2026-11-01T08:00:00Z").toEpochMilli(), s.fixTimeMs)
         assertEquals(18.52, s.speedKmh!!, 1e-9)
@@ -70,11 +70,14 @@ class TraccarMapperTest {
     }
 
     @Test
-    fun eventAlarmSharesThePositionsClientId() {
+    fun eventAlarmKeysMatchThePositionForward() {
         val e = TraccarJson.eventForward(fixture("event_alarm_sos.json"))
         assertEquals("alarm", e.event.type)
         val s = TraccarMapper.toSignal(e.position!!, e.event.attributes["alarm"]?.toString()?.trim('"'))
-        assertEquals("tc-1234", s.clientId)
+        val fix = TraccarMapper.toSignal(e.position!!)
+        assertEquals(fix.clientId + "-sos", s.clientId, "the alarm never deduplicates against the plain fix of the same second")
         assertEquals(setOf(AlarmKind.SOS), s.alarms)
+        assertEquals(s.clientId, TraccarMapper.toSignal(e.position!!.copy(attributes = kotlinx.serialization.json.buildJsonObject { put("alarm", kotlinx.serialization.json.JsonPrimitive("sos")) })).clientId,
+            "the position forward and the event forward of one alarm share a key")
     }
 }
