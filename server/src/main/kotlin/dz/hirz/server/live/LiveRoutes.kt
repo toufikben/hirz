@@ -26,10 +26,10 @@ import java.sql.Connection
 import java.sql.ResultSet
 import java.util.UUID
 
-private const val POSITION_COLUMNS =
+internal const val POSITION_COLUMNS =
     "p.asset_id, p.fix_time, p.server_time, ST_Y(p.geog::geometry), ST_X(p.geog::geometry), p.accuracy_m, p.accuracy_estimated, p.fix_source, p.speed_kmh, p.heading, p.battery"
 
-private fun positionRow(rs: ResultSet, at: Int = 1) = PositionDto(
+internal fun positionRow(rs: ResultSet, at: Int = 1) = PositionDto(
     assetId = rs.getString(at), fixTimeMs = rs.getTimestamp(at + 1).time, serverTimeMs = rs.getTimestamp(at + 2).time,
     position = LatLon(rs.getDouble(at + 3), rs.getDouble(at + 4)),
     accuracyM = rs.getDouble(at + 5).takeUnless { rs.wasNull() }, accuracyEstimated = rs.getBoolean(at + 6),

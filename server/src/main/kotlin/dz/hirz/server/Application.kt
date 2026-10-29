@@ -1,5 +1,9 @@
 package dz.hirz.server
 
+import dz.hirz.server.assets.AssetMediaService
+import dz.hirz.server.assets.assetMediaRoutes
+import dz.hirz.server.incidents.SheetService
+import dz.hirz.server.incidents.sheetRoutes
 import dz.hirz.server.circles.codeWordRoutes
 import dz.hirz.server.emergency.emergencyRoutes
 import kotlinx.coroutines.delay
@@ -71,6 +75,8 @@ fun Application.module(deps: Deps) {
     val incidents = IncidentService(deps.db, deps.clock, deps.notifier, circles, deps.rules)
     val codeWords = dz.hirz.server.circles.CodeWordService(deps.db, circles, dz.hirz.server.crypto.DataCipher(deps.dataKey))
     val emergency = dz.hirz.server.emergency.EmergencyService(deps.db, deps.clock, circles)
+    val media = AssetMediaService(deps.db, deps.clock, circles)
+    val sheets = SheetService(deps.db, deps.clock, circles, incidents, emergency)
     hub = LiveHub(deps.db, incidents, deps.clock)
     val escalation = dz.hirz.server.escalation.EscalationEngine(deps.db, deps.clock, deps.notifier, deps.rules, circles)
     escalation.ordering = dz.hirz.server.escalation.NearestOrdering(deps.rules)
@@ -102,6 +108,8 @@ fun Application.module(deps: Deps) {
             incidentRoutes(incidents)
             codeWordRoutes(codeWords)
             emergencyRoutes(emergency)
+            assetMediaRoutes(media)
+            sheetRoutes(sheets)
             historyRoutes(deps, circles)
         }
         authenticate(SOURCE_AUTH) {
