@@ -59,6 +59,8 @@ class FakeNotifier(
     val alerts get() = sent.filter { it.second.kind == "incident" }
 }
 
+const val TRACCAR_SECRET = "test-traccar-secret-0123456789abcdef"
+
 class TestEnv(
     val db: HikariDataSource = TestDb.fresh(),
     val clock: MutableClock = MutableClock(),
@@ -66,10 +68,14 @@ class TestEnv(
     val rules: RuleConfig = RuleConfig.DEFAULT,
     val ingestListeners: List<IngestListener> = emptyList(),
     val notifierOverride: Notifier? = null,
+    val traccar: FakeTraccarAdmin = FakeTraccarAdmin(),
+    /** "" models a server started without HIRZ_TRACCAR_SECRET. */
+    val traccarSecretOverride: String? = null,
 ) {
     val deps = Deps(
         db = db, verifier = FakeTokenVerifier(), notifier = notifierOverride ?: notifier, clock = clock, rules = rules,
         dataKey = ByteArray(32) { it.toByte() }, startJobs = false, extraIngestListeners = ingestListeners,
+        traccarSecret = traccarSecretOverride ?: TRACCAR_SECRET, traccar = traccar,
     )
 }
 
