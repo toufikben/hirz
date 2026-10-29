@@ -86,3 +86,11 @@ test('an entry the parser cannot read fails instead of being skipped', () => {
   const entity = template.replace("<entry key='geocoder.enable'>false</entry>", "<entry key='geocoder.enable'>&#116;rue</entry>");
   assert.ok(errorsOf(entity).some((e) => e.includes('unreadable')), errorsOf(entity).join('\n'));
 });
+
+test('h02 (SinoTrack ST-901) is an allowed protocol', () => {
+  assert.deepEqual(errorsOf(set(template, 'protocols.enable', 'gt06,h02,osmand')), []);
+});
+
+test('an unknown protocol is still refused', () => {
+  assert.ok(errorsOf(set(template, 'protocols.enable', 'gt06,watch')).some((e) => e.includes('remove watch')));
+});

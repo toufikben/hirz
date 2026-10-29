@@ -75,7 +75,7 @@ class TestEnv(
     val deps = Deps(
         db = db, verifier = FakeTokenVerifier(), notifier = notifierOverride ?: notifier, clock = clock, rules = rules,
         dataKey = ByteArray(32) { it.toByte() }, startJobs = false, extraIngestListeners = ingestListeners,
-        traccarSecret = traccarSecretOverride ?: TRACCAR_SECRET, traccar = traccar,
+        traccarSecret = traccarSecretOverride ?: TRACCAR_SECRET, traccar = traccar, deviceHost = "devices.hirz.test",
     )
 }
 
