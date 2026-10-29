@@ -94,3 +94,33 @@ test('h02 (SinoTrack ST-901) is an allowed protocol', () => {
 test('an unknown protocol is still refused', () => {
   assert.ok(errorsOf(set(template, 'protocols.enable', 'gt06,watch')).some((e) => e.includes('remove watch')));
 });
+
+// P3: Traccar forwards every position and event to Core, privately, with the shared secret.
+test('forward.url must stay on the private network', () => {
+  const errors = errorsOf(set(template, 'forward.url', 'https://example.com/v1/traccar/positions'));
+  assert.ok(errors.some((e) => e.startsWith('forward.url:')), errors.join('\n'));
+});
+
+test('event.forward.url must stay on the private network', () => {
+  const errors = errorsOf(set(template, 'event.forward.url', 'http://203.0.113.5:8080/v1/traccar/events'));
+  assert.ok(errors.some((e) => e.startsWith('event.forward.url:')), errors.join('\n'));
+});
+
+test('a missing forward header is rejected', () => {
+  const without = template.replace(/<entry key='forward\.header'>[^<]*<\/entry>/, '');
+  assert.ok(errorsOf(without).includes('forward.header is required'));
+});
+
+test('forward retry must stay on', () => {
+  assert.ok(errorsOf(set(template, 'forward.retry.enable', 'false')).some((e) => e.startsWith('forward.retry.enable:')));
+});
+
+test('forward.type must be json', () => {
+  assert.ok(errorsOf(set(template, 'forward.type', 'url')).some((e) => e.startsWith('forward.type:')));
+});
+
+test('a container config may bind 0.0.0.0, a host config may not', () => {
+  const inContainer = set(template, 'web.address', '0.0.0.0');
+  assert.deepEqual(validateConfig(inContainer, { allowPlaceholders: true, container: true }).errors, []);
+  assert.ok(errorsOf(inContainer).some((e) => e.startsWith('web.address:')));
+});
