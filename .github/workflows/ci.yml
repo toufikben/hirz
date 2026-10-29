@@ -42,6 +42,13 @@ jobs:
       - name: sim and app
         if: always()
         run: ./gradlew --no-daemon :sim:test :sim:compileIntegrationTestKotlin :app:testDebugUnitTest :app:assembleDebug
+      - name: Package Hirz Core
+        run: ./gradlew --no-daemon :server:installDist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hirz-core
+          path: server/build/install/server/
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: hirz-debug-apk
@@ -56,7 +63,7 @@ jobs:
         with:
           node-version: '22'
       - name: Guard tests
-        run: node --test "infra/traccar/tools/*.test.mjs" "tools/forbidden-claims/*.test.mjs"
+        run: node --test "infra/traccar/tools/*.test.mjs" "tools/forbidden-claims/*.test.mjs" "tools/latency/*.test.mjs"
       - name: Traccar template
         run: node infra/traccar/tools/check-config.mjs --template infra/traccar/hirz.template.xml
       - name: Forbidden claims in app strings
