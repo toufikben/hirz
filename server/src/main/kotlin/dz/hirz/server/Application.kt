@@ -1,5 +1,7 @@
 package dz.hirz.server
 
+import dz.hirz.server.exports.PolicePack
+import dz.hirz.server.exports.exportRoutes
 import dz.hirz.server.assets.AssetMediaService
 import dz.hirz.server.assets.assetMediaRoutes
 import dz.hirz.server.incidents.SheetService
@@ -77,6 +79,7 @@ fun Application.module(deps: Deps) {
     val emergency = dz.hirz.server.emergency.EmergencyService(deps.db, deps.clock, circles)
     val media = AssetMediaService(deps.db, deps.clock, circles)
     val sheets = SheetService(deps.db, deps.clock, circles, incidents, emergency)
+    val policePack = PolicePack(deps.db, deps.clock, circles, incidents, System.getProperty("hirz.version") ?: "dev")
     hub = LiveHub(deps.db, incidents, deps.clock)
     val escalation = dz.hirz.server.escalation.EscalationEngine(deps.db, deps.clock, deps.notifier, deps.rules, circles)
     escalation.ordering = dz.hirz.server.escalation.NearestOrdering(deps.rules)
@@ -110,6 +113,7 @@ fun Application.module(deps: Deps) {
             emergencyRoutes(emergency)
             assetMediaRoutes(media)
             sheetRoutes(sheets)
+            exportRoutes(policePack)
             historyRoutes(deps, circles)
         }
         authenticate(SOURCE_AUTH) {
