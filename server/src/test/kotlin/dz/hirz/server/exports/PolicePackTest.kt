@@ -98,8 +98,7 @@ class PolicePackTest {
             val files = unzip(client.pack(id).readRawBytes())
             val gaps = files.getValue("completeness.txt").decodeToString().lines().filter { it.startsWith("gap ") }
             // The window opens 2 h before the incident: the silence before the first fix is a gap too (review #8).
-            assertEquals(2, gaps.size, gaps.joinToString("
-"))
+            assertEquals(2, gaps.size, gaps.joinToString(" | "))
             assertTrue(gaps.first().contains("window_start"), gaps.first())
             assertTrue(gaps.any { "duration_s=1260" in it }, "the 20-minute silence between fixes")
             val rows = files.getValue("positions.csv").decodeToString().trim().lines().drop(1)
