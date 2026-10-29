@@ -36,6 +36,8 @@ sealed interface LadderEvent {
     data class Claimed(val member: UUID, val at: Instant) : LadderEvent
     data class Contested(val member: UUID, val at: Instant) : LadderEvent
     data class Closed(val at: Instant) : LadderEvent
+    /** Every contact who was told declined by SMS: nobody is left before retrying everyone. */
+    data class ContactsExhausted(val at: Instant) : LadderEvent
 }
 
 sealed interface LadderAction {
@@ -61,6 +63,10 @@ object Ladder {
             is LadderEvent.Contested -> contest(st, ev, cfg)
             is LadderEvent.Delivered -> delivered(st, ev, cfg)
             is LadderEvent.Tick -> tick(st, ev.now, cfg)
+            is LadderEvent.ContactsExhausted ->
+                if (st.stage != Stage.CONTACTS) st to emptyList()
+                else st.copy(stage = Stage.EVERYONE_UNAVAILABLE, nextCheck = ev.at.plusMillis(cfg.escalationRetryMs)) to
+                    listOf(LadderAction.RetryAll, LadderAction.Log("everyone_unavailable", null))
         }
     }
 

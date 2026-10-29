@@ -1,5 +1,10 @@
 package dz.hirz.server
 
+import dz.hirz.server.sms.GatewayService
+import dz.hirz.server.sms.gatewayMemberRoutes
+import dz.hirz.server.sms.gatewayPairRoutes
+import dz.hirz.server.sms.gatewayRoutes
+import dz.hirz.server.sms.installGatewayAuth
 import dz.hirz.server.share.ShareService
 import dz.hirz.server.share.publicShareRoutes
 import dz.hirz.server.share.shareRoutes
@@ -81,6 +86,8 @@ fun Application.module(deps: Deps) {
     val codeWords = dz.hirz.server.circles.CodeWordService(deps.db, circles, dz.hirz.server.crypto.DataCipher(deps.dataKey))
     val emergency = dz.hirz.server.emergency.EmergencyService(deps.db, deps.clock, circles)
     val media = AssetMediaService(deps.db, deps.clock, circles)
+    val gateways = GatewayService(deps.db, deps.clock, circles, incidents)
+    installGatewayAuth(gateways)
     val shares = ShareService(deps.db, deps.clock, circles, deps.publicBaseUrl)
     val sheets = SheetService(deps.db, deps.clock, circles, incidents, emergency).also { it.shareActiveUntil = shares::activeUntil }
     val policePack = PolicePack(deps.db, deps.clock, circles, incidents, System.getProperty("hirz.version") ?: "dev")
@@ -107,6 +114,8 @@ fun Application.module(deps: Deps) {
         healthRoutes(System.getProperty("hirz.version") ?: "dev")
         pairRoutes(assets)
         publicShareRoutes(shares)
+        gatewayPairRoutes(gateways)
+        gatewayRoutes(gateways)
         liveRoutes(deps, hub, incidents)
         authenticate(MEMBER_AUTH) {
             meRoutes(deps)
@@ -120,6 +129,7 @@ fun Application.module(deps: Deps) {
             sheetRoutes(sheets)
             exportRoutes(policePack)
             shareRoutes(shares)
+            gatewayMemberRoutes(gateways)
             historyRoutes(deps, circles)
         }
         authenticate(SOURCE_AUTH) {

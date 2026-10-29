@@ -98,6 +98,19 @@ class EscalationEngine(
     fun onContested(incidentId: UUID, member: UUID) = apply(incidentId, LadderEvent.Contested(member, clock.instant()), wait = true)
     fun onClosed(incidentId: UUID) = apply(incidentId, LadderEvent.Closed(clock.instant()), wait = true)
 
+    /** A contact answered "2" by SMS. When every contact who was told has declined, the ladder moves on at once. */
+    fun onContactDeclined(incidentId: UUID, member: UUID) {
+        val now = clock.instant()
+        val remaining = db.tx { c ->
+            logRow(c, incidentId, "contact_declined", member, now)
+            c.prepareStatement(
+                """SELECT count(DISTINCT o.member_id) FROM outbound_sms o WHERE o.incident_id = ?
+                   AND o.member_id NOT IN (SELECT member_id FROM escalation_log WHERE incident_id = ? AND kind = 'contact_declined' AND member_id IS NOT NULL)""",
+            ).apply { setObject(1, incidentId); setObject(2, incidentId) }.executeQuery().use { it.next(); it.getInt(1) }
+        }
+        if (remaining == 0) apply(incidentId, LadderEvent.ContactsExhausted(now), wait = true)
+    }
+
     /** Advances every ladder whose next check is due. Rows are locked, so two servers never double-escalate. */
     fun tick() {
         val now = clock.instant()
@@ -129,6 +142,22 @@ class EscalationEngine(
         val members = actions.filterIsInstance<LadderAction.NotifyMember>().map { it.member }.toMutableList()
         if (LadderAction.RetryAll in actions) members += db.connection.use { c -> ordering.order(c, incidentId, circleOf(c, incidentId), now) }
         if (members.isNotEmpty()) push(incidentId, members.distinct())
+        if (LadderAction.NotifyContacts in actions || LadderAction.RetryAll in actions) nudgeGateways(incidentId)
+    }
+
+    /** A data push tells the circle's SMS gateways to fetch the outbox now instead of at the next poll. */
+    private fun nudgeGateways(incidentId: UUID) {
+        val tokens = db.connection.use { c ->
+            c.prepareStatement(
+                "SELECT g.push_token FROM gateways g JOIN incidents i ON i.circle_id = g.circle_id WHERE i.id = ? AND g.revoked_at IS NULL AND g.push_token IS NOT NULL",
+            ).apply { setObject(1, incidentId) }.executeQuery().toList { it.getString(1) }
+        }
+        if (tokens.isEmpty()) return
+        runBlocking(Dispatchers.IO) {
+            tokens.map { t ->
+                async { runCatching { withTimeout(10_000) { notifier.send(PushTarget(null, t), AlertMessage("sms_pending", null, null, "", null)) } } }
+            }.awaitAll()
+        }
     }
 
     private fun circleOf(c: Connection, incidentId: UUID): UUID =
@@ -158,8 +187,9 @@ class EscalationEngine(
                JOIN assets a ON a.id = i.asset_id
                JOIN circle_members cm ON cm.circle_id = i.circle_id AND cm.role = 'contact' AND cm.phone IS NOT NULL
                JOIN members m ON m.id = cm.member_id
-               WHERE i.id = ?""",
-        ).apply { setObject(1, incidentId) }.executeQuery().toList {
+               WHERE i.id = ? AND cm.member_id NOT IN (
+                 SELECT member_id FROM escalation_log WHERE incident_id = ? AND kind = 'contact_declined' AND member_id IS NOT NULL)""",
+        ).apply { setObject(1, incidentId); setObject(2, incidentId) }.executeQuery().toList {
             Row(it.getObject(1, UUID::class.java), it.getString(2), it.getString(3), it.getObject(4, UUID::class.java), it.getString(5), it.getString(6))
         }
         rows.forEach { r ->

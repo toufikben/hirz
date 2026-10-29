@@ -207,6 +207,22 @@ class IncidentService(
         if (won) escalation?.onClaimed(incidentId, memberId)
     }
 
+    /** A contact answered "1" by SMS; contacts have no app, so the role check is the gateway's circle. */
+    fun claimBySms(incidentId: UUID, memberId: UUID): Boolean {
+        val now = clock.instant()
+        val (circleId, won) = db.tx { c ->
+            val circleId = circleOf(c, incidentId)
+            val n = c.prepareStatement(
+                "UPDATE incidents SET owner_member = ?, claimed_at = ? WHERE id = ? AND state = 'open' AND owner_member IS NULL",
+            ).apply { setObject(1, memberId); setTimestamp(2, now.ts()); setObject(3, incidentId) }.executeUpdate()
+            if (n == 1) event(c, incidentId, "claimed", memberId, """{"via":"sms"}""", now)
+            circleId to (n == 1)
+        }
+        notifyChanged(circleId, incidentId)
+        if (won) escalation?.onClaimed(incidentId, memberId)
+        return won
+    }
+
     fun contest(incidentId: UUID, memberId: UUID) {
         mutate(incidentId, memberId) { c, now ->
             c.prepareStatement("UPDATE incidents SET owner_member = NULL, claimed_at = NULL WHERE id = ? AND state = 'open'")
