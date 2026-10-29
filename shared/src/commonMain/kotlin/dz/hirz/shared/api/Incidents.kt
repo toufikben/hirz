@@ -69,7 +69,15 @@ data class IncidentDto(
     val events: List<IncidentEventDto> = emptyList(),
     val deliveries: List<DeliveryDto> = emptyList(),
     val pendingClose: PendingCloseDto? = null,
+    val escalation: EscalationViewDto? = null,
 )
+
+/**
+ * Where the escalation ladder stands (design §5.3): [stage] is GUARDIANS, CONTACTS, EVERYONE_UNAVAILABLE, CLAIMED or
+ * CLOSED; while GUARDIANS, [waitingForMemberId] is the member asked to take it, until [deadlineMs].
+ */
+@Serializable
+data class EscalationViewDto(val stage: String, val waitingForMemberId: String? = null, val deadlineMs: Long? = null)
 
 /** A close waiting for a second guardian, or for the only guardian's second tap, before [expiresAtMs] (design §5.7). */
 @Serializable

@@ -493,7 +493,32 @@ class IncidentService(
                       i.owner_member, i.claimed_at, i.closed_at, i.close_reason
                FROM incidents i JOIN assets a ON a.id = i.asset_id WHERE i.id = ?""",
         ).apply { setObject(1, id) }.executeQuery().use { rs -> if (!rs.next()) notFound(); row(rs, events, deliveries) }
-            .copy(pendingClose = ClosePolicy.pending(c, id)?.takeIf { clock.instant().isBefore(it.expiresAt) }?.dto())
+            .copy(
+                pendingClose = ClosePolicy.pending(c, id)?.takeIf { clock.instant().isBefore(it.expiresAt) }?.dto(),
+                escalation = ladderView(c, id),
+            )
+    }
+
+    /** The ladder as members see it; only GUARDIANS waits on one member, and only open stages have a deadline. */
+    private fun ladderView(c: Connection, id: UUID): dz.hirz.shared.api.EscalationViewDto? =
+        c.prepareStatement(
+            "SELECT data->>'stage', data->'order'->>((data->>'index')::int), next_check_at FROM escalation_state WHERE incident_id = ?",
+        ).apply { setObject(1, id) }.executeQuery().use { rs ->
+            if (!rs.next()) return@use null
+            val stage = rs.getString(1)
+            val open = stage in setOf("GUARDIANS", "CONTACTS", "EVERYONE_UNAVAILABLE")
+            dz.hirz.shared.api.EscalationViewDto(
+                stage = stage,
+                waitingForMemberId = rs.getString(2).takeIf { stage == "GUARDIANS" },
+                deadlineMs = rs.getTimestamp(3).time.takeIf { open },
+            )
+        }
+
+    /** Sign-out: a member removes their own token; someone else's token is left alone and the answer is the same. */
+    fun deleteMemberPushToken(memberId: UUID, token: String) {
+        db.connection.use { c ->
+            c.prepareStatement("DELETE FROM push_tokens WHERE token = ? AND member_id = ?").apply { setString(1, token); setObject(2, memberId) }.executeUpdate()
+        }
     }
 
     private fun row(rs: ResultSet, events: List<IncidentEventDto>, deliveries: List<DeliveryDto>) = IncidentDto(

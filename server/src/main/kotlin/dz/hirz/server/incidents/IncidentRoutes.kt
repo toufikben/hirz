@@ -11,6 +11,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
+import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.put
@@ -63,6 +64,10 @@ fun Route.incidentRoutes(service: IncidentService) {
     }
     post("/v1/incidents/{id}/my-location") {
         service.recordMyLocation(uuidOrNotFound(call.parameters["id"]), call.member().memberId, call.receive<dz.hirz.shared.api.MyLocationRequest>())
+        call.respond(HttpStatusCode.NoContent)
+    }
+    delete("/v1/me/push-token/{token}") {
+        service.deleteMemberPushToken(call.member().memberId, call.parameters["token"].orEmpty())
         call.respond(HttpStatusCode.NoContent)
     }
     put("/v1/me/push-token") {
