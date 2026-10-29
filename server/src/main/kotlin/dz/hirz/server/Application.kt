@@ -8,7 +8,6 @@ import dz.hirz.server.auth.FirebaseTokenVerifier
 import dz.hirz.server.auth.MEMBER_AUTH
 import dz.hirz.server.auth.SOURCE_AUTH
 import dz.hirz.server.auth.installAuth
-import dz.hirz.server.circles.CircleEvents
 import dz.hirz.server.circles.CircleService
 import dz.hirz.server.circles.circleRoutes
 import dz.hirz.server.config.AppConfig
@@ -17,7 +16,11 @@ import dz.hirz.server.incidents.IncidentService
 import dz.hirz.server.incidents.incidentRoutes
 import dz.hirz.server.ingest.IngestService
 import dz.hirz.server.ingest.ingestRoutes
+import dz.hirz.server.jobs.RetentionPurge
 import dz.hirz.server.jobs.SilenceScanner
+import dz.hirz.server.live.LiveHub
+import dz.hirz.server.live.historyRoutes
+import dz.hirz.server.live.liveRoutes
 import dz.hirz.server.notify.FcmNotifier
 import dz.hirz.server.rules.FindingRecorder
 import dz.hirz.server.rules.RulesEngine
@@ -37,6 +40,9 @@ import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.response.respond
 import io.ktor.server.routing.routing
+import io.ktor.server.websocket.WebSockets
+import io.ktor.server.websocket.pingPeriod
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import java.time.Clock
@@ -52,23 +58,32 @@ fun Application.module(deps: Deps) {
         exception<IllegalArgumentException> { call, e -> call.respond(HttpStatusCode.BadRequest, ApiErrorDto("invalid", e.message)) }
     }
     installAuth(deps.db, deps.verifier)
-    val circles = CircleService(deps.db, deps.clock, CircleEvents.NONE)
+    install(WebSockets) { pingPeriod = 30.seconds }
+    lateinit var hub: LiveHub
+    val circles = CircleService(deps.db, deps.clock) { circleId, memberId -> hub.memberRemoved(circleId, memberId) }
     val assets = AssetService(deps.db, deps.clock, circles)
     val places = PlaceService(deps.db, circles, deps.rules.placeMinMarginM)
     val incidents = IncidentService(deps.db, deps.clock, deps.notifier, circles)
+    hub = LiveHub(deps.db, incidents)
+    incidents.subscribe(hub)
     val recorder = FindingRecorder(deps.db, deps.clock, incidents)
     val engine = RulesEngine(deps.db, deps.rules, recorder)
-    val ingest = IngestService(deps.db, deps.clock, deps.rules, listOf(engine) + deps.extraIngestListeners)
-    if (deps.startJobs) SilenceScanner(deps.db, deps.clock, deps.rules, recorder).start(this)
+    val ingest = IngestService(deps.db, deps.clock, deps.rules, listOf(engine, hub) + deps.extraIngestListeners)
+    if (deps.startJobs) {
+        SilenceScanner(deps.db, deps.clock, deps.rules, recorder).start(this)
+        RetentionPurge(deps.db, deps.clock).start(this)
+    }
     routing {
         healthRoutes(System.getProperty("hirz.version") ?: "dev")
         pairRoutes(assets)
+        liveRoutes(deps, hub, incidents)
         authenticate(MEMBER_AUTH) {
             meRoutes(deps)
             circleRoutes(circles)
             assetRoutes(assets)
             placeRoutes(places)
             incidentRoutes(incidents)
+            historyRoutes(deps, circles)
         }
         authenticate(SOURCE_AUTH) {
             sourceSelfRoutes(deps)

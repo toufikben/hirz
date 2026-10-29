@@ -28,6 +28,10 @@ fun Application.installAuth(db: DataSource, verifier: TokenVerifier) {
     }
 }
 
+/** For transports that cannot send headers (WebSocket query token). */
+suspend fun memberFromToken(db: DataSource, verifier: TokenVerifier, token: String?): MemberPrincipal? =
+    token?.let { verifier.verify(it) }?.let { MemberPrincipal(upsertMember(db, it), it.uid) }
+
 private fun upsertMember(db: DataSource, identity: VerifiedIdentity): UUID = db.connection.use { c ->
     c.prepareStatement(
         """INSERT INTO members (firebase_uid, email, display_name) VALUES (?, ?, ?)
