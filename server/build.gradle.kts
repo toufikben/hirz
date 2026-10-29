@@ -18,11 +18,24 @@ dependencies {
     implementation(libs.ktor.server.content.negotiation)
     implementation(libs.ktor.serialization.kotlinx.json)
     implementation(libs.logback.classic)
+    implementation(libs.hikari)
+    implementation(libs.flyway.core)
+    implementation(libs.flyway.postgresql)
+    implementation(libs.postgresql)
+    implementation(libs.ktor.server.auth)
+    implementation(libs.ktor.server.status.pages)
+    implementation(libs.ktor.server.websockets)
+    implementation(libs.firebase.admin)
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.kotlin.test.junit5)
+    testImplementation(libs.ktor.client.content.negotiation)
+    testImplementation(libs.ktor.client.websockets)
 }
 
 tasks.test {
     useJUnitPlatform()
     systemProperty("hirz.version", project.version.toString())
+    listOf("HIRZ_TEST_DB_URL", "HIRZ_TEST_DB_USER", "HIRZ_TEST_DB_PASSWORD").forEach { key ->
+        System.getenv(key)?.let { environment(key, it) }
+    }
 }

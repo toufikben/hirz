@@ -20,3 +20,5 @@ infra/traccar/data/
 infra/traccar/logs/
 # Superpowers workspaces
 .superpowers/
+app/google-services.json
+!app/debug.keystore

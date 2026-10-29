@@ -7,6 +7,19 @@ on:
 jobs:
   gradle:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: hirz
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      HIRZ_TEST_DB_URL: jdbc:postgresql://localhost:5432/hirz
+      HIRZ_TEST_DB_USER: postgres
+      HIRZ_TEST_DB_PASSWORD: postgres
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -14,8 +27,30 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
-      - name: Build and test
-        run: ./gradlew --no-daemon :shared:allTests :server:test :sim:test :sim:compileIntegrationTestKotlin :app:testDebugUnitTest :app:assembleDebug
+      - name: Firebase config (real secret when available, otherwise a non-functional dummy)
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then echo "$GOOGLE_SERVICES_JSON" | base64 -d > app/google-services.json; echo "using real Firebase config"
+          else cp app/google-services.ci.json app/google-services.json; echo "using dummy Firebase config (sign-in will not work in this build)"; fi
+      - name: shared
+        if: always()
+        run: ./gradlew --no-daemon :shared:allTests
+      - name: server
+        if: always()
+        run: ./gradlew --no-daemon :server:test
+      - name: sim and app
+        if: always()
+        run: ./gradlew --no-daemon :sim:test :sim:compileIntegrationTestKotlin :app:testDebugUnitTest :app:assembleDebug
+      - name: Debug signing fingerprint (register this SHA-1 in Firebase)
+        run: keytool -list -v -keystore app/debug.keystore -storepass android | grep -E "SHA1|SHA256"
+      - name: Package Hirz Core
+        run: ./gradlew --no-daemon :server:installDist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hirz-core
+          path: server/build/install/server/
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: hirz-debug-apk
@@ -30,7 +65,7 @@ jobs:
         with:
           node-version: '22'
       - name: Guard tests
-        run: node --test "infra/traccar/tools/*.test.mjs" "tools/forbidden-claims/*.test.mjs"
+        run: node --test "infra/traccar/tools/*.test.mjs" "tools/forbidden-claims/*.test.mjs" "tools/latency/*.test.mjs"
       - name: Traccar template
         run: node infra/traccar/tools/check-config.mjs --template infra/traccar/hirz.template.xml
       - name: Forbidden claims in app strings

@@ -1,0 +1,48 @@
+{
+  "name": "10_offline_backlog_no_new_exit",
+  "places": [
+    {
+      "name": "School",
+      "kind": "school",
+      "shape": {
+        "type": "circle",
+        "center": {
+          "lat": 36.7538,
+          "lon": 3.0588
+        },
+        "radiusM": 100
+      },
+      "marginM": 50
+    }
+  ],
+  "signals": [
+    {
+      "t": 0,
+      "n": 0
+    },
+    {
+      "t": 10,
+      "n": 0
+    },
+    {
+      "t": 100,
+      "n": 0
+    },
+    {
+      "t": 110,
+      "n": 250,
+      "fixT": 20
+    },
+    {
+      "t": 120,
+      "n": 250,
+      "fixT": 30
+    },
+    {
+      "t": 130,
+      "n": 250,
+      "fixT": 40
+    }
+  ],
+  "expect": []
+}

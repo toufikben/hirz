@@ -1,0 +1,47 @@
+{
+  "name": "11_forbidden_place_entry",
+  "places": [
+    {
+      "name": "Old quarry",
+      "kind": "forbidden",
+      "shape": {
+        "type": "circle",
+        "center": {
+          "lat": 36.7538,
+          "lon": 3.0588
+        },
+        "radiusM": 100
+      },
+      "marginM": 50
+    }
+  ],
+  "signals": [
+    {
+      "t": 0,
+      "n": 400
+    },
+    {
+      "t": 10,
+      "n": 400
+    },
+    {
+      "t": 20,
+      "n": 0
+    },
+    {
+      "t": 30,
+      "n": 0
+    },
+    {
+      "t": 40,
+      "n": 0
+    }
+  ],
+  "expect": [
+    {
+      "rule": "FORBIDDEN_ENTRY",
+      "tier": "P1",
+      "atSignal": 4
+    }
+  ]
+}

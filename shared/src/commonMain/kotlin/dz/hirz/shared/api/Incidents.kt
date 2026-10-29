@@ -1,0 +1,74 @@
+package dz.hirz.shared.api
+
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
+
+/** Severity (design §5): P0 immediate full-screen to everyone, P1 alert with an ack window, P2 in-app only. */
+@Serializable
+enum class Tier { P0, P1, P2 }
+
+@Serializable
+enum class RuleId { SOS, DURESS, PLACE_EXIT, FORBIDDEN_ENTRY, SILENT_SOURCE }
+
+/** A machine reason the app renders through i18n, e.g. `left_place{place, readings, distanceM, accuracyM, ageS}`. */
+@Serializable
+data class Reason(val code: String, val args: Map<String, String> = emptyMap())
+
+@Serializable
+enum class ReceiptState {
+    @SerialName("delivered") DELIVERED,
+    @SerialName("opened") OPENED,
+}
+
+@Serializable
+data class ReceiptRequest(val state: ReceiptState)
+
+@Serializable
+enum class CloseReason {
+    @SerialName("found_safe") FOUND_SAFE,
+    @SerialName("family") FAMILY,
+    @SerialName("technical") TECHNICAL,
+    @SerialName("measurement_error") MEASUREMENT_ERROR,
+    @SerialName("recovered") RECOVERED,
+}
+
+@Serializable
+data class CloseRequest(val reason: CloseReason)
+
+@Serializable
+data class DeliveryDto(
+    val memberId: String,
+    val channel: String,
+    val sentAtMs: Long? = null,
+    val deliveredAtMs: Long? = null,
+    val openedAtMs: Long? = null,
+    val error: String? = null,
+)
+
+@Serializable
+data class IncidentEventDto(val kind: String, val memberId: String? = null, val data: JsonObject = JsonObject(emptyMap()), val atMs: Long)
+
+/** "Claimed" means someone is handling it; it never lowers the tier or closes the incident (design §5). */
+@Serializable
+data class IncidentDto(
+    val id: String,
+    val assetId: String,
+    val assetName: String,
+    val circleId: String,
+    val tier: Tier,
+    val rule: RuleId,
+    val state: String,
+    val silent: Boolean = false,
+    val reasons: List<Reason> = emptyList(),
+    val openedAtMs: Long,
+    val ownerMemberId: String? = null,
+    val claimedAtMs: Long? = null,
+    val closedAtMs: Long? = null,
+    val closeReason: CloseReason? = null,
+    val events: List<IncidentEventDto> = emptyList(),
+    val deliveries: List<DeliveryDto> = emptyList(),
+)
+
+@Serializable
+data class CheckInSentDto(val sent: Int)
