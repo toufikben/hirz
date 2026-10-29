@@ -78,7 +78,7 @@ class IncidentTest {
             client.sos(paired.sourceToken, "sos1")
             val elapsedMs = (System.nanoTime() - started) / 1_000_000
             assertTrue(elapsedMs < 1_500, "fan-out took $elapsedMs ms; four sequential sends would take ≥ 2000 ms")
-            assertEquals(MEMBERS.map { "tok-${it.removePrefix("test.")}" }.toSet(), env.notifier.sent.map { it.first.token }.toSet())
+            assertEquals(MEMBERS.map { "tok-${it.removePrefix("test.")}" }.toSet(), env.notifier.alerts.map { it.first.token }.toSet())
             val incident = client.openIncidents("test.mom", circleId).single()
             assertEquals(Tier.P0, incident.tier)
             assertEquals(4, client.incident("test.mom", incident.id).deliveries.count { it.sentAtMs != null })
@@ -91,7 +91,7 @@ class IncidentTest {
         withApp(env) { client, _ ->
             val (circleId, _, paired) = client.family()
             client.sos(paired.sourceToken, "sos1")
-            assertEquals(3, env.notifier.sent.size)
+            assertEquals(3, env.notifier.alerts.size)
             val deliveries = client.incident("test.owner", client.openIncidents("test.owner", circleId).single().id).deliveries
             assertEquals(1, deliveries.count { it.error != null })
             env.db.connection.use { c ->
@@ -104,7 +104,7 @@ class IncidentTest {
     fun memberWithoutTokenIsRecordedNotSkipped() = withApp { client, env ->
         val (circleId, _, paired) = client.family(withTokens = listOf("test.owner"))
         client.sos(paired.sourceToken, "sos1")
-        assertEquals(1, env.notifier.sent.size)
+        assertEquals(1, env.notifier.alerts.size)
         val deliveries = client.incident("test.owner", client.openIncidents("test.owner", circleId).single().id).deliveries
         assertEquals(3, deliveries.count { it.error == "no_push_token" })
     }
@@ -127,7 +127,7 @@ class IncidentTest {
         client.sos(paired.sourceToken, "sos1")
         client.sos(paired.sourceToken, "sos2")
         val incident = client.openIncidents("test.owner", circleId).single()
-        assertEquals(4, env.notifier.sent.size, "the second SOS joins the open incident without re-alerting")
+        assertEquals(4, env.notifier.alerts.size, "the second SOS joins the open incident without re-alerting")
         assertTrue(client.incident("test.owner", incident.id).events.count { it.kind == "finding" } >= 1)
     }
 

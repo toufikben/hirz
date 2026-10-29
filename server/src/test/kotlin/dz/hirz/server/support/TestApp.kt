@@ -54,6 +54,9 @@ class FakeNotifier(
         sent += to to message
         return SendResult.Ok("fake-${sent.size}")
     }
+
+    /** Only incident alerts, without device commands such as `high_rate`. */
+    val alerts get() = sent.filter { it.second.kind == "incident" }
 }
 
 class TestEnv(
