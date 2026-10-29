@@ -41,11 +41,15 @@ export HIRZ_HOST=<host>
 `deploy.sh` ينتظر حتى يجيب `https://<host>/health`، وإلا يطبع آخر 80 سطرًا من سجل Core.
 
 ## 5) مدير Traccar (مرة واحدة)
-واجهة Traccar غير عامة. افتح نفق SSH من حاسوبك:
+واجهة Traccar غير منشورة. على الآلة، اربطها بـ localhost فقط ما دمت تحتاجها:
 ```bash
-ssh -L 8082:localhost:8082 ubuntu@<ip> "docker exec -it hirz-traccar-1 true; sleep infinity"
+docker run --rm -d --name traccar-ui --network hirz_hirz -p 127.0.0.1:8082:8082 alpine/socat:1.8.0.0 tcp-listen:8082,fork,reuseaddr tcp-connect:traccar:8082
 ```
-ثم من الآلة نفسها: `docker compose port traccar 8082` غير منشور، فاستعمل `docker run --rm --network hirz_hirz -p 127.0.0.1:8082:8082 alpine/socat tcp-listen:8082,fork,reuseaddr tcp-connect:traccar:8082` على الآلة، ثم افتح `http://localhost:8082` من حاسوبك عبر النفق.
+ومن حاسوبك افتح نفق SSH ثم المتصفح على `http://localhost:8082`:
+```bash
+ssh -L 8082:localhost:8082 ubuntu@<ip>
+```
+عند الانتهاء: `docker stop traccar-ui`.
 - أنشئ الحساب الأول فورًا (يصبح المدير)، ثم من **Settings → Server** عطّل **Registration**.
 - ضع هذا الحساب في `HIRZ_TRACCAR_USER`/`HIRZ_TRACCAR_PASSWORD` وأعد `./deploy.sh`.
 
