@@ -1,0 +1,10 @@
+{
+  "position": {
+    "id": 1234, "deviceId": 7, "protocol": "gt06",
+    "serverTime": "2026-11-01T08:00:02.000+00:00", "deviceTime": "2026-11-01T08:00:00.000+00:00", "fixTime": "2026-11-01T08:00:00.000+00:00",
+    "outdated": false, "valid": true, "latitude": 36.7538, "longitude": 3.0588, "altitude": 30.0,
+    "speed": 10.0, "course": 90.0, "address": null, "accuracy": 0.0, "network": null, "geofenceIds": null,
+    "attributes": { "sat": 9, "batteryLevel": 80, "charge": false, "ignition": false, "motion": true, "distance": 12.3, "totalDistance": 4567.0 }
+  },
+  "device": { "id": 7, "name": "hirz-ab12", "uniqueId": "359339075123456", "status": "online", "disabled": false, "lastUpdate": "2026-11-01T08:00:02.000+00:00", "attributes": {} }
+}
