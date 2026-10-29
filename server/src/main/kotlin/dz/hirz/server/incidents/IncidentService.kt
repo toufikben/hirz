@@ -62,6 +62,9 @@ class IncidentService(
 ) : IncidentSink {
     private val listeners = CopyOnWriteArrayList<IncidentEvents>()
 
+    /** The escalation ladder (P2); null in tests that exercise incidents alone. */
+    var escalation: dz.hirz.server.escalation.EscalationEngine? = null
+
     fun subscribe(l: IncidentEvents) { listeners += l }
 
     override fun open(finding: Finding, findingId: Long) {
@@ -84,7 +87,10 @@ class IncidentService(
                 apiJson.encodeToString(reasonsSerializer, finding.reasons).let { """{"reasons":$it}""" }, now)
             id to (inserted != null)
         }
-        if (isNew && finding.tier != Tier.P2) fanOut(incidentId, finding)
+        if (isNew && finding.tier != Tier.P2) {
+            fanOut(incidentId, finding)
+            escalation?.onOpened(incidentId, finding.circleId, finding.tier)
+        }
         notifyChanged(finding.circleId, incidentId)
     }
 
@@ -163,25 +169,38 @@ class IncidentService(
         load(c, incidentId)
     }
 
-    fun receipt(incidentId: UUID, memberId: UUID, state: ReceiptState) = db.tx { c ->
-        circles.requireRole(c, circleOf(c, incidentId), memberId)
-        val column = if (state == ReceiptState.DELIVERED) "delivered_at" else "opened_at"
-        c.prepareStatement("UPDATE deliveries SET $column = COALESCE($column, ?) WHERE incident_id = ? AND member_id = ?").apply {
-            setTimestamp(1, clock.instant().ts()); setObject(2, incidentId); setObject(3, memberId)
-        }.executeUpdate()
+    fun receipt(incidentId: UUID, memberId: UUID, state: ReceiptState) {
+        val now = clock.instant()
+        db.tx { c ->
+            circles.requireRole(c, circleOf(c, incidentId), memberId)
+            val column = if (state == ReceiptState.DELIVERED) "delivered_at" else "opened_at"
+            c.prepareStatement("UPDATE deliveries SET $column = COALESCE($column, ?) WHERE incident_id = ? AND member_id = ?").apply {
+                setTimestamp(1, now.ts()); setObject(2, incidentId); setObject(3, memberId)
+            }.executeUpdate()
+        }
+        // An "opened" receipt also proves delivery; the ladder's window starts at whichever arrives first.
+        escalation?.onDelivered(incidentId, memberId, now)
     }
 
-    fun claim(incidentId: UUID, memberId: UUID) = mutate(incidentId, memberId) { c, now ->
-        val claimed = c.prepareStatement(
-            "UPDATE incidents SET owner_member = ?, claimed_at = ? WHERE id = ? AND state = 'open' AND owner_member IS NULL",
-        ).apply { setObject(1, memberId); setTimestamp(2, now.ts()); setObject(3, incidentId) }.executeUpdate()
-        if (claimed == 1) event(c, incidentId, "claimed", memberId, "{}", now)
+    fun claim(incidentId: UUID, memberId: UUID) {
+        var won = false
+        mutate(incidentId, memberId) { c, now ->
+            val claimed = c.prepareStatement(
+                "UPDATE incidents SET owner_member = ?, claimed_at = ? WHERE id = ? AND state = 'open' AND owner_member IS NULL",
+            ).apply { setObject(1, memberId); setTimestamp(2, now.ts()); setObject(3, incidentId) }.executeUpdate()
+            if (claimed == 1) { event(c, incidentId, "claimed", memberId, "{}", now); won = true }
+        }
+        // Only the member whose UPDATE won tells the ladder: simultaneous claims yield exactly one owner.
+        if (won) escalation?.onClaimed(incidentId, memberId)
     }
 
-    fun contest(incidentId: UUID, memberId: UUID) = mutate(incidentId, memberId) { c, now ->
-        c.prepareStatement("UPDATE incidents SET owner_member = NULL, claimed_at = NULL WHERE id = ? AND state = 'open'")
-            .apply { setObject(1, incidentId) }.executeUpdate()
-        event(c, incidentId, "contested", memberId, "{}", now)
+    fun contest(incidentId: UUID, memberId: UUID) {
+        mutate(incidentId, memberId) { c, now ->
+            c.prepareStatement("UPDATE incidents SET owner_member = NULL, claimed_at = NULL WHERE id = ? AND state = 'open'")
+                .apply { setObject(1, incidentId) }.executeUpdate()
+            event(c, incidentId, "contested", memberId, "{}", now)
+        }
+        escalation?.onContested(incidentId, memberId)
     }
 
     fun close(incidentId: UUID, memberId: UUID, reason: CloseReason) = mutate(incidentId, memberId, EDITORS) { c, now ->
@@ -191,7 +210,7 @@ class IncidentService(
         ).apply { setTimestamp(1, now.ts()); setString(2, wire); setObject(3, memberId); setObject(4, incidentId) }.executeUpdate()
         if (n == 0) conflict("already_closed")
         event(c, incidentId, "closed", memberId, """{"reason":"$wire"}""", now)
-    }
+    }.also { escalation?.onClosed(incidentId) }
 
     fun setMemberPushToken(memberId: UUID, token: String, platform: String) {
         require(token.isNotBlank() && token.length <= 4096) { "invalid push token" }

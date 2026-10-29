@@ -65,6 +65,8 @@ fun Application.module(deps: Deps) {
     val places = PlaceService(deps.db, circles, deps.rules.placeMinMarginM)
     val incidents = IncidentService(deps.db, deps.clock, deps.notifier, circles)
     hub = LiveHub(deps.db, incidents, deps.clock)
+    val escalation = dz.hirz.server.escalation.EscalationEngine(deps.db, deps.clock, deps.notifier, deps.rules, circles)
+    incidents.escalation = escalation
     incidents.subscribe(hub)
     val recorder = FindingRecorder(deps.db, deps.clock, incidents)
     val engine = RulesEngine(deps.db, deps.rules, recorder)
@@ -72,6 +74,7 @@ fun Application.module(deps: Deps) {
     if (deps.startJobs) {
         SilenceScanner(deps.db, deps.clock, deps.rules, recorder).start(this)
         RetentionPurge(deps.db, deps.clock).start(this)
+        escalation.start(this)
     }
     routing {
         healthRoutes(System.getProperty("hirz.version") ?: "dev")

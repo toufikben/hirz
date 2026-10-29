@@ -26,6 +26,9 @@ fun Route.circleRoutes(service: CircleService) {
     post("/v1/circles/{id}/invites") {
         call.respond(service.invite(uuidOrNotFound(call.parameters["id"]), call.member().memberId, call.receive<CreateInviteRequest>()))
     }
+    post("/v1/circles/{id}/contacts") {
+        call.respond(service.addContact(uuidOrNotFound(call.parameters["id"]), call.member().memberId, call.receive<dz.hirz.shared.api.ContactRequest>()))
+    }
     post("/v1/invites/{code}/accept") {
         call.respond(service.accept(call.parameters["code"].orEmpty(), call.member().memberId))
     }
