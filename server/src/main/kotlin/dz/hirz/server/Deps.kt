@@ -15,6 +15,8 @@ data class Deps(
     val notifier: Notifier,
     val clock: Clock,
     val rules: RuleConfig,
+    /** 32-byte key for secrets at rest (HIRZ_DATA_KEY). */
+    val dataKey: ByteArray,
     val startJobs: Boolean = true,
     /** Extra observers of accepted signals (tests); the rules engine and live hub are wired inside the module. */
     val extraIngestListeners: List<IngestListener> = emptyList(),

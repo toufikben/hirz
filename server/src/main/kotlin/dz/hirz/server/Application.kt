@@ -1,5 +1,7 @@
 package dz.hirz.server
 
+import dz.hirz.server.circles.codeWordRoutes
+import dz.hirz.server.emergency.emergencyRoutes
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -67,6 +69,8 @@ fun Application.module(deps: Deps) {
     val assets = AssetService(deps.db, deps.clock, circles)
     val places = PlaceService(deps.db, circles, deps.rules.placeMinMarginM)
     val incidents = IncidentService(deps.db, deps.clock, deps.notifier, circles, deps.rules)
+    val codeWords = dz.hirz.server.circles.CodeWordService(deps.db, circles, dz.hirz.server.crypto.DataCipher(deps.dataKey))
+    val emergency = dz.hirz.server.emergency.EmergencyService(deps.db, deps.clock, circles)
     hub = LiveHub(deps.db, incidents, deps.clock)
     val escalation = dz.hirz.server.escalation.EscalationEngine(deps.db, deps.clock, deps.notifier, deps.rules, circles)
     escalation.ordering = dz.hirz.server.escalation.NearestOrdering(deps.rules)
@@ -96,6 +100,8 @@ fun Application.module(deps: Deps) {
             assetRoutes(assets)
             placeRoutes(places)
             incidentRoutes(incidents)
+            codeWordRoutes(codeWords)
+            emergencyRoutes(emergency)
             historyRoutes(deps, circles)
         }
         authenticate(SOURCE_AUTH) {
@@ -117,6 +123,7 @@ fun main() {
         notifier = FcmNotifier(firebase),
         clock = Clock.systemUTC(),
         rules = RuleConfig.DEFAULT,
+        dataKey = cfg.dataKey,
     )
     val port = System.getenv("PORT")?.toIntOrNull() ?: 8080
     embeddedServer(Netty, port = port) { module(deps) }.start(wait = true)

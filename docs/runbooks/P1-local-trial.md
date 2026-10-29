@@ -36,6 +36,9 @@
    $env:HIRZ_DATABASE_USER = "postgres.<project-ref>"
    $env:HIRZ_DATABASE_PASSWORD = "<كلمة السر>"
    $env:HIRZ_FIREBASE_PROJECT_ID = "<firebase-project-id>"
+   # مفتاح تشفير كلمة سر العائلة: 32 بايت عشوائية بصيغة base64. ولّده مرة واحدة واحفظه في core.env، فتغييره يُفقد كلمات السر المحفوظة.
+   # التوليد: $b = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b)
+   $env:HIRZ_DATA_KEY = "<base64-32-bytes>"
    $env:GOOGLE_APPLICATION_CREDENTIALS = "C:\Users\Administrator\hirz-secrets\firebase-admin.json"
    $env:JAVA_HOME = "C:\Program Files\Java\jdk-25.0.2"
    ```

@@ -66,7 +66,7 @@ class TestEnv(
 ) {
     val deps = Deps(
         db = db, verifier = FakeTokenVerifier(), notifier = notifierOverride ?: notifier, clock = clock, rules = rules,
-        startJobs = false, extraIngestListeners = ingestListeners,
+        dataKey = ByteArray(32) { it.toByte() }, startJobs = false, extraIngestListeners = ingestListeners,
     )
 }
 
