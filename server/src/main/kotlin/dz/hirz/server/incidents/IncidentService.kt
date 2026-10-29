@@ -101,6 +101,8 @@ class IncidentService(
             id to (inserted != null)
         }
         if (isNew && finding.tier != Tier.P2) {
+            // P0: every source reports every 15 s until close (design §6.2). Never under duress: the carrier's phone gets nothing.
+            if (finding.tier == Tier.P0 && !finding.silent) pushToSources(finding.assetId, "high_rate")
             fanOut(incidentId, finding)
             escalation?.onOpened(incidentId, finding.circleId, finding.tier)
         }
@@ -255,7 +257,7 @@ class IncidentService(
             askSoleGuardian = ClosePolicy.editorCount(c, circleId, now) == 1
             false
         }
-        if (closed) escalation?.onClosed(incidentId)
+        if (closed) { escalation?.onClosed(incidentId); rateAfterClose(incidentId) }
         if (askSoleGuardian) askToConfirm(incidentId, memberId)
     }
 
@@ -274,6 +276,7 @@ class IncidentService(
         }
         if (expired) gone("close_request_expired")
         escalation?.onClosed(incidentId)
+        rateAfterClose(incidentId)
     }
 
     /** Lapses every close request past its window; the incident stays open (design §5.7). */
@@ -394,22 +397,51 @@ class IncidentService(
         }
     }
 
-    /** Asks every live companion of [assetId] "are you OK?" (design §6.2). */
-    fun checkIn(assetId: UUID, memberId: UUID): CheckInSentDto {
-        data class Target(val token: String, val assetName: String)
-        val (circleId, targets) = db.connection.use { c ->
+    /** Asks every live companion of [assetId] "are you OK?" and records the check-in (design §6.2). */
+    fun checkIn(assetId: UUID, memberId: UUID): CheckInSentDto = sourceCommand(assetId, memberId, "checkin") { c ->
+        c.prepareStatement("INSERT INTO checkins (asset_id, sent_by, sent_at) VALUES (?, ?, ?)")
+            .apply { setObject(1, assetId); setObject(2, memberId); setTimestamp(3, clock.instant().ts()) }.executeUpdate()
+    }
+
+    /** The companion plays the alarm sound for 30 s, even when silenced (design §6.2). */
+    fun ring(assetId: UUID, memberId: UUID): CheckInSentDto = sourceCommand(assetId, memberId, "ring") {}
+
+    /** A data push to every live source of the asset, by an owner or guardian; audited. */
+    private fun sourceCommand(assetId: UUID, memberId: UUID, kind: String, record: (Connection) -> Unit): CheckInSentDto {
+        val circleId = db.tx { c ->
             val circleId = c.prepareStatement("SELECT circle_id FROM assets WHERE id = ?").apply { setObject(1, assetId) }
                 .executeQuery().use { if (it.next()) it.getObject(1, UUID::class.java) else notFound() }
             circles.requireRole(c, circleId, memberId, EDITORS)
-            circleId to c.prepareStatement(
+            record(c)
+            circleId
+        }
+        val sent = pushToSources(assetId, kind)
+        db.connection.use { audit(it, circleId, memberId, "${kind}_sent", """{"asset":"$assetId","sent":$sent}""") }
+        return CheckInSentDto(sent)
+    }
+
+    /** Sends [kind] to every live source of the asset with a push token; returns how many were accepted. */
+    private fun pushToSources(assetId: UUID, kind: String): Int {
+        data class Target(val token: String, val assetName: String)
+        val targets = db.connection.use { c ->
+            c.prepareStatement(
                 "SELECT s.push_token, a.name FROM sources s JOIN assets a ON a.id = s.asset_id WHERE s.asset_id = ? AND s.revoked_at IS NULL AND s.push_token IS NOT NULL",
             ).apply { setObject(1, assetId) }.executeQuery().toList { Target(it.getString(1), it.getString(2)) }
         }
-        val sent = runBlocking(Dispatchers.IO) {
-            targets.map { t -> async { safeSend(PushTarget(null, t.token), AlertMessage("checkin", null, null, t.assetName, null)) } }.awaitAll()
+        return runBlocking(Dispatchers.IO) {
+            targets.map { t -> async { safeSend(PushTarget(null, t.token), AlertMessage(kind, null, null, t.assetName, null)) } }.awaitAll()
         }.count { it is SendResult.Ok }
-        db.connection.use { audit(it, circleId, memberId, "checkin_sent", """{"asset":"$assetId","sent":$sent}""") }
-        return CheckInSentDto(sent)
+    }
+
+    /** After a close: back to the normal reporting rate unless another P0 is still open on the asset. */
+    private fun rateAfterClose(incidentId: UUID) {
+        val assetId = db.connection.use { c ->
+            c.prepareStatement(
+                """SELECT i.asset_id FROM incidents i WHERE i.id = ? AND i.tier = 'P0'
+                   AND NOT EXISTS (SELECT 1 FROM incidents o WHERE o.asset_id = i.asset_id AND o.state = 'open' AND o.tier = 'P0')""",
+            ).apply { setObject(1, incidentId) }.executeQuery().use { if (it.next()) it.getObject(1, UUID::class.java) else null }
+        } ?: return
+        pushToSources(assetId, "normal_rate")
     }
 
     // ---- helpers ------------------------------------------------------------------------------------------------

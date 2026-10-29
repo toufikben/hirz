@@ -101,6 +101,7 @@ fun Application.module(deps: Deps) {
     val ingest = IngestService(deps.db, deps.clock, deps.rules, listOf(engine, hub) + deps.extraIngestListeners)
     if (deps.startJobs) {
         SilenceScanner(deps.db, deps.clock, deps.rules, recorder).start(this)
+        dz.hirz.server.rules.CheckInScanner(deps.db, deps.clock, recorder).start(this)
         RetentionPurge(deps.db, deps.clock).start(this)
         escalation.start(this)
         launch {

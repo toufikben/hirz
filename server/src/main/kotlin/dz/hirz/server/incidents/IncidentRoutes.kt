@@ -70,6 +70,9 @@ fun Route.incidentRoutes(service: IncidentService) {
         service.setMemberPushToken(call.member().memberId, body.token, body.platform)
         call.respond(HttpStatusCode.NoContent)
     }
+    post("/v1/assets/{id}/ring") {
+        call.respond(service.ring(uuidOrNotFound(call.parameters["id"]), call.member().memberId))
+    }
     post("/v1/assets/{id}/checkin") {
         call.respond(service.checkIn(uuidOrNotFound(call.parameters["id"]), call.member().memberId))
     }

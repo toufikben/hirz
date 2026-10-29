@@ -9,7 +9,7 @@ import kotlinx.serialization.json.JsonObject
 enum class Tier { P0, P1, P2 }
 
 @Serializable
-enum class RuleId { SOS, DURESS, PLACE_EXIT, FORBIDDEN_ENTRY, SILENT_SOURCE }
+enum class RuleId { SOS, DURESS, PLACE_EXIT, FORBIDDEN_ENTRY, SILENT_SOURCE, NO_RESPONSE_CHECKIN }
 
 /** A machine reason the app renders through i18n, e.g. `left_place{place, readings, distanceM, accuracyM, ageS}`. */
 @Serializable

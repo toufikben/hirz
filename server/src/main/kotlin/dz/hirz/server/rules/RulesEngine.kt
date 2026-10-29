@@ -27,6 +27,7 @@ class RulesEngine(
                 Finding(s.assetId, s.circleId, if (hit.duress) RuleId.DURESS else RuleId.SOS, Tier.P0, listOf(hit.reason), at, silent = hit.duress),
             )
         }
+        if (s.cancelPin) recorder.appendToOpen(s.assetId, dz.hirz.shared.api.Reason("cancel_pin_entered"), RuleId.SOS)
         boundaries(s, at).forEach(recorder::record)
     }
 

@@ -37,6 +37,8 @@ data class IngestedSignal(
     val checkInReply: CheckInReply?,
     /** False for backlog fixes older than the newest fix already known for this source. */
     val isLatestFix: Boolean,
+    /** The carrier typed the cancel PIN: a neutral reason on an open SOS, never a close (design §6.2). */
+    val cancelPin: Boolean = false,
 )
 
 fun interface IngestListener {
@@ -108,10 +110,11 @@ class IngestService(
     private fun store(c: Connection, p: SourcePrincipal, s: IngestSignal, pins: Pins, now: Instant): Stored {
         val alarms = s.alarms.toMutableSet()
         var reply = s.checkInReply
+        var cancelPin = false
         s.pinHash?.let { typed ->
             when {
                 pins.duress != null && same(typed, pins.duress) -> alarms += AlarmKind.DURESS
-                pins.cancel != null && same(typed, pins.cancel) -> reply = CheckInReply.OK
+                pins.cancel != null && same(typed, pins.cancel) -> { reply = CheckInReply.OK; cancelPin = true }
             }
         }
         val fixTime = s.fixTimeMs?.let(Instant::ofEpochMilli)
@@ -157,7 +160,15 @@ class IngestService(
             ignition = null, motion = null, tilt = null, alarms = alarms,
         )
         val isLatest = fixTime != null && (previousLastFix == null || !fixTime.isBefore(previousLastFix))
-        return Stored(inserted, duplicate = false, IngestedSignal(s.clientId, p.sourceId, p.assetId, p.circleId, signal, quality, reply, isLatest))
+        // Any reply (or the cancel PIN) answers the asset's latest open check-in; a duress PIN never does.
+        reply?.let { r ->
+            c.prepareStatement(
+                """UPDATE checkins SET answered_at = ?, answer = ? WHERE id = (
+                     SELECT id FROM checkins WHERE asset_id = ? AND answered_at IS NULL ORDER BY sent_at DESC LIMIT 1)""",
+            ).apply { setTimestamp(1, now.ts()); setString(2, apiJson.encodeToString(CheckInReply.serializer(), r).trim('"')); setObject(3, p.assetId) }
+                .executeUpdate()
+        }
+        return Stored(inserted, duplicate = false, IngestedSignal(s.clientId, p.sourceId, p.assetId, p.circleId, signal, quality, reply, isLatest, cancelPin))
     }
 
     /** A resent signal: evaluated before → nothing to do; stored but never evaluated → evaluate it now. */
