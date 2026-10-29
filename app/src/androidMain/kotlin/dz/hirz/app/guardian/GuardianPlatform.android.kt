@@ -67,7 +67,7 @@ actual fun copyText(text: String) {
 }
 
 actual fun saveDownload(name: String, mime: String, bytes: ByteArray): Boolean = runCatching {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return shareFile(name, mime, bytes)
     val values = ContentValues().apply {
         put(MediaStore.Downloads.DISPLAY_NAME, name)
         put(MediaStore.Downloads.MIME_TYPE, mime)
@@ -75,6 +75,16 @@ actual fun saveDownload(name: String, mime: String, bytes: ByteArray): Boolean =
     }
     val uri = app.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return false
     app.contentResolver.openOutputStream(uri)?.use { it.write(bytes) } ?: return false
+    true
+}.getOrDefault(false)
+
+/** Android 8–9 have no MediaStore Downloads: the file goes through the share sheet (save to Drive, email, Bluetooth…). */
+private fun shareFile(name: String, mime: String, bytes: ByteArray): Boolean = runCatching {
+    val dir = java.io.File(app.cacheDir, "exports").apply { mkdirs() }
+    val file = java.io.File(dir, name).apply { writeBytes(bytes) }
+    val uri = androidx.core.content.FileProvider.getUriForFile(app, app.packageName + ".files", file)
+    val send = Intent(Intent.ACTION_SEND).setType(mime).putExtra(Intent.EXTRA_STREAM, uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    app.startActivity(Intent.createChooser(send, name).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION))
     true
 }.getOrDefault(false)
 

@@ -80,13 +80,18 @@ class LiveHub(private val db: DataSource, private val incidents: IncidentService
             position = LatLon(pos.lat, pos.lon), accuracyM = pos.accuracyM, accuracyEstimated = pos.accuracyEstimated,
             fixSource = s.signal.fixSource, speedKmh = s.signal.speedKmh, heading = s.signal.heading, battery = s.signal.battery,
         )
-        broadcast(s.circleId, LiveEvent.PositionUpdate(dto), viewedAsset = s.assetId)
+        val event = LiveEvent.PositionUpdate(dto)
+        circlesSeeing(s.assetId).forEach { broadcast(it, event, viewedAsset = s.assetId) }
     }
 
     override fun changed(circleId: UUID, incidentId: UUID) {
         val dto = db.connection.use { incidents.load(it, incidentId) }
-        broadcast(circleId, LiveEvent.IncidentUpdate(dto))
+        val event = LiveEvent.IncidentUpdate(dto)
+        (circlesSeeing(UUID.fromString(dto.assetId)) + circleId).distinct().forEach { broadcast(it, event) }
     }
+
+    /** The asset's own circle and every circle sharing its custody (design §12.1). */
+    private fun circlesSeeing(assetId: UUID): List<UUID> = db.connection.use { dz.hirz.server.custody.AssetAccess.circlesSeeing(it, assetId) }
 
     override fun memberRemoved(circleId: UUID, memberId: UUID) {
         conns.filter { it.memberId == memberId && circleId in it.circles }.forEach { kick(it, circleId) }
