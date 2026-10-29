@@ -1,0 +1,18 @@
+{
+  "name": "found_safe_with_proof",
+  "family": { "guardians": ["dad"], "home": true },
+  "steps": [
+    { "t": 0, "action": "fix", "north": 0 },
+    { "t": 10, "action": "fix", "north": 0 },
+    { "t": 20, "action": "fix", "north": 300 },
+    { "t": 30, "action": "fix", "north": 310 },
+    { "t": 40, "action": "fix", "north": 320 },
+    { "t": 60, "action": "fix", "north": 0 },
+    { "t": 65, "action": "close", "who": "mom", "reason": "found_safe" }
+  ],
+  "expect": {
+    "rule": "PLACE_EXIT",
+    "state": "closed",
+    "events": ["closed"]
+  }
+}
