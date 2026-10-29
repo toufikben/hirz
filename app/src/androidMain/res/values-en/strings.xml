@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Launcher label only; UI strings live in commonMain/composeResources. -->
+<!-- Strings used outside Compose (launcher label, lock-screen alarm); UI strings live in commonMain/composeResources. -->
 <resources>
     <string name="app_name">Hirz</string>
+    <string name="alarm_claim">I\'ll handle it</string>
+    <string name="alarm_details">Open details</string>
+    <string name="companion_channel">Location sharing</string>
+    <string name="companion_sharing">Hirz is sharing your location</string>
+    <string name="sos_action">SOS</string>
+    <string name="checkin_title">Are you OK?</string>
+    <string name="checkin_yes">Yes</string>
+    <string name="checkin_no">No, help me</string>
 </resources>

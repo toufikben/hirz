@@ -13,6 +13,7 @@ class MainActivity : ComponentActivity() {
         val env = AppEnvironment(
             kv = DataStoreKeyValueStore(applicationContext),
             auth = FirebaseAuthPort { this },
+            companion = AndroidCompanionPort(this),
             defaultBaseUrl = BuildConfig.HIRZ_BASE_URL,
             engineFactory = { OkHttp.create() },
         )

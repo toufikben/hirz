@@ -34,7 +34,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import dz.hirz.app.AlarmReadinessCard
 import dz.hirz.app.AppEnvironment
+import dz.hirz.app.platformPushToken
 import dz.hirz.app.api.HirzClient
 import dz.hirz.app.generated.resources.*
 import dz.hirz.shared.api.ActiveWindow
@@ -97,7 +99,10 @@ fun GuardianRoot(env: AppEnvironment, client: HirzClient) {
     var circles by remember { mutableStateOf<List<CircleDto>?>(null) }
     var error by remember { mutableStateOf(false) }
     suspend fun reload() { runCatching { client.circles() }.onSuccess { circles = it; error = false }.onFailure { error = true } }
-    LaunchedEffect(client) { reload() }
+    LaunchedEffect(client) {
+        reload()
+        platformPushToken()?.let { token -> runCatching { client.setPushToken(token) } }
+    }
 
     val list = circles
     when {
@@ -168,6 +173,7 @@ private fun MapTab(live: LiveState, now: Long) {
         a.last?.let { p -> MapMarker(a.assetId, a.name, p.position, p.accuracyM, markerStyle(freshnessOf(now - p.fixTimeMs))) }
     }
     Column(Modifier.fillMaxSize()) {
+        AlarmReadinessCard()
         HirzMap(markers, emptyList(), emptyList(), Modifier.fillMaxWidth().weight(1f)) {}
         if (assets.isEmpty()) Text(stringResource(Res.string.no_assets), Modifier.padding(16.dp))
         assets.forEach { a ->

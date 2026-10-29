@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Launcher label only; UI strings live in commonMain/composeResources. -->
+<!-- Strings used outside Compose (launcher label, lock-screen alarm); UI strings live in commonMain/composeResources. -->
 <resources>
     <string name="app_name">حِرز</string>
+    <string name="alarm_claim">أتولّى</string>
+    <string name="alarm_details">افتح التفاصيل</string>
+    <string name="companion_channel">مشاركة الموقع</string>
+    <string name="companion_sharing">حِرز يشارك موقعك</string>
+    <string name="sos_action">استغاثة</string>
+    <string name="checkin_title">هل أنت بخير؟</string>
+    <string name="checkin_yes">نعم</string>
+    <string name="checkin_no">لا، ساعدوني</string>
 </resources>

@@ -20,6 +20,9 @@ googleid = "1.1.1"
 datastore = "1.1.7"
 security-crypto = "1.1.0"
 maplibre = "11.8.0"
+work = "2.10.2"
+play-location = "21.3.0"
+zxing-embedded = "4.3.0"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -58,6 +61,9 @@ googleid = { module = "com.google.android.libraries.identity.googleid:googleid",
 androidx-datastore = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
 androidx-security-crypto = { module = "androidx.security:security-crypto", version.ref = "security-crypto" }
 maplibre-android = { module = "org.maplibre.gl:android-sdk", version.ref = "maplibre" }
+androidx-work = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
+play-services-location = { module = "com.google.android.gms:play-services-location", version.ref = "play-location" }
+zxing-embedded = { module = "com.journeyapps:zxing-android-embedded", version.ref = "zxing-embedded" }
 
 [plugins]
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }

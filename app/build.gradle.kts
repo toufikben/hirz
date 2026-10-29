@@ -39,6 +39,9 @@ kotlin {
             implementation(libs.androidx.datastore)
             implementation(libs.androidx.security.crypto)
             implementation(libs.maplibre.android)
+            implementation(libs.androidx.work)
+            implementation(libs.play.services.location)
+            implementation(libs.zxing.embedded)
         }
         androidUnitTest.dependencies {
             implementation(libs.kotlin.test)

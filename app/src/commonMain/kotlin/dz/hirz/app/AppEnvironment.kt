@@ -19,6 +19,7 @@ interface AuthPort {
 class AppEnvironment(
     val kv: KeyValueStore,
     val auth: AuthPort,
+    val companion: CompanionPort,
     defaultBaseUrl: String,
     private val engineFactory: () -> HttpClientEngine,
 ) {
