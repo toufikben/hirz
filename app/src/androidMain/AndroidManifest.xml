@@ -50,6 +50,20 @@
             android:exported="false" />
 
         <activity
+            android:name=".push.RingActivity"
+            android:exported="false"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:launchMode="singleTop"
+            android:excludeFromRecents="true" />
+
+        <activity
+            android:name=".guardian.CredentialActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <activity
             android:name=".push.AlarmActivity"
             android:exported="false"
             android:showWhenLocked="true"

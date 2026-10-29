@@ -1,0 +1,13 @@
+{
+  "name": "single_guardian_close_expires",
+  "family": {},
+  "steps": [
+    { "t": 0, "action": "sos" },
+    { "t": 5, "action": "close", "who": "mom", "reason": "family" },
+    { "t": 130, "action": "tick" }
+  ],
+  "expect": {
+    "state": "open",
+    "events": ["close_requested", "close_request_expired"]
+  }
+}

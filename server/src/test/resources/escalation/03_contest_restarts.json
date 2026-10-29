@@ -1,0 +1,16 @@
+{
+  "name": "contest_restarts",
+  "family": { "guardians": ["dad"] },
+  "steps": [
+    { "t": 0, "action": "sos" },
+    { "t": 5, "action": "claim", "who": "mom" },
+    { "t": 10, "action": "contest", "who": "dad" },
+    { "t": 30, "action": "tick" }
+  ],
+  "expect": {
+    "log": ["opened", "claimed", "contested", "window_from_sent"],
+    "owner": "none",
+    "state": "open",
+    "events": ["claimed", "contested"]
+  }
+}

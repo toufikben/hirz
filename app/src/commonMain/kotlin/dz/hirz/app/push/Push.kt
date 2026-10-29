@@ -4,6 +4,16 @@ package dz.hirz.app.push
 sealed interface Push {
     data class Incident(val incidentId: String, val tier: String, val assetName: String, val rule: String?) : Push
     data class CheckIn(val assetName: String) : Push
+    /** Companion: sound the alarm for 30 s even when silenced (design §6.2). */
+    data class Ring(val assetName: String) : Push
+    /** Companion: report every 15 s ([high]) or back to normal; sent when a P0 opens and closes. */
+    data class Rate(val high: Boolean) : Push
+    /** SMS gateway: the outbox has items; fetch now instead of at the next poll. */
+    data object SmsPending : Push
+    /** The only guardian asked to close a P0: confirm with a second tap (design §5.7). */
+    data class CloseConfirm(val incidentId: String, val assetName: String) : Push
+    /** A quiet in-app notice (custody changed, gateway silent): never an alarm. */
+    data class Notice(val kind: String, val subject: String) : Push
 }
 
 object PushPayload {
@@ -13,6 +23,12 @@ object PushPayload {
             if (id == null || tier == null || asset == null) null else Push.Incident(id, tier, asset, data["rule"])
         }
         "checkin" -> data["asset"]?.let { Push.CheckIn(it) }
+        "ring" -> Push.Ring(data["asset"].orEmpty())
+        "high_rate" -> Push.Rate(high = true)
+        "normal_rate" -> Push.Rate(high = false)
+        "sms_pending" -> Push.SmsPending
+        "close_confirm" -> data["id"]?.let { Push.CloseConfirm(it, data["asset"].orEmpty()) }
+        "custody_changed", "gateway_silent" -> Push.Notice(data["t"]!!, data["asset"].orEmpty())
         else -> null
     }
 }

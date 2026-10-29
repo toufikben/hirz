@@ -14,6 +14,7 @@ class MainActivity : ComponentActivity() {
             kv = DataStoreKeyValueStore(applicationContext),
             auth = FirebaseAuthPort { this },
             companion = AndroidCompanionPort(this),
+            gateway = dz.hirz.app.gateway.AndroidGatewayPort(this),
             defaultBaseUrl = BuildConfig.HIRZ_BASE_URL,
             engineFactory = { OkHttp.create() },
         )

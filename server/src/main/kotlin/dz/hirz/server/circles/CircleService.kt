@@ -123,6 +123,23 @@ class CircleService(private val db: DataSource, private val clock: Clock, privat
         CircleDto(row.circleId.toString(), name, roleOf(row.role))
     }
 
+    /** A no-app contact reached by SMS (design §5.6). Local Algerian numbers become +213. */
+    fun addContact(circleId: UUID, actor: UUID, req: dz.hirz.shared.api.ContactRequest): MemberDto = db.tx { c ->
+        requireRole(c, circleId, actor, setOf(Role.OWNER))
+        require(req.name.isNotBlank() && req.name.length <= 80) { "name must be 1–80 characters" }
+        if (req.lang !in setOf("ar", "fr", "en")) unprocessable("unsupported_lang")
+        val phone = normalizePhone(req.phone) ?: unprocessable("invalid_phone")
+        val id = c.prepareStatement("INSERT INTO members (firebase_uid, display_name, lang) VALUES (?, ?, ?) RETURNING id")
+            .apply { setString(1, "contact:" + UUID.randomUUID()); setString(2, req.name.trim()); setString(3, req.lang) }
+            .executeQuery().use { it.next(); it.getObject(1, UUID::class.java) }
+        val priority = c.prepareStatement("SELECT COALESCE(max(priority), 0) + 1 FROM circle_members WHERE circle_id = ?")
+            .apply { setObject(1, circleId) }.executeQuery().use { it.next(); it.getInt(1) }
+        c.prepareStatement("INSERT INTO circle_members (circle_id, member_id, role, priority, phone) VALUES (?, ?, 'contact', ?, ?)")
+            .apply { setObject(1, circleId); setObject(2, id); setInt(3, priority); setString(4, phone) }.executeUpdate()
+        audit(c, circleId, actor, "contact_added", """{"member":"$id"}""")
+        MemberDto(id.toString(), req.name.trim(), Role.CONTACT, priority)
+    }
+
     fun update(circleId: UUID, actor: UUID, target: UUID, req: UpdateMemberRequest) = db.tx { c ->
         requireRole(c, circleId, actor, setOf(Role.OWNER))
         val current = currentRole(c, circleId, target) ?: notFound()
@@ -171,4 +188,15 @@ class CircleService(private val db: DataSource, private val clock: Clock, privat
 fun audit(c: Connection, circleId: UUID?, actor: UUID?, action: String, data: String = "{}") {
     c.prepareStatement("INSERT INTO audit_log (circle_id, actor_member, action, data) VALUES (?, ?, ?, ?::jsonb)")
         .apply { setObject(1, circleId); setObject(2, actor); setString(3, action); setString(4, data) }.executeUpdate()
+}
+
+/** "0550 12 34 56" → "+213550123456"; "+33…" kept; anything else → null. */
+fun normalizePhone(raw: String): String? {
+    val digits = raw.filter { it.isDigit() || it == '+' }
+    return when {
+        Regex("^\\+[1-9][0-9]{7,14}$").matches(digits) -> digits
+        Regex("^0[5-7][0-9]{8}$").matches(digits) -> "+213" + digits.drop(1)
+        Regex("^0[1-4][0-9]{7}$").matches(digits) -> "+213" + digits.drop(1)
+        else -> null
+    }
 }

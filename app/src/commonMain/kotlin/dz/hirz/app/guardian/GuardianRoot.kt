@@ -48,6 +48,7 @@ import dz.hirz.shared.api.CreateAssetRequest
 import dz.hirz.shared.api.CreateInviteRequest
 import dz.hirz.shared.api.CreatePairingRequest
 import dz.hirz.shared.api.CreatePlaceRequest
+import dz.hirz.shared.api.EmergencyNumberDto
 import dz.hirz.shared.api.IncidentDto
 import dz.hirz.shared.api.LatLon
 import dz.hirz.shared.api.LiveEvent
@@ -111,7 +112,7 @@ fun GuardianRoot(env: AppEnvironment, client: HirzClient) {
             if (error) Button({ scope.launch { reload() } }) { Text(stringResource(Res.string.reconnecting)) }
         }
         list.isEmpty() -> CreateOrJoin(client) { scope.launch { reload() } }
-        else -> CircleHome(client, list.first())
+        else -> CircleHome(env, client, list.first())
     }
 }
 
@@ -136,7 +137,7 @@ private fun CreateOrJoin(client: HirzClient, done: () -> Unit) {
 }
 
 @Composable
-private fun CircleHome(client: HirzClient, circle: CircleDto) {
+private fun CircleHome(env: AppEnvironment, client: HirzClient, circle: CircleDto) {
     val live = remember(circle.id) { LiveState() }
     var tab by remember { mutableStateOf(GuardianTab.MAP) }
     var now by remember { mutableStateOf(nowMs()) }
@@ -159,8 +160,8 @@ private fun CircleHome(client: HirzClient, circle: CircleDto) {
         when (tab) {
             GuardianTab.MAP -> MapTab(live, now)
             GuardianTab.PLACES -> PlacesTab(client, circle)
-            GuardianTab.CIRCLE -> CircleTab(client, circle)
-            GuardianTab.INCIDENTS -> IncidentsTab(client, live)
+            GuardianTab.CIRCLE -> CircleTab(env, client, circle)
+            GuardianTab.INCIDENTS -> IncidentsTab(client, circle, live)
         }
     }
 }
@@ -268,7 +269,7 @@ private val ASSET_TYPES = listOf(
 )
 
 @Composable
-private fun CircleTab(client: HirzClient, circle: CircleDto) {
+private fun CircleTab(env: AppEnvironment, client: HirzClient, circle: CircleDto) {
     val scope = rememberCoroutineScope()
     var members by remember { mutableStateOf<List<MemberDto>>(emptyList()) }
     var assets by remember { mutableStateOf<List<AssetDto>>(emptyList()) }
@@ -307,6 +308,7 @@ private fun CircleTab(client: HirzClient, circle: CircleDto) {
                             }
                         }) { Text(stringResource(Res.string.pair_device)) }
                         OutlinedButton({ scope.launch { runCatching { client.checkIn(a.id) } } }) { Text(stringResource(Res.string.ask_checkin)) }
+                        RingButton(client, a.id)
                     }
                     pairing?.takeIf { it.first == a.id }?.let { Text(stringResource(Res.string.pairing_code, it.second), style = MaterialTheme.typography.titleLarge) }
                 }
@@ -320,57 +322,35 @@ private fun CircleTab(client: HirzClient, circle: CircleDto) {
             Button({ scope.launch { runCatching { client.createAsset(circle.id, CreateAssetRequest(assetType, assetName.trim())) }.onSuccess { assetName = ""; reload() } } },
                 enabled = assetName.isNotBlank()) { Text(stringResource(Res.string.add_asset)) }
         }
+        item { HorizontalDivider(); CodeWordCard(client, circle) }
+        item { ContactsCard(client, circle) }
+        item { SignOutButton(client, { platformPushToken() }, { env.auth.signOut() }) }
     }
 }
 
-/** Starting registry until the server-side one ships (P2); every number is shown with "check for your wilaya". */
-private val EMERGENCY = listOf("1548", "17", "14", "1055", "112")
-
-private val CLOSE_REASONS = listOf(
-    CloseReason.FOUND_SAFE to Res.string.close_found_safe, CloseReason.RECOVERED to Res.string.close_recovered,
-    CloseReason.FAMILY to Res.string.close_family, CloseReason.TECHNICAL to Res.string.close_technical,
-    CloseReason.MEASUREMENT_ERROR to Res.string.close_measurement,
-)
-
 @Composable
-private fun IncidentsTab(client: HirzClient, live: LiveState) {
-    val scope = rememberCoroutineScope()
-    val lang = currentLang()
+private fun IncidentsTab(client: HirzClient, circle: CircleDto, live: LiveState) {
+    var view by remember(circle.id) { mutableStateOf(CircleView(emptyMap(), 1, null)) }
+    var numbers by remember(circle.id) { mutableStateOf<List<EmergencyNumberDto>>(emptyList()) }
+    LaunchedEffect(circle.id) {
+        val me = runCatching { client.me().memberId }.getOrNull()
+        runCatching { client.members(circle.id) }.onSuccess { ms ->
+            view = CircleView(
+                names = ms.associate { it.memberId to (it.displayName ?: it.memberId.take(8)) },
+                editors = ms.count { it.role == Role.OWNER || it.role == Role.GUARDIAN },
+                myMemberId = me,
+            )
+        }
+        runCatching { client.emergencyNumbers(circle.id) }.onSuccess { numbers = it }
+    }
     val open = live.incidents.values.sortedWith(compareBy({ it.tier }, { -it.openedAtMs }))
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (open.isEmpty()) item { Text(stringResource(Res.string.no_open_incidents)) }
-        items(open, key = { it.id }) { inc ->
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("${inc.tier} — ${inc.assetName}", style = MaterialTheme.typography.titleLarge)
-                    inc.reasons.forEach { Text("• " + ReasonText.render(it, lang)) }
-                    Text(inc.ownerMemberId?.let { stringResource(Res.string.handled_by, it.take(8)) } ?: stringResource(Res.string.unhandled))
-                    inc.deliveries.forEach { d ->
-                        val state = when {
-                            d.openedAtMs != null -> Res.string.delivery_opened
-                            d.deliveredAtMs != null -> Res.string.delivery_delivered
-                            d.sentAtMs != null -> Res.string.delivery_sent
-                            else -> Res.string.delivery_failed
-                        }
-                        Text("${d.memberId.take(8)}: ${stringResource(state)}", style = MaterialTheme.typography.bodySmall)
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button({ scope.launch { runCatching { client.claim(inc.id) }.onSuccess { live.apply(LiveEvent.IncidentUpdate(it)) } } }) { Text(stringResource(Res.string.claim)) }
-                        OutlinedButton({ scope.launch { runCatching { client.contest(inc.id) }.onSuccess { live.apply(LiveEvent.IncidentUpdate(it)) } } }) { Text(stringResource(Res.string.contest)) }
-                    }
-                    Text(stringResource(Res.string.close_incident), style = MaterialTheme.typography.labelLarge)
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        CLOSE_REASONS.take(3).forEach { (r, label) ->
-                            TextButton({ scope.launch { runCatching { client.close(inc.id, r) }.onSuccess { live.apply(LiveEvent.IncidentUpdate(it)) } } }) { Text(stringResource(label)) }
-                        }
-                    }
-                }
-            }
-        }
+        items(open, key = { it.id }) { inc -> IncidentCard(client, inc, view, numbers) { live.apply(LiveEvent.IncidentUpdate(it)) } }
         item {
             Text(stringResource(Res.string.emergency_numbers), style = MaterialTheme.typography.titleMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                EMERGENCY.forEach { n -> OutlinedButton({ dial(n) }) { Text("${stringResource(Res.string.call)} $n") } }
+                numbers.forEach { n -> OutlinedButton({ dial(n.number) }) { Text("${stringResource(Res.string.call)} ${n.number}" + if (n.verifiedAtMs == null) " ⚠" else "") } }
             }
         }
     }

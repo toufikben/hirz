@@ -10,4 +10,14 @@
     <string name="checkin_title">هل أنت بخير؟</string>
     <string name="checkin_yes">نعم</string>
     <string name="checkin_no">لا، ساعدوني</string>
+    <string name="sos_confirm">اضغط «تأكيد الاستغاثة» خلال 10 ثوانٍ</string>
+    <string name="sos_confirm_action">تأكيد الاستغاثة</string>
+    <string name="ring_title">حِرز: العائلة تبحث عن هذا الهاتف</string>
+    <string name="ring_stop">إيقاف</string>
+    <string name="close_confirm_title">أكّد إغلاق التنبيه: %1$s</string>
+    <string name="close_confirm_body">افتح حِرز واضغط «تأكيد الإغلاق» خلال دقيقتين</string>
+    <string name="notice_custody">تغيّرت الحضانة المشتركة: %1$s</string>
+    <string name="notice_gateway_silent">بوابة الرسائل صامتة: %1$s</string>
+    <string name="gateway_channel">بوابة الرسائل</string>
+    <string name="gateway_running">حِرز: بوابة الرسائل تعمل</string>
 </resources>

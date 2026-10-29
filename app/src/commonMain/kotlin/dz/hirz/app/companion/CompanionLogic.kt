@@ -78,6 +78,27 @@ object PinPad {
         PinSubmission(PinUiState.ACCEPTED, IngestSignal(clientId = newClientId(), pinHash = sha256Hex(salt + pin)))
 }
 
+/** A remote ring (design §6.2): 30 s of alarm, or less if the carrier taps stop. */
+class RingSession(private val startedMs: Long, private val lengthMs: Long = 30_000) {
+    private var stopped = false
+    fun stop() { stopped = true }
+    fun shouldStop(nowMs: Long) = stopped || nowMs - startedMs >= lengthMs
+}
+
+/**
+ * SOS from the notification needs one confirming tap within [windowMs] (P1 minor #19): a pocket press of the
+ * notification action must not alarm the whole family. The in-app button (hold 2 s) is unchanged.
+ */
+class SosConfirm(private val windowMs: Long = 10_000) {
+    enum class Step { ARMED, SEND }
+    private var armedAt: Long? = null
+
+    fun tap(nowMs: Long): Step {
+        val armed = armedAt
+        return if (armed != null && nowMs - armed < windowMs) { armedAt = null; Step.SEND } else { armedAt = nowMs; Step.ARMED }
+    }
+}
+
 /** Reporting interval: 60 s normally, 15 s for 10 min after SOS or while the server reports an open incident. */
 class CompanionCadence(private val normalMs: Long = 60_000, private val highMs: Long = 15_000, private val highWindowMs: Long = 600_000) {
     private var highUntil = Long.MIN_VALUE

@@ -1,23 +1,34 @@
 package dz.hirz.app.api
 
+import dz.hirz.shared.api.ActionRequest
 import dz.hirz.shared.api.ApiErrorDto
 import dz.hirz.shared.api.AssetDto
 import dz.hirz.shared.api.CheckInSentDto
 import dz.hirz.shared.api.CircleDto
 import dz.hirz.shared.api.CloseReason
 import dz.hirz.shared.api.CloseRequest
+import dz.hirz.shared.api.CodeWordDto
+import dz.hirz.shared.api.ContactRequest
 import dz.hirz.shared.api.CreateAssetRequest
 import dz.hirz.shared.api.CreateCircleRequest
 import dz.hirz.shared.api.CreateInviteRequest
 import dz.hirz.shared.api.CreatePairingRequest
 import dz.hirz.shared.api.CreatePlaceRequest
+import dz.hirz.shared.api.EmergencyNumberDto
+import dz.hirz.shared.api.GatewayCodeDto
+import dz.hirz.shared.api.GatewayPairRequest
+import dz.hirz.shared.api.GatewayPairResponse
+import dz.hirz.shared.api.InboundSmsRequest
 import dz.hirz.shared.api.IncidentDto
 import dz.hirz.shared.api.IngestBatch
 import dz.hirz.shared.api.IngestResult
 import dz.hirz.shared.api.InviteDto
+import dz.hirz.shared.api.LatLon
 import dz.hirz.shared.api.LiveEvent
 import dz.hirz.shared.api.MeDto
 import dz.hirz.shared.api.MemberDto
+import dz.hirz.shared.api.MyLocationRequest
+import dz.hirz.shared.api.OutboxItemDto
 import dz.hirz.shared.api.PairRequest
 import dz.hirz.shared.api.PairResponse
 import dz.hirz.shared.api.PairingCodeDto
@@ -26,6 +37,11 @@ import dz.hirz.shared.api.PositionDto
 import dz.hirz.shared.api.PushTokenDto
 import dz.hirz.shared.api.ReceiptRequest
 import dz.hirz.shared.api.ReceiptState
+import dz.hirz.shared.api.ReviewRequest
+import dz.hirz.shared.api.ShareDto
+import dz.hirz.shared.api.ShareRequest
+import dz.hirz.shared.api.SheetDto
+import dz.hirz.shared.api.SmsResultRequest
 import dz.hirz.shared.api.SourceStatusDto
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -46,6 +62,8 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import io.ktor.http.encodeURLParameter
+import io.ktor.http.encodeURLPathPart
 import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.websocket.Frame
@@ -128,15 +146,49 @@ class HirzClient(
     suspend fun contest(id: String): IncidentDto = member { t -> http.post("$base/v1/incidents/$id/contest") { auth(t) } }.ok()
     suspend fun close(id: String, reason: CloseReason): IncidentDto =
         member { t -> http.post("$base/v1/incidents/$id/close") { auth(t); json(CloseRequest(reason)) } }.ok()
+    suspend fun confirmClose(id: String): IncidentDto = member { t -> http.post("$base/v1/incidents/$id/close/confirm") { auth(t) } }.ok()
+    suspend fun action(id: String, kind: String, value: String? = null): IncidentDto =
+        member { t -> http.post("$base/v1/incidents/$id/actions") { auth(t); json(ActionRequest(kind, value)) } }.ok()
+    suspend fun review(id: String, falseAlarm: Boolean, note: String? = null) =
+        member { t -> http.post("$base/v1/incidents/$id/review") { auth(t); json(ReviewRequest(falseAlarm, note)) } }.done()
+    suspend fun myLocation(id: String, position: LatLon, accuracyM: Double?) =
+        member { t -> http.post("$base/v1/incidents/$id/my-location") { auth(t); json(MyLocationRequest(position, accuracyM)) } }.done()
+    suspend fun sheet(id: String): SheetDto = member { t -> http.get("$base/v1/incidents/$id/sheet") { auth(t) } }.ok()
+    suspend fun policePack(id: String): ByteArray = member { t -> http.get("$base/v1/incidents/$id/police-pack") { auth(t) } }.ok()
+    suspend fun share(id: String, ttlMinutes: Int): ShareDto =
+        member { t -> http.post("$base/v1/incidents/$id/share") { auth(t); json(ShareRequest(ttlMinutes)) } }.ok()
+    suspend fun revokeShare(id: String) = member { t -> http.delete("$base/v1/incidents/$id/share") { auth(t) } }.done()
+    suspend fun ring(assetId: String): CheckInSentDto = member { t -> http.post("$base/v1/assets/$assetId/ring") { auth(t) } }.ok()
+
+    suspend fun codeWord(circleId: String): CodeWordDto = member { t -> http.get("$base/v1/circles/$circleId/code-word") { auth(t) } }.ok()
+    suspend fun setCodeWord(circleId: String, word: String) =
+        member { t -> http.put("$base/v1/circles/$circleId/code-word") { auth(t); json(CodeWordDto(word)) } }.done()
+    suspend fun emergencyNumbers(circleId: String, country: String = "DZ"): List<EmergencyNumberDto> =
+        member { t -> http.get("$base/v1/emergency-numbers") { auth(t); parameter("country", country); parameter("circleId", circleId) } }.ok()
+    suspend fun gatewayCode(circleId: String): GatewayCodeDto = member { t -> http.post("$base/v1/circles/$circleId/gateways") { auth(t) } }.ok()
+    suspend fun addContact(circleId: String, name: String, phone: String, lang: String): MemberDto =
+        member { t -> http.post("$base/v1/circles/$circleId/contacts") { auth(t); json(ContactRequest(name, phone, lang)) } }.ok()
+    /** Sign-out removes this install's token first, so a signed-out phone never rings (P1 minor #20). */
+    suspend fun deletePushToken(token: String) =
+        member { t -> http.delete("$base/v1/me/push-token/${token.encodeURLPathPart()}") { auth(t) } }.done()
 
     /** Live events for every circle of the signed-in member; completes when the socket closes. */
     fun live(): Flow<LiveEvent> = flow {
-        val token = tokenProvider(false)
-        val wsBase = base.replaceFirst("https://", "wss://").replaceFirst("http://", "ws://")
-        http.webSocket("$wsBase/v1/live?token=$token") {
+        // No token, no socket: the caller retries later instead of sending "?token=null" (P1 minor #21).
+        val url = liveUrl(base, tokenProvider(false)) ?: return@flow
+        http.webSocket(url) {
             for (frame in incoming) {
                 if (frame is Frame.Text) emit(hirzJson.decodeFromString(LiveEvent.serializer(), frame.readText()))
             }
+        }
+    }
+
+    companion object {
+        /** The live-socket URL with the token URL-encoded; null when there is no token. */
+        fun liveUrl(baseUrl: String, token: String?): String? {
+            if (token.isNullOrEmpty()) return null
+            val wsBase = baseUrl.trimEnd('/').replaceFirst("https://", "wss://").replaceFirst("http://", "ws://")
+            return "$wsBase/v1/live?token=${token.encodeURLParameter()}"
         }
     }
 
@@ -147,4 +199,14 @@ class HirzClient(
     suspend fun sourceMe(sourceToken: String): SourceStatusDto = http.get("$base/v1/sources/me") { auth(sourceToken) }.ok()
     suspend fun setSourcePushToken(sourceToken: String, token: String) =
         http.put("$base/v1/sources/me/push-token") { auth(sourceToken); json(PushTokenDto(token)) }.done()
+
+    // ---- SMS gateway ----
+    suspend fun gatewayPair(code: String, pushToken: String?): GatewayPairResponse =
+        http.post("$base/v1/gateways/pair") { json(GatewayPairRequest(code, pushToken)) }.ok()
+    suspend fun gatewayOutbox(gatewayToken: String): List<OutboxItemDto> = http.get("$base/v1/gateways/me/outbox") { auth(gatewayToken) }.ok()
+    suspend fun gatewayResult(gatewayToken: String, id: Long, status: String, error: String?) =
+        http.post("$base/v1/gateways/me/outbox/$id/result") { auth(gatewayToken); json(SmsResultRequest(status, error)) }.done()
+    suspend fun gatewayInbox(gatewayToken: String, from: String, body: String, receivedAtMs: Long) =
+        http.post("$base/v1/gateways/me/inbox") { auth(gatewayToken); json(InboundSmsRequest(from, body, receivedAtMs)) }.done()
+    suspend fun gatewayHeartbeat(gatewayToken: String) = http.post("$base/v1/gateways/me/heartbeat") { auth(gatewayToken) }.done()
 }

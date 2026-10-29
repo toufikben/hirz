@@ -39,22 +39,27 @@ interface IncidentSink {
 class FindingRecorder(private val db: DataSource, private val clock: Clock, private val sink: IncidentSink) {
     private val reasonsSerializer = ListSerializer(Reason.serializer())
 
-    fun record(f: Finding) {
-        val id = db.connection.use { c ->
+    fun record(f: Finding) = sink.open(f, store(f))
+
+    /** On record only, never raised: a place exit during a handover that mutes exits (design §12.1). */
+    fun recordMuted(f: Finding) {
+        store(f.copy(reasons = f.reasons + Reason("muted_by_handover")))
+    }
+
+    private fun store(f: Finding): Long =
+        db.connection.use { c ->
             c.prepareStatement("INSERT INTO findings (asset_id, rule, tier, reasons, at) VALUES (?, ?, ?, ?::jsonb, ?) RETURNING id").apply {
                 setObject(1, f.assetId); setString(2, f.rule.name); setString(3, f.tier.name)
                 setString(4, apiJson.encodeToString(reasonsSerializer, f.reasons)); setTimestamp(5, f.at.ts())
             }.executeQuery().use { it.next(); it.getLong(1) }
         }
-        sink.open(f, id)
-    }
 
-    /** Adds [reason] to the asset's open P0/P1 incident, if any; returns false when there is none. */
-    fun appendToOpen(assetId: UUID, reason: Reason): Boolean {
+    /** Adds [reason] to the asset's open P0/P1 incident (of [rule], when given), if any; returns false when there is none. */
+    fun appendToOpen(assetId: UUID, reason: Reason, rule: dz.hirz.shared.api.RuleId? = null): Boolean {
         val incidentId = db.connection.use { c ->
             val id = c.prepareStatement(
-                "SELECT id FROM incidents WHERE asset_id = ? AND state = 'open' AND tier IN ('P0', 'P1') ORDER BY opened_at LIMIT 1",
-            ).apply { setObject(1, assetId) }.executeQuery().use { if (it.next()) it.getObject(1, UUID::class.java) else null }
+                "SELECT id FROM incidents WHERE asset_id = ? AND state = 'open' AND tier IN ('P0', 'P1') AND (?::text IS NULL OR rule = ?) ORDER BY opened_at LIMIT 1",
+            ).apply { setObject(1, assetId); setString(2, rule?.name); setString(3, rule?.name) }.executeQuery().use { if (it.next()) it.getObject(1, UUID::class.java) else null }
                 ?: return false
             val json = apiJson.encodeToString(Reason.serializer(), reason)
             c.prepareStatement("INSERT INTO incident_events (incident_id, kind, data, at) VALUES (?, 'reason', ?::jsonb, ?)")

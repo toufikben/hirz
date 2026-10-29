@@ -85,6 +85,7 @@ object CompanionEngine {
     private val mutex = Mutex()
     private var queue: SignalQueue? = null
     val cadence = CompanionCadence()
+    val sosConfirm = SosConfirm()
 
     /** AtomicFile: a crash mid-write keeps the previous complete queue instead of a truncated one (P1 review #10). */
     private fun file(context: Context) = AtomicFile(File(context.filesDir, "companion-queue.json"))
@@ -136,6 +137,7 @@ object CompanionEngine {
 object CompanionNotifications {
     const val CHANNEL = "hirz_companion"
     const val CHECKIN_ID = 7_002
+    const val SOS_CONFIRM_ID = 7_003
 
     fun ensureChannel(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java)
@@ -162,6 +164,20 @@ object CompanionNotifications {
             .build()
     }
 
+    /** Second step of the notification SOS: one more tap within 10 s sends it. */
+    fun showSosConfirm(context: Context) {
+        ensureChannel(context)
+        val n = NotificationCompat.Builder(context, CHANNEL)
+            .setSmallIcon(android.R.drawable.stat_sys_warning)
+            .setContentTitle(context.getString(R.string.sos_confirm))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setTimeoutAfter(10_000)
+            .setAutoCancel(true)
+            .addAction(0, context.getString(R.string.sos_confirm_action), action(context, CompanionActionReceiver.SOS, 4))
+            .build()
+        context.getSystemService(NotificationManager::class.java).notify(SOS_CONFIRM_ID, n)
+    }
+
     fun showCheckIn(context: Context, @Suppress("UNUSED_PARAMETER") assetName: String) {
         ensureChannel(context)
         val n = NotificationCompat.Builder(context, CHANNEL)
@@ -184,7 +200,15 @@ class CompanionActionReceiver : BroadcastReceiver() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 when (intent.action) {
-                    SOS -> { CompanionEngine.cadence.sosPressed(System.currentTimeMillis()); CompanionEngine.sendNow(app, CompanionSignals.sos()) }
+                    // The notification action asks for one confirming tap first (P1 minor #19).
+                    SOS -> when (CompanionEngine.sosConfirm.tap(System.currentTimeMillis())) {
+                        SosConfirm.Step.ARMED -> CompanionNotifications.showSosConfirm(app)
+                        SosConfirm.Step.SEND -> {
+                            app.getSystemService(NotificationManager::class.java).cancel(CompanionNotifications.SOS_CONFIRM_ID)
+                            CompanionEngine.cadence.sosPressed(System.currentTimeMillis())
+                            CompanionEngine.sendNow(app, CompanionSignals.sos())
+                        }
+                    }
                     CHECKIN_OK -> CompanionEngine.sendNow(app, CompanionSignals.checkIn(CheckInReply.OK))
                     CHECKIN_HELP -> {
                         CompanionEngine.cadence.sosPressed(System.currentTimeMillis())
@@ -298,6 +322,9 @@ fun hasLocationPermission(context: Context): Boolean =
 /** Restarts sharing after a reboot when this phone is paired. */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == Intent.ACTION_BOOT_COMPLETED && CompanionVault(context).credentials() != null) LocationService.start(context)
+        if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
+        if (CompanionVault(context).credentials() != null) LocationService.start(context)
+        // The gateway build restarts its SMS relay too; in the Play build there is never a gateway token.
+        dz.hirz.app.gateway.GatewayService.start(context)
     }
 }

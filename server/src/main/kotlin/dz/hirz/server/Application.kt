@@ -1,5 +1,26 @@
 package dz.hirz.server
 
+import dz.hirz.server.custody.CustodyService
+import dz.hirz.server.custody.custodyRoutes
+import dz.hirz.server.sms.GatewayService
+import dz.hirz.server.sms.gatewayMemberRoutes
+import dz.hirz.server.sms.gatewayPairRoutes
+import dz.hirz.server.sms.gatewayRoutes
+import dz.hirz.server.sms.installGatewayAuth
+import dz.hirz.server.share.ShareService
+import dz.hirz.server.share.publicShareRoutes
+import dz.hirz.server.share.shareRoutes
+import dz.hirz.server.exports.PolicePack
+import dz.hirz.server.exports.exportRoutes
+import dz.hirz.server.assets.AssetMediaService
+import dz.hirz.server.assets.assetMediaRoutes
+import dz.hirz.server.incidents.SheetService
+import dz.hirz.server.incidents.sheetRoutes
+import dz.hirz.server.circles.codeWordRoutes
+import dz.hirz.server.emergency.emergencyRoutes
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import dz.hirz.server.assets.AssetService
 import dz.hirz.server.assets.assetRoutes
 import dz.hirz.server.assets.pairRoutes
@@ -63,19 +84,43 @@ fun Application.module(deps: Deps) {
     val circles = CircleService(deps.db, deps.clock) { circleId, memberId -> hub.memberRemoved(circleId, memberId) }
     val assets = AssetService(deps.db, deps.clock, circles)
     val places = PlaceService(deps.db, circles, deps.rules.placeMinMarginM)
-    val incidents = IncidentService(deps.db, deps.clock, deps.notifier, circles)
+    val incidents = IncidentService(deps.db, deps.clock, deps.notifier, circles, deps.rules)
+    val codeWords = dz.hirz.server.circles.CodeWordService(deps.db, circles, dz.hirz.server.crypto.DataCipher(deps.dataKey))
+    val emergency = dz.hirz.server.emergency.EmergencyService(deps.db, deps.clock, circles)
+    val media = AssetMediaService(deps.db, deps.clock, circles)
+    val custody = CustodyService(deps.db, deps.clock, circles, deps.notifier)
+    val gateways = GatewayService(deps.db, deps.clock, circles, incidents)
+    installGatewayAuth(gateways)
+    val shares = ShareService(deps.db, deps.clock, circles, deps.publicBaseUrl, deps.dataKey)
+    val sheets = SheetService(deps.db, deps.clock, circles, incidents, emergency).also { it.shareActiveUntil = shares::activeUntil }
+    val policePack = PolicePack(deps.db, deps.clock, circles, incidents, System.getProperty("hirz.version") ?: "dev")
     hub = LiveHub(deps.db, incidents, deps.clock)
+    val escalation = dz.hirz.server.escalation.EscalationEngine(deps.db, deps.clock, deps.notifier, deps.rules, circles)
+    escalation.ordering = dz.hirz.server.escalation.NearestOrdering(deps.rules)
+    incidents.escalation = escalation
     incidents.subscribe(hub)
     val recorder = FindingRecorder(deps.db, deps.clock, incidents)
     val engine = RulesEngine(deps.db, deps.rules, recorder)
     val ingest = IngestService(deps.db, deps.clock, deps.rules, listOf(engine, hub) + deps.extraIngestListeners)
     if (deps.startJobs) {
         SilenceScanner(deps.db, deps.clock, deps.rules, recorder).start(this)
+        dz.hirz.server.rules.CheckInScanner(deps.db, deps.clock, recorder).start(this)
+        dz.hirz.server.sms.GatewaySilenceScanner(deps.db, deps.clock, deps.notifier).start(this)
         RetentionPurge(deps.db, deps.clock).start(this)
+        escalation.start(this)
+        launch {
+            while (isActive) {
+                runCatching { incidents.expireCloseRequests() }
+                delay(5_000)
+            }
+        }
     }
     routing {
         healthRoutes(System.getProperty("hirz.version") ?: "dev")
         pairRoutes(assets)
+        publicShareRoutes(shares)
+        gatewayPairRoutes(gateways)
+        gatewayRoutes(gateways)
         liveRoutes(deps, hub, incidents)
         authenticate(MEMBER_AUTH) {
             meRoutes(deps)
@@ -83,6 +128,14 @@ fun Application.module(deps: Deps) {
             assetRoutes(assets)
             placeRoutes(places)
             incidentRoutes(incidents)
+            codeWordRoutes(codeWords)
+            emergencyRoutes(emergency)
+            assetMediaRoutes(media)
+            sheetRoutes(sheets)
+            exportRoutes(policePack)
+            shareRoutes(shares)
+            gatewayMemberRoutes(gateways)
+            custodyRoutes(custody)
             historyRoutes(deps, circles)
         }
         authenticate(SOURCE_AUTH) {
@@ -104,6 +157,8 @@ fun main() {
         notifier = FcmNotifier(firebase),
         clock = Clock.systemUTC(),
         rules = RuleConfig.DEFAULT,
+        dataKey = cfg.dataKey,
+        publicBaseUrl = cfg.publicBaseUrl,
     )
     val port = System.getenv("PORT")?.toIntOrNull() ?: 8080
     embeddedServer(Netty, port = port) { module(deps) }.start(wait = true)

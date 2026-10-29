@@ -1,0 +1,19 @@
+{
+  "name": "second_guardian_claims",
+  "family": { "guardians": ["dad"], "contacts": { "Jaddah": "0550123456" } },
+  "steps": [
+    { "t": 0, "action": "sos" },
+    { "t": 20, "action": "tick" },
+    { "t": 60, "action": "tick" },
+    { "t": 70, "action": "claim", "who": "dad" },
+    { "t": 80, "action": "tick" },
+    { "t": 120, "action": "tick" },
+    { "t": 240, "action": "tick" }
+  ],
+  "expect": {
+    "log": ["opened", "window_from_sent", "escalated", "claimed"],
+    "logExcludes": ["contacts_notified", "everyone_unavailable"],
+    "owner": "dad",
+    "state": "open"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "name": "nobody_answers_p0",
+  "family": { "guardians": ["dad"], "contacts": { "Jaddah": "0550123456" } },
+  "steps": [
+    { "t": 0, "action": "sos" },
+    { "t": 20, "action": "tick" },
+    { "t": 60, "action": "tick" },
+    { "t": 80, "action": "tick" },
+    { "t": 120, "action": "tick" },
+    { "t": 240, "action": "tick" },
+    { "t": 360, "action": "tick" }
+  ],
+  "expect": {
+    "log": ["opened", "window_from_sent", "escalated", "window_from_sent", "escalated", "contacts_notified", "everyone_unavailable", "retry_all"],
+    "owner": "none",
+    "state": "open"
+  }
+}

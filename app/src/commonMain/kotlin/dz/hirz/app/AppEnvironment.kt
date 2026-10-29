@@ -20,6 +20,7 @@ class AppEnvironment(
     val kv: KeyValueStore,
     val auth: AuthPort,
     val companion: CompanionPort,
+    val gateway: GatewayPort,
     defaultBaseUrl: String,
     private val engineFactory: () -> HttpClientEngine,
 ) {

@@ -8,6 +8,7 @@ import dz.hirz.shared.api.LatLon
 import dz.hirz.shared.api.RuleId
 import dz.hirz.shared.api.Tier
 import dz.hirz.shared.rules.RuleConfig
+import dz.hirz.server.db.tx
 import java.sql.Connection
 import java.time.Instant
 import java.util.UUID
@@ -27,7 +28,12 @@ class RulesEngine(
                 Finding(s.assetId, s.circleId, if (hit.duress) RuleId.DURESS else RuleId.SOS, Tier.P0, listOf(hit.reason), at, silent = hit.duress),
             )
         }
-        boundaries(s, at).forEach(recorder::record)
+        if (s.cancelPin) recorder.appendToOpen(s.assetId, dz.hirz.shared.api.Reason("cancel_pin_entered"), RuleId.SOS)
+        val findings = boundaries(s, at)
+        if (findings.isEmpty()) return
+        // Only PLACE_EXIT can be muted, and only by a handover that says so; SOS, duress and silence never are.
+        val muted = findings.any { it.rule == RuleId.PLACE_EXIT } && db.connection.use { c -> dz.hirz.server.custody.Custody.muted(c, s.assetId, at) }
+        findings.forEach { f -> if (muted && f.rule == RuleId.PLACE_EXIT) recorder.recordMuted(f) else recorder.record(f) }
     }
 
     private fun boundaries(s: IngestedSignal, at: Instant): List<Finding> {
@@ -37,7 +43,9 @@ class RulesEngine(
         val point = LatLon(position.lat, position.lon)
         val accuracy = position.accuracyM ?: Double.MAX_VALUE
         val found = mutableListOf<Finding>()
-        db.connection.use { c ->
+        db.tx { c ->
+            // One evaluation per asset at a time: overlapping batches never lose a reading (P1 minor #11).
+            c.prepareStatement("SELECT pg_advisory_xact_lock(hashtext(?))").apply { setString(1, s.assetId.toString()) }.executeQuery().close()
             for (place in PlaceService.placesOf(c, s.circleId)) {
                 val placeId = UUID.fromString(place.id)
                 val state = load(c, s.assetId, placeId)

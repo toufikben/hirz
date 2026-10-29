@@ -21,6 +21,6 @@ object TestDb {
     fun fresh(): HikariDataSource {
         val schema = "t_" + UUID.randomUUID().toString().replace("-", "")
         DriverManager.getConnection(url, user, password).use { it.createStatement().execute("CREATE SCHEMA $schema") }
-        return connectDatabase(AppConfig(url, user, password, firebaseProjectId = null), schema = schema, poolSize = 3)
+        return connectDatabase(AppConfig(url, user, password, firebaseProjectId = null, dataKey = ByteArray(32)), schema = schema, poolSize = 3)
     }
 }

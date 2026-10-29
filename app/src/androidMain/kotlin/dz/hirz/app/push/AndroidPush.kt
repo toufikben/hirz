@@ -129,6 +129,14 @@ class HirzMessagingService : FirebaseMessagingService() {
                 if (AlarmPolicy.isAlarm(push)) AlarmNotifier.show(applicationContext, push)
             }
             is Push.CheckIn -> CompanionNotifications.showCheckIn(applicationContext, push.assetName)
+            // Android 10+ blocks activity starts from the background: a full-screen alarm notification opens it (review #6).
+            is Push.Ring -> RingNotifier.show(applicationContext)
+            is Push.Rate -> dz.hirz.app.companion.CompanionEngine.cadence.serverSaysHighRate(push.high, System.currentTimeMillis())
+            Push.SmsPending -> dz.hirz.app.gateway.GatewayService.kick(applicationContext)
+            is Push.CloseConfirm -> QuietNotices.show(applicationContext, push.incidentId.hashCode(),
+                getString(R.string.close_confirm_title, push.assetName), getString(R.string.close_confirm_body))
+            is Push.Notice -> QuietNotices.show(applicationContext, (push.kind + push.subject).hashCode(),
+                getString(if (push.kind == "gateway_silent") R.string.notice_gateway_silent else R.string.notice_custody, push.subject), null)
             null -> Unit
         }
     }
@@ -172,5 +180,81 @@ class AlarmActivity : ComponentActivity() {
     private fun openApp() {
         startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP))
         finish()
+    }
+}
+
+object RingNotifier {
+    private const val ID = 7_020
+
+    fun show(context: Context) {
+        AlarmNotifier.ensureChannel(context)
+        val intent = Intent(context, RingActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val pending = PendingIntent.getActivity(context, ID, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val n = NotificationCompat.Builder(context, ALARM_CHANNEL)
+            .setSmallIcon(android.R.drawable.stat_sys_warning)
+            .setContentTitle(context.getString(R.string.ring_title))
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setFullScreenIntent(pending, true)
+            .setContentIntent(pending)
+            .setTimeoutAfter(30_000)
+            .setAutoCancel(true)
+            .build()
+        context.getSystemService(NotificationManager::class.java).notify(ID, n)
+    }
+}
+
+/** In-app-tier notices: no sound, no full screen, never an alarm (design §5, P2). */
+object QuietNotices {
+    private const val CHANNEL = "hirz_quiet"
+
+    fun show(context: Context, id: Int, title: String, body: String?) {
+        val nm = context.getSystemService(NotificationManager::class.java)
+        if (nm.getNotificationChannel(CHANNEL) == null) {
+            nm.createNotificationChannel(NotificationChannel(CHANNEL, context.getString(R.string.app_name), NotificationManager.IMPORTANCE_DEFAULT))
+        }
+        val open = PendingIntent.getActivity(context, id, Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_IMMUTABLE)
+        nm.notify(id, NotificationCompat.Builder(context, CHANNEL)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle(title).setContentText(body)
+            .setContentIntent(open).setAutoCancel(true)
+            .build())
+    }
+}
+
+/**
+ * A remote ring (design §6.2): the alarm sound on the alarm stream, so it plays even when the phone is on silent,
+ * for 30 s or until "stop". Shown over the lock screen; it reveals nothing about any incident.
+ */
+class RingActivity : ComponentActivity() {
+    private var ringtone: android.media.Ringtone? = null
+    private val session = dz.hirz.app.companion.RingSession(System.currentTimeMillis())
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) { setShowWhenLocked(true); setTurnScreenOn(true) }
+        ringtone = RingtoneManager.getRingtone(this, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM))?.apply {
+            audioAttributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) isLooping = true
+            play()
+        }
+        setContent {
+            MaterialTheme {
+                Surface {
+                    Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Text(getString(R.string.ring_title), style = MaterialTheme.typography.headlineMedium)
+                        Button({ session.stop(); finish() }, Modifier.fillMaxWidth()) { Text(getString(R.string.ring_stop)) }
+                    }
+                }
+            }
+        }
+        window.decorView.postDelayed(object : Runnable {
+            override fun run() { if (session.shouldStop(System.currentTimeMillis())) finish() else window.decorView.postDelayed(this, 1_000) }
+        }, 1_000)
+    }
+
+    override fun onDestroy() {
+        ringtone?.stop()
+        super.onDestroy()
     }
 }

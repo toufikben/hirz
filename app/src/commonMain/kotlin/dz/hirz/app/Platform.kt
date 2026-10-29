@@ -17,6 +17,18 @@ expect fun CompanionPermissionsCard()
 
 data class PairedInfo(val circleName: String, val assetName: String, val hasPin: Boolean)
 
+/** SMS-gateway mode (design §12.3.3): only the `gateway` build may send and read SMS. */
+interface GatewayPort {
+    /** False in the Play build, which declares no SMS permission. */
+    val supported: Boolean
+    /** The circle this phone serves as gateway, or null. */
+    val pairedCircle: StateFlow<String?>
+    suspend fun pair(client: HirzClient, code: String): Result<Unit>
+    /** Asks for the SMS permissions and starts the foreground service. */
+    fun start()
+    fun unpair()
+}
+
 /** Companion-mode capabilities the platform provides (design §6.2). */
 interface CompanionPort {
     val paired: StateFlow<PairedInfo?>

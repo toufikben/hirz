@@ -1,0 +1,12 @@
+{
+  "name": "gateway_silent",
+  "family": { "gateway": true },
+  "steps": [
+    { "t": 600, "action": "gateway_scan" },
+    { "t": 960, "action": "gateway_scan" },
+    { "t": 970, "action": "gateway_scan" }
+  ],
+  "expect": {
+    "notices": { "gateway_silent": 1 }
+  }
+}

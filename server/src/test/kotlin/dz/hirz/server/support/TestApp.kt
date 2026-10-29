@@ -54,6 +54,9 @@ class FakeNotifier(
         sent += to to message
         return SendResult.Ok("fake-${sent.size}")
     }
+
+    /** Only incident alerts, without device commands such as `high_rate`. */
+    val alerts get() = sent.filter { it.second.kind == "incident" }
 }
 
 class TestEnv(
@@ -66,7 +69,7 @@ class TestEnv(
 ) {
     val deps = Deps(
         db = db, verifier = FakeTokenVerifier(), notifier = notifierOverride ?: notifier, clock = clock, rules = rules,
-        startJobs = false, extraIngestListeners = ingestListeners,
+        dataKey = ByteArray(32) { it.toByte() }, startJobs = false, extraIngestListeners = ingestListeners,
     )
 }
 

@@ -9,7 +9,7 @@ import kotlinx.serialization.json.JsonObject
 enum class Tier { P0, P1, P2 }
 
 @Serializable
-enum class RuleId { SOS, DURESS, PLACE_EXIT, FORBIDDEN_ENTRY, SILENT_SOURCE }
+enum class RuleId { SOS, DURESS, PLACE_EXIT, FORBIDDEN_ENTRY, SILENT_SOURCE, NO_RESPONSE_CHECKIN }
 
 /** A machine reason the app renders through i18n, e.g. `left_place{place, readings, distanceM, accuracyM, ageS}`. */
 @Serializable
@@ -68,7 +68,32 @@ data class IncidentDto(
     val closeReason: CloseReason? = null,
     val events: List<IncidentEventDto> = emptyList(),
     val deliveries: List<DeliveryDto> = emptyList(),
+    val pendingClose: PendingCloseDto? = null,
+    val escalation: EscalationViewDto? = null,
 )
+
+/**
+ * Where the escalation ladder stands (design §5.3): [stage] is GUARDIANS, CONTACTS, EVERYONE_UNAVAILABLE, CLAIMED or
+ * CLOSED; while GUARDIANS, [waitingForMemberId] is the member asked to take it, until [deadlineMs].
+ */
+@Serializable
+data class EscalationViewDto(val stage: String, val waitingForMemberId: String? = null, val deadlineMs: Long? = null)
+
+/** A close waiting for a second guardian, or for the only guardian's second tap, before [expiresAtMs] (design §5.7). */
+@Serializable
+data class PendingCloseDto(val requestedBy: String, val reason: CloseReason, val atMs: Long, val expiresAtMs: Long)
+
+/** Something a member did about an incident; shown to everyone so nobody repeats it (design §5.8). */
+@Serializable
+data class ActionRequest(val kind: String, val value: String? = null)
+
+/** After close: was it a false alarm? Counted per rule for the false-alarm budget (design §5.9). */
+@Serializable
+data class ReviewRequest(val falseAlarm: Boolean, val note: String? = null)
 
 @Serializable
 data class CheckInSentDto(val sent: Int)
+
+/** A guardian's own position, sent only while an incident they can see is open (design §5.11). */
+@Serializable
+data class MyLocationRequest(val position: LatLon, val accuracyM: Double? = null)

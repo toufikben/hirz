@@ -1,0 +1,16 @@
+{
+  "name": "contact_replies_1",
+  "family": { "contacts": { "Jaddah": "0550123456" }, "gateway": true },
+  "steps": [
+    { "t": 0, "action": "sos" },
+    { "t": 20, "action": "tick" },
+    { "t": 60, "action": "tick" },
+    { "t": 70, "action": "reply", "from": "+213550123456", "body": "1" }
+  ],
+  "expect": {
+    "log": ["opened", "window_from_sent", "escalated", "contacts_notified", "claimed"],
+    "owner": "Jaddah",
+    "state": "open",
+    "notices": { "sms_pending": 1 }
+  }
+}

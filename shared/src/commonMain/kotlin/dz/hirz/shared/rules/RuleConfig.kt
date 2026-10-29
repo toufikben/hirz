@@ -19,6 +19,10 @@ data class RuleConfig(
     val ackWindowP0Ms: Long = 60_000,
     val ackWindowP1Ms: Long = 180_000,
     val highRateMs: Long = 10 * 60_000,
+    val ackFallbackMs: Long = 20_000,
+    val escalationRetryMs: Long = 120_000,
+    val nearestLeadM: Double = 300.0,
+    val singleGuardianConfirmMs: Long = 120_000,
     val retentionDays: Int = 30,
 ) {
     companion object {
