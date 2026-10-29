@@ -62,6 +62,7 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import io.ktor.http.encodeURLParameter
 import io.ktor.http.encodeURLPathPart
 import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
@@ -173,12 +174,21 @@ class HirzClient(
 
     /** Live events for every circle of the signed-in member; completes when the socket closes. */
     fun live(): Flow<LiveEvent> = flow {
-        val token = tokenProvider(false)
-        val wsBase = base.replaceFirst("https://", "wss://").replaceFirst("http://", "ws://")
-        http.webSocket("$wsBase/v1/live?token=$token") {
+        // No token, no socket: the caller retries later instead of sending "?token=null" (P1 minor #21).
+        val url = liveUrl(base, tokenProvider(false)) ?: return@flow
+        http.webSocket(url) {
             for (frame in incoming) {
                 if (frame is Frame.Text) emit(hirzJson.decodeFromString(LiveEvent.serializer(), frame.readText()))
             }
+        }
+    }
+
+    companion object {
+        /** The live-socket URL with the token URL-encoded; null when there is no token. */
+        fun liveUrl(baseUrl: String, token: String?): String? {
+            if (token.isNullOrEmpty()) return null
+            val wsBase = baseUrl.trimEnd('/').replaceFirst("https://", "wss://").replaceFirst("http://", "ws://")
+            return "$wsBase/v1/live?token=${token.encodeURLParameter()}"
         }
     }
 

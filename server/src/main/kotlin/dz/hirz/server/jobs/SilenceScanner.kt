@@ -14,7 +14,6 @@ import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
 import java.time.Clock
 import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 import javax.sql.DataSource
 
 /**
@@ -29,7 +28,12 @@ class SilenceScanner(
     private val recorder: FindingRecorder,
 ) {
     private val log = LoggerFactory.getLogger(SilenceScanner::class.java)
-    private val episodes = ConcurrentHashMap<UUID, String>()
+    /** Stores [kind] as the source's episode; true only when it changed to a new silence. */
+    private fun episode(source: UUID, kind: String?): Boolean = db.connection.use { c ->
+        c.prepareStatement(
+            "UPDATE sources SET silence_episode = ? WHERE id = ? AND silence_episode IS DISTINCT FROM ?",
+        ).apply { setString(1, kind); setObject(2, source); setString(3, kind) }.executeUpdate() == 1
+    }
 
     fun start(scope: CoroutineScope, everyMs: Long = 30_000): Job = scope.launch {
         while (isActive) {
@@ -62,8 +66,9 @@ class SilenceScanner(
                 sinceFix > cfg.silentAliveNoFixMs -> "alive"
                 else -> null
             }
-            if (kind == null) { episodes.remove(r.source); continue }
-            if (episodes.put(r.source, kind) == kind) continue
+            // The episode lives in the database, so a restart never raises the same silence twice (P1 minor #17).
+            if (!episode(r.source, kind)) continue
+            if (kind == null) continue
             val minutes = ((if (kind == "dead") sinceHeartbeat else sinceFix) / 60_000).toString()
             if (recorder.appendToOpen(r.asset, Reason("silence_during_incident", mapOf("mode" to kind, "minutes" to minutes)))) continue
             recorder.record(Finding(r.asset, r.circle, RuleId.SILENT_SOURCE, Tier.P2, listOf(Reason("silent_$kind", mapOf("minutes" to minutes))), now))

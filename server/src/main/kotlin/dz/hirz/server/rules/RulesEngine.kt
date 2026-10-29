@@ -8,6 +8,7 @@ import dz.hirz.shared.api.LatLon
 import dz.hirz.shared.api.RuleId
 import dz.hirz.shared.api.Tier
 import dz.hirz.shared.rules.RuleConfig
+import dz.hirz.server.db.tx
 import java.sql.Connection
 import java.time.Instant
 import java.util.UUID
@@ -42,7 +43,9 @@ class RulesEngine(
         val point = LatLon(position.lat, position.lon)
         val accuracy = position.accuracyM ?: Double.MAX_VALUE
         val found = mutableListOf<Finding>()
-        db.connection.use { c ->
+        db.tx { c ->
+            // One evaluation per asset at a time: overlapping batches never lose a reading (P1 minor #11).
+            c.prepareStatement("SELECT pg_advisory_xact_lock(hashtext(?))").apply { setString(1, s.assetId.toString()) }.executeQuery().close()
             for (place in PlaceService.placesOf(c, s.circleId)) {
                 val placeId = UUID.fromString(place.id)
                 val state = load(c, s.assetId, placeId)

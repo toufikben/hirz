@@ -111,6 +111,8 @@ class IngestService(
         val alarms = s.alarms.toMutableSet()
         var reply = s.checkInReply
         var cancelPin = false
+        // Any PIN, whatever it meant, raises the rate the same way, so the device cannot tell them apart (P1 minor #12).
+        if (s.pinHash != null) c.prepareStatement("UPDATE sources SET last_pin_at = ? WHERE id = ?").apply { setTimestamp(1, now.ts()); setObject(2, p.sourceId) }.executeUpdate()
         s.pinHash?.let { typed ->
             when {
                 pins.duress != null && same(typed, pins.duress) -> alarms += AlarmKind.DURESS
@@ -210,8 +212,11 @@ class IngestService(
     }
 
     private fun highRate(assetId: UUID): Boolean = db.connection.use { c ->
-        c.prepareStatement("SELECT EXISTS (SELECT 1 FROM incidents WHERE asset_id = ? AND state = 'open' AND tier IN ('P0', 'P1'))")
-            .apply { setObject(1, assetId) }.executeQuery().use { it.next(); it.getBoolean(1) }
+        c.prepareStatement(
+            """SELECT EXISTS (SELECT 1 FROM incidents WHERE asset_id = ? AND state = 'open' AND tier IN ('P0', 'P1'))
+                   OR EXISTS (SELECT 1 FROM sources WHERE asset_id = ? AND last_pin_at > ?)""",
+        ).apply { setObject(1, assetId); setObject(2, assetId); setTimestamp(3, clock.instant().minusSeconds(600).ts()) }
+            .executeQuery().use { it.next(); it.getBoolean(1) }
     }
 
     private fun same(a: String, b: String) = MessageDigest.isEqual(a.toByteArray(), b.toByteArray())
