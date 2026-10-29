@@ -166,8 +166,9 @@ class IncidentTest {
         val (circleId, _, paired) = client.family()
         client.sos(paired.sourceToken, "sos1")
         val id = client.openIncidents("test.mom", circleId).single().id
-        assertEquals(HttpStatusCode.OK, client.postJson("/v1/incidents/$id/close", "test.mom", CloseRequest(CloseReason.FOUND_SAFE)).status)
-        assertEquals(CloseReason.FOUND_SAFE, client.incident("test.owner", id).closeReason)
+        assertEquals(HttpStatusCode.OK, client.postJson("/v1/incidents/$id/close", "test.mom", CloseRequest(CloseReason.FAMILY)).status)
+        assertEquals(HttpStatusCode.OK, client.post("/v1/incidents/$id/close/confirm") { bearerAuth("test.grandpa") }.status)
+        assertEquals(CloseReason.FAMILY, client.incident("test.owner", id).closeReason)
         assertEquals(HttpStatusCode.Conflict, client.postJson("/v1/incidents/$id/close", "test.mom", CloseRequest(CloseReason.FAMILY)).status)
         assertTrue(client.openIncidents("test.owner", circleId).isEmpty())
         assertEquals(HttpStatusCode.NotFound, client.postJson("/v1/incidents/$id/close", "test.aunt", CloseRequest(CloseReason.FAMILY)).status)

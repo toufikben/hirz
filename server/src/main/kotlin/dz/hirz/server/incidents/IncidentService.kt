@@ -3,7 +3,10 @@ package dz.hirz.server.incidents
 import dz.hirz.server.apiJson
 import dz.hirz.server.circles.CircleService
 import dz.hirz.server.circles.audit
+import dz.hirz.server.ApiException
+import dz.hirz.server.badRequest
 import dz.hirz.server.conflict
+import dz.hirz.server.gone
 import dz.hirz.server.db.toList
 import dz.hirz.server.db.tx
 import dz.hirz.server.notFound
@@ -24,6 +27,8 @@ import dz.hirz.shared.api.ReceiptState
 import dz.hirz.shared.api.Role
 import dz.hirz.shared.api.RuleId
 import dz.hirz.shared.api.Tier
+import dz.hirz.shared.rules.RuleConfig
+import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -31,7 +36,9 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.put
 import java.sql.Connection
 import java.sql.ResultSet
 import java.time.Clock
@@ -47,6 +54,11 @@ fun interface IncidentEvents {
 private const val SEND_TIMEOUT_MS = 10_000L
 private val RECIPIENT_ROLES = listOf("owner", "guardian", "viewer", "temporary")
 private val EDITORS = setOf(Role.OWNER, Role.GUARDIAN)
+/** Viewers watch and may contest, but never own an incident (P1 minor #14). */
+private val CLAIMERS = setOf(Role.OWNER, Role.GUARDIAN, Role.TEMPORARY)
+private val ACTION_KINDS = setOf("called_number", "went_to_last_position", "checked_school", "other")
+/** The same number called twice within this window is reported, not repeated (design §5.8). */
+private const val DUPLICATE_CALL_S = 600L
 private val reasonsSerializer = ListSerializer(Reason.serializer())
 
 /**
@@ -59,6 +71,7 @@ class IncidentService(
     private val clock: Clock,
     private val notifier: Notifier,
     private val circles: CircleService,
+    private val rules: RuleConfig = RuleConfig(),
 ) : IncidentSink {
     private val listeners = CopyOnWriteArrayList<IncidentEvents>()
 
@@ -184,7 +197,7 @@ class IncidentService(
 
     fun claim(incidentId: UUID, memberId: UUID) {
         var won = false
-        mutate(incidentId, memberId) { c, now ->
+        mutate(incidentId, memberId, CLAIMERS) { c, now ->
             val claimed = c.prepareStatement(
                 "UPDATE incidents SET owner_member = ?, claimed_at = ? WHERE id = ? AND state = 'open' AND owner_member IS NULL",
             ).apply { setObject(1, memberId); setTimestamp(2, now.ts()); setObject(3, incidentId) }.executeUpdate()
@@ -203,15 +216,145 @@ class IncidentService(
         escalation?.onContested(incidentId, memberId)
     }
 
-    fun close(incidentId: UUID, memberId: UUID, reason: CloseReason) = mutate(incidentId, memberId, EDITORS) { c, now ->
-        val wire = apiJson.encodeToString(CloseReason.serializer(), reason).trim('"')
+    /**
+     * Closes at once when policy allows; otherwise records a close request that a second guardian (or the only
+     * guardian's second tap) confirms within [RuleConfig.singleGuardianConfirmMs] (design §5.7). Tapping close on
+     * a pending request is a confirmation.
+     */
+    fun close(incidentId: UUID, memberId: UUID, reason: CloseReason) {
+        var askSoleGuardian = false
+        val closed = mutateResult(incidentId, memberId, EDITORS) { c, now, circleId ->
+            val tier = openTier(c, incidentId) ?: conflict("already_closed")
+            ClosePolicy.pending(c, incidentId, forUpdate = true)?.let { req ->
+                if (now.isBefore(req.expiresAt)) return@mutateResult confirmLocked(c, incidentId, circleId, memberId, req, now)
+                expire(c, incidentId, now)
+            }
+            val needsQuorum = tier == Tier.P0 || (reason == CloseReason.FOUND_SAFE && !ClosePolicy.foundSafeProof(c, incidentId, now))
+            if (!needsQuorum) {
+                closeLocked(c, incidentId, memberId, reason, null, now)
+                return@mutateResult true
+            }
+            ClosePolicy.request(c, incidentId, memberId, reason, now, now.plusMillis(rules.singleGuardianConfirmMs))
+            event(c, incidentId, "close_requested", memberId, """{"reason":"${ClosePolicy.wire(reason)}"}""", now)
+            askSoleGuardian = ClosePolicy.editorCount(c, circleId, now) == 1
+            false
+        }
+        if (closed) escalation?.onClosed(incidentId)
+        if (askSoleGuardian) askToConfirm(incidentId, memberId)
+    }
+
+    /** A second guardian confirms; the only guardian may confirm their own request. Expired requests answer 410. */
+    fun confirmClose(incidentId: UUID, memberId: UUID) {
+        var expired = false
+        mutateResult(incidentId, memberId, EDITORS) { c, now, circleId ->
+            openTier(c, incidentId) ?: conflict("already_closed")
+            val req = ClosePolicy.pending(c, incidentId, forUpdate = true) ?: conflict("no_close_request")
+            if (!now.isBefore(req.expiresAt)) {
+                expire(c, incidentId, now)
+                expired = true
+                return@mutateResult false
+            }
+            confirmLocked(c, incidentId, circleId, memberId, req, now)
+        }
+        if (expired) gone("close_request_expired")
+        escalation?.onClosed(incidentId)
+    }
+
+    /** Lapses every close request past its window; the incident stays open (design §5.7). */
+    fun expireCloseRequests() {
+        val now = clock.instant()
+        val lapsed = db.tx { c ->
+            c.prepareStatement(
+                "SELECT r.incident_id, i.circle_id FROM close_requests r JOIN incidents i ON i.id = r.incident_id WHERE r.expires_at <= ? FOR UPDATE OF r SKIP LOCKED",
+            ).apply { setTimestamp(1, now.ts()) }.executeQuery()
+                .toList { it.getObject(1, UUID::class.java) to it.getObject(2, UUID::class.java) }
+                .onEach { (id, _) -> expire(c, id, now) }
+        }
+        lapsed.forEach { (id, circleId) -> notifyChanged(circleId, id) }
+    }
+
+    private fun confirmLocked(c: Connection, incidentId: UUID, circleId: UUID, memberId: UUID, req: CloseRequestRow, now: java.time.Instant): Boolean {
+        if (req.requestedBy == memberId && ClosePolicy.editorCount(c, circleId, now) >= 2) conflict("needs_second_guardian")
+        closeLocked(c, incidentId, req.requestedBy, req.reason, memberId, now)
+        return true
+    }
+
+    private fun closeLocked(c: Connection, incidentId: UUID, closedBy: UUID, reason: CloseReason, confirmedBy: UUID?, now: java.time.Instant) {
+        val wire = ClosePolicy.wire(reason)
         val n = c.prepareStatement(
             "UPDATE incidents SET state = 'closed', closed_at = ?, close_reason = ?, closed_by = ? WHERE id = ? AND state = 'open'",
-        ).apply { setTimestamp(1, now.ts()); setString(2, wire); setObject(3, memberId); setObject(4, incidentId) }.executeUpdate()
+        ).apply { setTimestamp(1, now.ts()); setString(2, wire); setObject(3, closedBy); setObject(4, incidentId) }.executeUpdate()
         if (n == 0) conflict("already_closed")
+        ClosePolicy.drop(c, incidentId)
         c.prepareStatement("DELETE FROM member_locations WHERE incident_id = ?").apply { setObject(1, incidentId) }.executeUpdate()
-        event(c, incidentId, "closed", memberId, """{"reason":"$wire"}""", now)
-    }.also { escalation?.onClosed(incidentId) }
+        val confirmed = confirmedBy?.let { ""","confirmedBy":"$it"""" } ?: ""
+        event(c, incidentId, "closed", closedBy, """{"reason":"$wire"$confirmed}""", now)
+    }
+
+    private fun expire(c: Connection, incidentId: UUID, now: java.time.Instant) {
+        ClosePolicy.drop(c, incidentId)
+        event(c, incidentId, "close_request_expired", null, "{}", now)
+    }
+
+    private fun openTier(c: Connection, incidentId: UUID): Tier? =
+        c.prepareStatement("SELECT tier FROM incidents WHERE id = ? AND state = 'open' FOR UPDATE").apply { setObject(1, incidentId) }
+            .executeQuery().use { if (it.next()) Tier.valueOf(it.getString(1)) else null }
+
+    /** The only guardian gets a push asking for the second tap; it carries no reason and no position. */
+    private fun askToConfirm(incidentId: UUID, memberId: UUID) {
+        val (assetName, tokens) = db.connection.use { c ->
+            val name = c.prepareStatement("SELECT a.name FROM incidents i JOIN assets a ON a.id = i.asset_id WHERE i.id = ?")
+                .apply { setObject(1, incidentId) }.executeQuery().use { it.next(); it.getString(1) }
+            name to c.prepareStatement("SELECT token FROM push_tokens WHERE member_id = ?").apply { setObject(1, memberId) }
+                .executeQuery().toList { it.getString(1) }
+        }
+        runBlocking(Dispatchers.IO) {
+            tokens.map { t -> async { safeSend(PushTarget(memberId, t), AlertMessage("close_confirm", incidentId, null, assetName, null)) } }.awaitAll()
+        }
+    }
+
+    /** Appends a shared action; the same number called twice within 10 minutes answers 409 with who already did it. */
+    fun action(incidentId: UUID, memberId: UUID, kind: String, value: String?) = mutate(incidentId, memberId) { c, now ->
+        if (kind !in ACTION_KINDS) badRequest("unknown_action")
+        val v = value?.trim()?.take(120)
+        if (kind == "called_number") {
+            if (v.isNullOrEmpty()) badRequest("number_required")
+            c.prepareStatement(
+                """SELECT member_id, at FROM incident_events WHERE incident_id = ? AND kind = 'action'
+                   AND data->>'kind' = 'called_number' AND data->>'value' = ? AND at > ? ORDER BY at DESC LIMIT 1""",
+            ).apply { setObject(1, incidentId); setString(2, v); setTimestamp(3, now.minusSeconds(DUPLICATE_CALL_S).ts()) }
+                .executeQuery().use {
+                    if (it.next()) {
+                        throw ApiException(HttpStatusCode.Conflict, "already_done", """{"memberId":"${it.getString(1)}","atMs":${it.getTimestamp(2).time}}""")
+                    }
+                }
+        }
+        val data = buildJsonObject {
+            put("kind", kind)
+            if (v != null) put("value", v)
+        }
+        event(c, incidentId, "action", memberId, data.toString(), now)
+    }
+
+    /** Post-close review by an owner or guardian; the latest answer per reviewer counts. */
+    fun review(incidentId: UUID, memberId: UUID, falseAlarm: Boolean, note: String?) = mutate(incidentId, memberId, EDITORS) { c, now ->
+        if (openTier(c, incidentId) != null) conflict("not_closed")
+        c.prepareStatement(
+            """INSERT INTO incident_reviews (incident_id, member_id, false_alarm, note, at) VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT (incident_id, member_id) DO UPDATE SET false_alarm = EXCLUDED.false_alarm, note = EXCLUDED.note, at = EXCLUDED.at""",
+        ).apply { setObject(1, incidentId); setObject(2, memberId); setBoolean(3, falseAlarm); setString(4, note?.take(500)); setTimestamp(5, now.ts()) }
+            .executeUpdate()
+        event(c, incidentId, "reviewed", memberId, """{"falseAlarm":$falseAlarm}""", now)
+    }
+
+    /** Incidents judged false alarms by at least one reviewer, per rule (design §5.9). */
+    fun falseAlarms(circleId: UUID, memberId: UUID): Map<String, Int> = db.connection.use { c ->
+        circles.requireRole(c, circleId, memberId)
+        c.prepareStatement(
+            """SELECT i.rule, count(DISTINCT i.id) FROM incidents i JOIN incident_reviews r ON r.incident_id = i.id
+               WHERE i.circle_id = ? AND r.false_alarm GROUP BY i.rule""",
+        ).apply { setObject(1, circleId) }.executeQuery().toList { it.getString(1) to it.getInt(2) }.toMap()
+    }
 
     /** Accepted only while the incident is an open P0/P1; otherwise 409 (design §5.11). */
     fun recordMyLocation(incidentId: UUID, memberId: UUID, req: dz.hirz.shared.api.MyLocationRequest) = db.tx { c ->
@@ -265,6 +408,16 @@ class IncidentService(
         notifyChanged(circleId, incidentId)
     }
 
+    private fun <T> mutateResult(incidentId: UUID, memberId: UUID, roles: Set<Role>, block: (Connection, java.time.Instant, UUID) -> T): T {
+        val (circleId, result) = db.tx { c ->
+            val circleId = circleOf(c, incidentId)
+            circles.requireRole(c, circleId, memberId, roles)
+            circleId to block(c, clock.instant(), circleId)
+        }
+        notifyChanged(circleId, incidentId)
+        return result
+    }
+
     private fun circleOf(c: Connection, incidentId: UUID): UUID =
         c.prepareStatement("SELECT circle_id FROM incidents WHERE id = ?").apply { setObject(1, incidentId) }
             .executeQuery().use { if (it.next()) it.getObject(1, UUID::class.java) else notFound() }
@@ -292,6 +445,7 @@ class IncidentService(
                       i.owner_member, i.claimed_at, i.closed_at, i.close_reason
                FROM incidents i JOIN assets a ON a.id = i.asset_id WHERE i.id = ?""",
         ).apply { setObject(1, id) }.executeQuery().use { rs -> if (!rs.next()) notFound(); row(rs, events, deliveries) }
+            .copy(pendingClose = ClosePolicy.pending(c, id)?.takeIf { clock.instant().isBefore(it.expiresAt) }?.dto())
     }
 
     private fun row(rs: ResultSet, events: List<IncidentEventDto>, deliveries: List<DeliveryDto>) = IncidentDto(

@@ -1,5 +1,8 @@
 package dz.hirz.server
 
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import dz.hirz.server.assets.AssetService
 import dz.hirz.server.assets.assetRoutes
 import dz.hirz.server.assets.pairRoutes
@@ -63,7 +66,7 @@ fun Application.module(deps: Deps) {
     val circles = CircleService(deps.db, deps.clock) { circleId, memberId -> hub.memberRemoved(circleId, memberId) }
     val assets = AssetService(deps.db, deps.clock, circles)
     val places = PlaceService(deps.db, circles, deps.rules.placeMinMarginM)
-    val incidents = IncidentService(deps.db, deps.clock, deps.notifier, circles)
+    val incidents = IncidentService(deps.db, deps.clock, deps.notifier, circles, deps.rules)
     hub = LiveHub(deps.db, incidents, deps.clock)
     val escalation = dz.hirz.server.escalation.EscalationEngine(deps.db, deps.clock, deps.notifier, deps.rules, circles)
     escalation.ordering = dz.hirz.server.escalation.NearestOrdering(deps.rules)
@@ -76,6 +79,12 @@ fun Application.module(deps: Deps) {
         SilenceScanner(deps.db, deps.clock, deps.rules, recorder).start(this)
         RetentionPurge(deps.db, deps.clock).start(this)
         escalation.start(this)
+        launch {
+            while (isActive) {
+                runCatching { incidents.expireCloseRequests() }
+                delay(5_000)
+            }
+        }
     }
     routing {
         healthRoutes(System.getProperty("hirz.version") ?: "dev")

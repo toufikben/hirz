@@ -68,7 +68,20 @@ data class IncidentDto(
     val closeReason: CloseReason? = null,
     val events: List<IncidentEventDto> = emptyList(),
     val deliveries: List<DeliveryDto> = emptyList(),
+    val pendingClose: PendingCloseDto? = null,
 )
+
+/** A close waiting for a second guardian, or for the only guardian's second tap, before [expiresAtMs] (design §5.7). */
+@Serializable
+data class PendingCloseDto(val requestedBy: String, val reason: CloseReason, val atMs: Long, val expiresAtMs: Long)
+
+/** Something a member did about an incident; shown to everyone so nobody repeats it (design §5.8). */
+@Serializable
+data class ActionRequest(val kind: String, val value: String? = null)
+
+/** After close: was it a false alarm? Counted per rule for the false-alarm budget (design §5.9). */
+@Serializable
+data class ReviewRequest(val falseAlarm: Boolean, val note: String? = null)
 
 @Serializable
 data class CheckInSentDto(val sent: Int)

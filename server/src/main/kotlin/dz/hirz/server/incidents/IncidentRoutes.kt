@@ -2,7 +2,9 @@ package dz.hirz.server.incidents
 
 import dz.hirz.server.circles.uuidOrNotFound
 import dz.hirz.server.member
+import dz.hirz.shared.api.ActionRequest
 import dz.hirz.shared.api.CloseRequest
+import dz.hirz.shared.api.ReviewRequest
 import dz.hirz.shared.api.PushTokenDto
 import dz.hirz.shared.api.ReceiptRequest
 import io.ktor.http.HttpStatusCode
@@ -39,6 +41,25 @@ fun Route.incidentRoutes(service: IncidentService) {
         val id = uuidOrNotFound(call.parameters["id"])
         service.close(id, call.member().memberId, call.receive<CloseRequest>().reason)
         call.respond(service.get(id, call.member().memberId))
+    }
+    post("/v1/incidents/{id}/close/confirm") {
+        val id = uuidOrNotFound(call.parameters["id"])
+        service.confirmClose(id, call.member().memberId)
+        call.respond(service.get(id, call.member().memberId))
+    }
+    post("/v1/incidents/{id}/actions") {
+        val id = uuidOrNotFound(call.parameters["id"])
+        val body = call.receive<ActionRequest>()
+        service.action(id, call.member().memberId, body.kind, body.value)
+        call.respond(service.get(id, call.member().memberId))
+    }
+    post("/v1/incidents/{id}/review") {
+        val body = call.receive<ReviewRequest>()
+        service.review(uuidOrNotFound(call.parameters["id"]), call.member().memberId, body.falseAlarm, body.note)
+        call.respond(HttpStatusCode.NoContent)
+    }
+    get("/v1/circles/{id}/false-alarms") {
+        call.respond(service.falseAlarms(uuidOrNotFound(call.parameters["id"]), call.member().memberId))
     }
     post("/v1/incidents/{id}/my-location") {
         service.recordMyLocation(uuidOrNotFound(call.parameters["id"]), call.member().memberId, call.receive<dz.hirz.shared.api.MyLocationRequest>())
