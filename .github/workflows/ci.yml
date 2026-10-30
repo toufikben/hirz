@@ -132,7 +132,7 @@ jobs:
         run: ./gradlew --no-daemon :sim:integrationTest
       - name: Integration tests really ran (a skip must fail)
         run: |
-          for t in TraccarRoundTripIT:2 EndToEndIT:3; do
+          for t in TraccarRoundTripIT:2 EndToEndIT:4; do
             report="sim/build/test-results/integrationTest/TEST-dz.hirz.sim.${t%%:*}.xml"
             head -3 "$report"
             grep -q "tests=\"${t##*:}\"" "$report"
