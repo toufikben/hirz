@@ -21,6 +21,8 @@ data class Profile(
     val lateTolerant: Boolean = false,
     /** The place a night exit watches: home for people, the barn for livestock. */
     val nightHome: dz.hirz.shared.api.PlaceKind = dz.hirz.shared.api.PlaceKind.HOME,
+    /** In the two weeks before Eid al-Adha (livestock only): tiers raised, a smaller share of the herd is a night move. */
+    val eidSeason: Boolean = false,
     /** Silence threshold for this profile; null keeps the global one. */
     val silenceAfterMs: Long? = null,
     /** Overrides naming a rule this profile does not have; validate() refuses them. */
@@ -100,5 +102,16 @@ object Profiles {
             if (wasTier != null && (nowTier == null || nowTier.ordinal > wasTier.ordinal)) return "owner_only"
         }
         return null
+    }
+
+    /**
+     * The calendar's effect (design §12): livestock in the two weeks before Eid al-Adha has every P2 rule raised to P1.
+     * The calendar never creates a P0, and people are never affected.
+     */
+    fun seasonal(p: Profile, type: AssetType, at: java.time.Instant, eidOverride: java.time.LocalDate?): Profile {
+        if (type != AssetType.LIVESTOCK) return p
+        val day = at.atZone(java.time.ZoneId.of("Africa/Algiers")).toLocalDate()
+        if (!dz.hirz.server.calendar.AlgerianCalendar.inEidSeason(day, eidOverride)) return p
+        return p.copy(eidSeason = true, rules = p.rules.mapValues { (_, s) -> if (s.tier == Tier.P2) s.copy(tier = Tier.P1) else s })
     }
 }

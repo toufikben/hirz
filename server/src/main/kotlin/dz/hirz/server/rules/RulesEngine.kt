@@ -82,9 +82,9 @@ class RulesEngine(
         db.tx { c ->
             // One evaluation per asset at a time: overlapping batches never lose a reading (P1 minor #11).
             c.prepareStatement("SELECT pg_advisory_xact_lock(hashtext(?))").apply { setString(1, s.assetId.toString()) }.executeQuery().close()
-            val profile = dz.hirz.server.assets.ProfileService.load(c, s.assetId) ?: return@tx
             // Night windows are judged at the fix's own time: a phone that uploads its 02:00 fixes at 06:10 was out at 02:00.
             val fixAt = Instant.ofEpochMilli(fixMs)
+            val profile = dz.hirz.server.assets.ProfileService.loadAt(c, s.assetId, fixAt) ?: return@tx
             val night = Geometry.isActive(profile.nightWindow, fixAt)
             // Night exit watches home only, at night, for profiles that have it (design §4.3).
             val nightTier = profile.tierOf(RuleId.NIGHT_EXIT)?.takeIf { night }
@@ -209,7 +209,9 @@ class RulesEngine(
         }
         val leader = h.leaderId?.let(UUID::fromString)
         val out = fresh.count(::outside)
-        val moving = (leader != null && leader in fresh && outside(leader)) || (fresh.isNotEmpty() && out.toDouble() / fresh.size >= cfg.herdNightShare)
+        // Before Eid al-Adha half the usual share is enough: thieves take a few heads, not the whole herd.
+        val share = if (profile.eidSeason) cfg.herdNightShare / 2 else cfg.herdNightShare
+        val moving = (leader != null && leader in fresh && outside(leader)) || (fresh.isNotEmpty() && out.toDouble() / fresh.size >= share)
         if (!moving) return emptyList()
         val target = leader ?: s.assetId
         val key = "HERD_NIGHT:$herd"

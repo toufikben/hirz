@@ -28,3 +28,7 @@ data class HerdDto(
 /** Weekly market hours for a herd; empty clears them. */
 @Serializable
 data class MarketRequest(val window: List<ActiveWindow>)
+
+/** The announced Eid al-Adha date (ISO yyyy-MM-dd); null returns to the built-in estimate. */
+@Serializable
+data class EidRequest(val date: String?)

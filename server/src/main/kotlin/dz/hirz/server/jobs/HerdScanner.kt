@@ -82,7 +82,7 @@ class HerdScanner(private val db: DataSource, private val clock: Clock, private 
             val members = c.prepareStatement("SELECT asset_id FROM asset_group_members WHERE group_id = ? AND kind = 'herd'")
                 .apply { setObject(1, herd) }.executeQuery().toList { it.getObject(1, UUID::class.java) }
             val target = leader ?: members.firstOrNull() ?: return@tx null
-            val profile = ProfileService.load(c, target) ?: return@tx null
+            val profile = ProfileService.loadAt(c, target, now) ?: return@tx null
             val fixes = lastFixes(c, members, now.minusMillis(cfg.herdFixMaxAgeMs))
             val st = c.prepareStatement("SELECT state::text FROM herd_rule_state WHERE herd_id = ?").apply { setObject(1, herd) }
                 .executeQuery().use { if (it.next()) apiJson.decodeFromString(HerdState.serializer(), it.getString(1)) else HerdState() }
@@ -110,7 +110,7 @@ class HerdScanner(private val db: DataSource, private val clock: Clock, private 
     private fun still(asset: UUID, circle: UUID, now: Instant) {
         val finding = db.tx { c ->
             c.prepareStatement("SELECT pg_advisory_xact_lock(hashtext(?))").apply { setString(1, asset.toString()) }.executeQuery().close()
-            val profile = ProfileService.load(c, asset) ?: return@tx null
+            val profile = ProfileService.loadAt(c, asset, now) ?: return@tx null
             val tier = profile.tierOf(RuleId.ANIMAL_STILL) ?: return@tx null
             if (Geometry.isActive(profile.nightWindow, now)) return@tx null
             val last = PersonState.load(c, asset, STILL, StillState.serializer())

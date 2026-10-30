@@ -67,6 +67,14 @@ class ProfileService(private val db: DataSource, private val circles: CircleServ
 
         /** The asset's profile for the rules engine; the type's defaults when the asset is gone. */
         fun load(c: Connection, assetId: UUID): Profile? = row(c, assetId)?.profile()
+
+        /** [load] with the calendar applied at [at]: livestock before Eid al-Adha, with its herd's announced date if set. */
+        fun loadAt(c: Connection, assetId: UUID, at: java.time.Instant): Profile? {
+            val row = row(c, assetId) ?: return null
+            val eid = dz.hirz.server.herds.HerdService.herdOf(c, assetId)?.let { dz.hirz.server.herds.HerdService.load(c, it) }
+                ?.eidDate?.let { LocalDate.parse(it) }
+            return Profiles.seasonal(row.profile(), row.type, at, eid)
+        }
     }
 
     fun get(assetId: UUID, memberId: UUID): ProfileDto = db.tx { c ->

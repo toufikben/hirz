@@ -110,6 +110,14 @@ class HerdService(private val db: DataSource, private val circles: CircleService
         load(c, herdId)!!
     }
 
+    fun setEid(herdId: UUID, memberId: UUID, date: String?): HerdDto = db.tx { c ->
+        val h = herd(c, herdId, memberId, EDITORS)
+        val day = date?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() ?: unprocessable("bad_date") }
+        c.prepareStatement("UPDATE asset_groups SET eid_date = ? WHERE id = ?").apply { setObject(1, day); setObject(2, herdId) }.executeUpdate()
+        audit(c, UUID.fromString(h.circleId), memberId, "herd_eid_set", """{"herd":"$herdId"}""")
+        load(c, herdId)!!
+    }
+
     fun setLeader(herdId: UUID, memberId: UUID, assetId: UUID): HerdDto = db.tx { c ->
         val h = herd(c, herdId, memberId, EDITORS)
         if (assetId.toString() !in h.members) unprocessable("leader_not_in_herd")
@@ -133,6 +141,9 @@ fun Route.herdRoutes(service: HerdService) {
     }
     put("/v1/herds/{id}/market") {
         call.respond(service.setMarket(uuidOrNotFound(call.parameters["id"]), call.member().memberId, call.receive<dz.hirz.shared.api.MarketRequest>().window))
+    }
+    put("/v1/herds/{id}/eid") {
+        call.respond(service.setEid(uuidOrNotFound(call.parameters["id"]), call.member().memberId, call.receive<dz.hirz.shared.api.EidRequest>().date))
     }
     put("/v1/herds/{id}/leader") {
         call.respond(service.setLeader(uuidOrNotFound(call.parameters["id"]), call.member().memberId, uuidOrNotFound(call.receive<LeaderRequest>().assetId)))
