@@ -21,8 +21,8 @@
 ## Defects found on the way
 - Rules ran after the ignition tracker, so a report was judged against the mode it had just changed, and auto-arm never
   caught an engine start. The tracker now runs after the rules engine.
-- Traccar has no API to drop a queued command. A queued stop gets a resume queued behind it (net effect: the engine
-  runs), and Core asks Traccar 6.7+ not to queue at all (`noQueue`).
+- Traccar has no API to drop a queued command. Core asks Traccar 6.7+ not to queue a stop (`noQueue`); if one queues
+  anyway, a resume is queued behind it, so the engine may cut for a moment on reconnect but ends running.
 
 ## Whole-branch review
 A fresh review found three critical defects, all fixed with tests (CI 41041904728):
