@@ -46,4 +46,11 @@ class DeviceCatalogTest {
         assertTrue(rejected.isNotEmpty())
         rejected.forEach { assertTrue(!it.rejectedReason.isNullOrBlank(), it.id) }
     }
+
+    @Test
+    fun engineCutIsACatalogueCapability() {
+        val gt06 = DeviceCatalog.byId("gt06n")!!
+        assertTrue("engine_cut" in gt06.capabilities && "ignition" in gt06.capabilities && "vibration" in gt06.capabilities)
+        assertTrue("engine_cut" !in DeviceCatalog.byId("sinotrack-st901")!!.capabilities || DeviceCatalog.byId("sinotrack-st901")!!.commands.isNotEmpty())
+    }
 }

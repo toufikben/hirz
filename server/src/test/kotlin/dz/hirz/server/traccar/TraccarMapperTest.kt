@@ -95,4 +95,9 @@ class TraccarMapperTest {
         val sos2 = TraccarMapper.toSignal(beat.copy(deviceTime = "2026-11-01T08:06:00.000+00:00", attributes = sosAttr))
         assertTrue(sos1.clientId != sos2.clientId, "a second SOS in a status packet is a new report")
     }
+
+    @Test
+    fun vehicleAlarmsMap() {
+        assertEquals(setOf(AlarmKind.VIBRATION, AlarmKind.DOOR, AlarmKind.ANTENNA_CUT), TraccarMapper.alarms("vibration,door,gpsAntennaCut"))
+    }
 }
