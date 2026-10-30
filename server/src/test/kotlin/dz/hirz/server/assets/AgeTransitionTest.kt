@@ -44,10 +44,11 @@ private suspend fun HttpClient.child(birthDate: String?, type: AssetType = Asset
     val circle = newCircle("test.mom")
     put("/v1/me/push-token") { bearerAuth("test.mom"); contentType(ContentType.Application.Json); setBody(PushTokenDto("tok-mom")) }
     val kid = newAsset("test.mom", circle.id, type)
+    // Paired while a child; the birth date says how old they are now.
+    val p: PairResponse = pair(pairingCode("test.mom", kid.id).code).body()
     if (birthDate != null) put("/v1/assets/${kid.id}/profile") {
         bearerAuth("test.mom"); contentType(ContentType.Application.Json); setBody(ProfileUpdate(birthDate = birthDate))
     }
-    val p: PairResponse = pair(pairingCode("test.mom", kid.id).code).body()
     return p.sourceToken
 }
 
@@ -153,6 +154,19 @@ class AgeTransitionTest {
             env.db.connection.use { c ->
                 c.createStatement().executeQuery("SELECT count(*) FROM incidents").use { it.next(); assertEquals(0, it.getInt(1), "a pause is not a silence") }
             }
+        }
+    }
+
+    @Test
+    fun aChildWhoTurned18PairsOnlyWithTheirConsent() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val circle = client.newCircle("test.mom")
+            val kid = client.newAsset("test.mom", circle.id)
+            client.put("/v1/assets/${kid.id}/profile") {
+                bearerAuth("test.mom"); contentType(ContentType.Application.Json); setBody(ProfileUpdate(birthDate = "2008-10-01"))
+            }
+            assertEquals(HttpStatusCode.UnprocessableEntity, client.pair(client.pairingCode("test.mom", kid.id).code).status)
         }
     }
 }

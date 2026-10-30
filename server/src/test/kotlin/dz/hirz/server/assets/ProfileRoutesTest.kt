@@ -34,6 +34,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.get
+import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
@@ -160,7 +161,9 @@ class ProfileRoutesTest {
         withApp(env) { client, _ ->
             val circle = client.newCircle("test.mom")
             client.join("test.mom", circle.id, "test.dad", Role.GUARDIAN)
-            client.join("test.mom", circle.id, "test.sitter", Role.TEMPORARY)
+            val invite: dz.hirz.shared.api.InviteDto = client.postJson("/v1/circles/${circle.id}/invites", "test.mom",
+                dz.hirz.shared.api.CreateInviteRequest(Role.TEMPORARY, memberExpiresAtMs = env.clock.millis() + 3_600_000)).body()
+            client.post("/v1/invites/${invite.code}/accept") { bearerAuth("test.sitter") }
             val teen = client.newAsset("test.mom", circle.id, AssetType.TEEN, "Amine")
             val oneMinute = listOf(ActiveWindow((1..7).toSet(), 0, 1))
             assertEquals(HttpStatusCode.Forbidden, client.putProfile(teen.id, "test.dad", ProfileUpdate(nightWindow = oneMinute)).status)
