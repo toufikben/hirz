@@ -24,6 +24,19 @@
 - Traccar has no API to drop a queued command. A queued stop gets a resume queued behind it (net effect: the engine
   runs), and Core asks Traccar 6.7+ not to queue at all (`noQueue`).
 
+## Whole-branch review
+A fresh review found three critical defects, all fixed with tests (CI 41041904728):
+- Auto-arm and schedule arming did not survive the engine starting: a thief's key turn disarmed the car after one
+  report. Arming now latches until an authorization, the owner's switch or maintenance (scenario 09).
+- Lazy arming took the armed position from the report being judged, so a towed car's first report set the reference
+  at the thief's position. It now uses the last fix before the arming time (scenario 10).
+- A "refused" queued stop could still run on reconnect. Stops now need Traccar 6.7+ (`noQueue`), and a failed
+  withdrawal reports `unknown` with the resume button shown.
+Also fixed: engine stop uses the relay tracker's own fix, refuses an unknown speed or a future fix, and records a
+pending row before calling Traccar outside the transaction; old ignition reports no longer roll the state back; coarse
+fixes no longer count as movement (scenario 11); schedule changes refused during a theft; maintenance is owner-only.
+Deferred: jamming while parked and engine off (needs per-model heartbeat cadence), a time limit on maintenance.
+
 ## Vehicle trial
 **Not run yet.** It needs the owner's car with a GT06N wired to ACC, a relay for the engine stop, and P3 staging.
 Steps: `docs/runbooks/P4-vehicle-trial.md`. Results (arm → alarm times over 5 runs, the 30-minute authorized drive,
