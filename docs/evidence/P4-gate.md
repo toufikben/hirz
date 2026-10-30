@@ -1,0 +1,46 @@
+# P4 gate — evidence
+
+## Automated (CI)
+- **End to end, every push** (`e2e` job): a simulated GT06 car is claimed and proved, armed through the API, then sends
+  an ACC-on heartbeat and two fixes at 30 km/h about 200 m and 400 m away through a real Traccar 6.16.0. Core opens
+  `ARMED_MOVEMENT` (`EndToEndIT.armedVehicleMovedOpensIncident`). The skip guard now expects 4 `EndToEndIT` tests.
+- **AC-22 replay** (`VehicleScenariosTest`, 8 scenarios over the real HTTP API with a moving clock): armed then driven
+  away, authorized drive without alarm, parked GPS drift without alarm, towed with ignition off, power cut while armed,
+  jamming in a garage vs. during a theft, auto-arm after parking, and an authorization ending mid-drive.
+- **Modes** (`VehicleModesTest`, 9): resolution order, auto-arm 10 min after ignition off, a manual disarm held until
+  the next parking, no disarm or authorization while a P0/P1 incident is open (409 `incident_open`).
+- **Rules** (`VehicleRulesTest` 10, `VehicleRulesHttpTest` 3): movement measured from the armed position net of
+  accuracy, P0 at speed or 500 m, towing, tilt and door only when armed, power cut, jamming and antenna cut P1 armed /
+  P2 otherwise, and an open incident's tier raised (P1 → P0) with the ladder restarted.
+- **Engine stop** (`RemoteEngineTest`, 9): refused for a guardian, without a theft incident, on a model without a
+  relay, with the device offline, with a fix over 60 s old, above 20 km/h, and when Traccar queues instead of sends.
+  A sent stop is recorded in `engine_commands`, the audit log and the incident. Resume needs only the owner.
+- **App** (`VehicleLogicTest`, 3): the mode line says why and since when; the stop is offered only to the owner during
+  a theft on a relay-capable tracker; every refusal and vehicle reason reads plainly in ar/fr/en.
+
+## Defects found on the way
+- Rules ran after the ignition tracker, so a report was judged against the mode it had just changed, and auto-arm never
+  caught an engine start. The tracker now runs after the rules engine.
+- Traccar has no API to drop a queued command. Core asks Traccar 6.7+ not to queue a stop (`noQueue`); if one queues
+  anyway, a resume is queued behind it, so the engine may cut for a moment on reconnect but ends running.
+
+## Whole-branch review
+A fresh review found three critical defects, all fixed with tests (CI 41041904728):
+- Auto-arm and schedule arming did not survive the engine starting: a thief's key turn disarmed the car after one
+  report. Arming now latches until an authorization, the owner's switch or maintenance (scenario 09).
+- Lazy arming took the armed position from the report being judged, so a towed car's first report set the reference
+  at the thief's position. It now uses the last fix before the arming time (scenario 10).
+- A "refused" queued stop could still run on reconnect. Stops now need Traccar 6.7+ (`noQueue`), and a failed
+  withdrawal reports `unknown` with the resume button shown.
+Also fixed: engine stop uses the relay tracker's own fix, refuses an unknown speed or a future fix, and records a
+pending row before calling Traccar outside the transaction; old ignition reports no longer roll the state back; coarse
+fixes no longer count as movement (scenario 11); schedule changes refused during a theft; maintenance is owner-only.
+Deferred: jamming while parked and engine off (needs per-model heartbeat cadence), a time limit on maintenance.
+
+## Vehicle trial
+**Not run yet.** It needs the owner's car with a GT06N wired to ACC, a relay for the engine stop, and P3 staging.
+Steps: `docs/runbooks/P4-vehicle-trial.md`. Results (arm → alarm times over 5 runs, the 30-minute authorized drive,
+power cut, engine stop stationary only, refusal texts verbatim, failures) go here.
+
+## Out of P4
+BLE auto-arm and `KEYLESS_NO_OWNER` (P6), `LEFT_IN_VEHICLE` (P9), fuel drop, siren, bus route mode.

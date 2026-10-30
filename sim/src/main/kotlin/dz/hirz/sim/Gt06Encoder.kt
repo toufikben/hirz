@@ -34,9 +34,9 @@ object Gt06Encoder {
         return frame(0x01, bcd, serial)
     }
 
-    fun heartbeat(serial: Int, batteryLevel0to6: Int, gsmSignal0to4: Int): ByteArray {
+    fun heartbeat(serial: Int, batteryLevel0to6: Int, gsmSignal0to4: Int, ignition: Boolean = false): ByteArray {
         val payload = byteArrayOf(
-            0x40, // terminal info: GPS tracking on
+            (0x40 or (if (ignition) 0x02 else 0)).toByte(), // terminal info: GPS tracking on; bit 1 = ACC (ignition)
             batteryLevel0to6.coerceIn(0, 6).toByte(),
             gsmSignal0to4.coerceIn(0, 4).toByte(),
             0x00, 0x01, // alarm/language: normal, English

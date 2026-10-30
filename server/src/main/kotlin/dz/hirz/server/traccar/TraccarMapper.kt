@@ -19,6 +19,9 @@ private val ALARMS = mapOf(
     "removing" to AlarmKind.REMOVAL,
     "jamming" to AlarmKind.JAMMING,
     "fallDown" to AlarmKind.FALL,
+    "vibration" to AlarmKind.VIBRATION,
+    "door" to AlarmKind.DOOR,
+    "gpsAntennaCut" to AlarmKind.ANTENNA_CUT,
 )
 
 /**

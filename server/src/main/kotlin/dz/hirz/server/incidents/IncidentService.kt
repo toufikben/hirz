@@ -84,6 +84,7 @@ class IncidentService(
 
     override fun open(finding: Finding, findingId: Long) {
         val now = clock.instant()
+        var raised = false
         val (incidentId, isNew) = db.tx { c ->
             val inserted = c.prepareStatement(
                 """INSERT INTO incidents (asset_id, circle_id, rule, tier, silent, reasons, opened_at)
@@ -98,9 +99,20 @@ class IncidentService(
                 .use { if (it.next()) it.getObject(1, UUID::class.java) else null }
                 ?: throw IllegalStateException("incident closed concurrently; the finding is retried by the next evaluation")
             c.prepareStatement("UPDATE findings SET incident_id = ? WHERE id = ?").apply { setObject(1, id); setLong(2, findingId) }.executeUpdate()
+            // A stronger finding raises the open incident's tier (never lowers it): P1 armed movement → P0 at speed.
+            if (inserted == null) {
+                raised = c.prepareStatement("UPDATE incidents SET tier = ? WHERE id = ? AND tier > ?")
+                    .apply { setString(1, finding.tier.name); setObject(2, id); setString(3, finding.tier.name) }.executeUpdate() == 1
+                if (raised) event(c, id, "tier_raised", null, """{"tier":"${finding.tier.name}"}""", now)
+            }
             event(c, id, if (inserted != null) "opened" else "finding", null,
                 apiJson.encodeToString(reasonsSerializer, finding.reasons).let { """{"reasons":$it}""" }, now)
             id to (inserted != null)
+        }
+        if (raised) {
+            escalation?.restart(incidentId, finding.circleId, finding.tier)
+            if (finding.tier == Tier.P0 && !finding.silent) pushToSources(finding.assetId, "high_rate")
+            fanOut(incidentId, finding)
         }
         if (isNew && finding.tier != Tier.P2) {
             // P0: every source reports every 15 s until close (design §6.2). Never under duress: the carrier's phone gets nothing.

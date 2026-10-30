@@ -1,0 +1,10 @@
+{
+  "name": "towed_ignition_off",
+  "steps": [
+    { "t": 0, "action": "fix", "north": 0, "ignition": false },
+    { "t": 10, "action": "arm" },
+    { "t": 120, "action": "alarm", "alarm": "vibration", "ignition": false },
+    { "t": 150, "action": "fix", "north": 90, "speed": 15, "accuracy": 10, "ignition": false }
+  ],
+  "expect": { "rules": ["PARKED_TILT", "TOWING"], "tiers": { "TOWING": "P1" }, "openedByT": { "TOWING": 150 } }
+}

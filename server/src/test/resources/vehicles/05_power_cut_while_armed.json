@@ -1,0 +1,9 @@
+{
+  "name": "power_cut_while_armed",
+  "steps": [
+    { "t": 0, "action": "fix", "north": 0, "ignition": false },
+    { "t": 10, "action": "arm" },
+    { "t": 200, "action": "alarm", "alarm": "power_cut", "ignition": false }
+  ],
+  "expect": { "rules": ["POWER_CUT"], "tiers": { "POWER_CUT": "P1" }, "openedByT": { "POWER_CUT": 200 } }
+}

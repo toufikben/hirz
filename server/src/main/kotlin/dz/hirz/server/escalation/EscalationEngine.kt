@@ -83,6 +83,15 @@ class EscalationEngine(
         }
     }
 
+    /** The incident's tier was raised: the ladder starts again with the new tier's windows. */
+    fun restart(incidentId: UUID, circleId: UUID, tier: Tier) {
+        db.tx { c ->
+            c.prepareStatement("DELETE FROM escalation_state WHERE incident_id = ?").apply { setObject(1, incidentId) }.executeUpdate()
+            logRow(c, incidentId, "tier_raised", null, clock.instant())
+        }
+        onOpened(incidentId, circleId, tier)
+    }
+
     fun onOpened(incidentId: UUID, circleId: UUID, tier: Tier) {
         if (tier == Tier.P2) return
         val now = clock.instant()

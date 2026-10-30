@@ -268,6 +268,8 @@ private val ASSET_TYPES = listOf(
     AssetType.ELDER to Res.string.type_elder, AssetType.SPECIAL_NEEDS to Res.string.type_special_needs,
 )
 
+private val VEHICLE_TYPES = setOf(AssetType.CAR, AssetType.MOTORCYCLE, AssetType.TRUCK, AssetType.BUS, AssetType.MACHINERY, AssetType.GENERATOR)
+
 @Composable
 private fun CircleTab(env: AppEnvironment, client: HirzClient, circle: CircleDto) {
     val scope = rememberCoroutineScope()
@@ -300,6 +302,13 @@ private fun CircleTab(env: AppEnvironment, client: HirzClient, circle: CircleDto
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(a.name, style = MaterialTheme.typography.titleMedium)
+                    if (a.type in VEHICLE_TYPES) {
+                        VehicleCard(client, a, isOwner = circle.myRole == Role.OWNER, canEdit = circle.myRole == Role.OWNER || circle.myRole == Role.GUARDIAN)
+                        if (circle.myRole == Role.OWNER || circle.myRole == Role.GUARDIAN) OutlinedButton({ wizardFor = a.id }) {
+                            Text(when (currentLang()) { "ar" -> "جهاز تتبع"; "fr" -> "Traceur"; else -> "Tracker" })
+                        }
+                        return@Column
+                    }
                     OutlinedTextField(cancelPin, { cancelPin = it.filter(Char::isDigit).take(8) }, label = { Text(stringResource(Res.string.cancel_pin)) }, singleLine = true)
                     OutlinedTextField(duressPin, { duressPin = it.filter(Char::isDigit).take(8) }, label = { Text(stringResource(Res.string.duress_pin)) }, singleLine = true)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -323,6 +332,9 @@ private fun CircleTab(env: AppEnvironment, client: HirzClient, circle: CircleDto
             OutlinedTextField(assetName, { assetName = it }, label = { Text(stringResource(Res.string.asset_name)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 ASSET_TYPES.forEach { (t, label) -> FilterChip(assetType == t, { assetType = t }, { Text(stringResource(label)) }) }
+                FilterChip(assetType == AssetType.CAR, { assetType = AssetType.CAR }, {
+                    Text(when (currentLang()) { "ar" -> "سيارة"; "fr" -> "Voiture"; else -> "Car" })
+                })
             }
             Button({ scope.launch { runCatching { client.createAsset(circle.id, CreateAssetRequest(assetType, assetName.trim())) }.onSuccess { assetName = ""; reload() } } },
                 enabled = assetName.isNotBlank()) { Text(stringResource(Res.string.add_asset)) }

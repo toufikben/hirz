@@ -1,0 +1,13 @@
+{
+  "name": "window_ends_mid_drive",
+  "steps": [
+    { "t": 0, "action": "fix", "north": 0, "ignition": false },
+    { "t": 10, "action": "authorize", "hours": 1 },
+    { "t": 60, "action": "fix", "north": 500, "speed": 40, "ignition": true },
+    { "t": 3610, "action": "fix", "north": 30000, "speed": 60, "ignition": true },
+    { "t": 3700, "action": "fix", "north": 30200, "speed": 0, "ignition": false },
+    { "t": 4000, "action": "fix", "north": 30200, "speed": 0, "ignition": false },
+    { "t": 4400, "action": "heartbeat", "ignition": true }
+  ],
+  "expect": { "rules": ["ARMED_MOVEMENT"], "openedByT": { "ARMED_MOVEMENT": 4400 } }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "jamming_garage_vs_theft",
+  "steps": [
+    { "t": 0, "action": "fix", "north": 0, "ignition": false },
+    { "t": 10, "action": "authorize", "hours": 1 },
+    { "t": 60, "action": "heartbeat", "ignition": true },
+    { "t": 120, "action": "heartbeat", "ignition": true },
+    { "t": 180, "action": "heartbeat", "ignition": true },
+    { "t": 200, "action": "jam_scan" },
+    { "t": 420, "action": "jam_scan" }
+  ],
+  "expect": { "rules": ["JAMMING"], "tiers": { "JAMMING": "P2" } }
+}

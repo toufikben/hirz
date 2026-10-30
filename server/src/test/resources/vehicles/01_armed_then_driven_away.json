@@ -1,0 +1,11 @@
+{
+  "name": "armed_then_driven_away",
+  "steps": [
+    { "t": 0, "action": "fix", "north": 0, "ignition": false },
+    { "t": 10, "action": "arm" },
+    { "t": 60, "action": "heartbeat", "ignition": true },
+    { "t": 70, "action": "fix", "north": 20, "speed": 12, "ignition": true },
+    { "t": 100, "action": "fix", "north": 250, "speed": 35, "ignition": true }
+  ],
+  "expect": { "rules": ["ARMED_MOVEMENT"], "tiers": { "ARMED_MOVEMENT": "P0" }, "openedByT": { "ARMED_MOVEMENT": 60 } }
+}

@@ -1,5 +1,8 @@
 package dz.hirz.server
 
+import dz.hirz.server.vehicles.VehicleModes
+import dz.hirz.server.vehicles.VehicleStateTracker
+import dz.hirz.server.vehicles.vehicleRoutes
 import dz.hirz.server.traccar.TrackerService
 import dz.hirz.server.traccar.traccarForwardRoutes
 import dz.hirz.server.traccar.trackerRoutes
@@ -103,13 +106,17 @@ fun Application.module(deps: Deps) {
     incidents.escalation = escalation
     incidents.subscribe(hub)
     val recorder = FindingRecorder(deps.db, deps.clock, incidents)
-    val engine = RulesEngine(deps.db, deps.rules, recorder)
-    val ingest = IngestService(deps.db, deps.clock, deps.rules, listOf(engine, hub) + deps.extraIngestListeners)
+    val vehicleModes = VehicleModes(deps.db, deps.clock, circles, deps.rules)
+    val engine = RulesEngine(deps.db, deps.rules, recorder, vehicleModes)
+    // The rules judge a report against the mode as it was before it (an engine starting on an auto-armed car is theft);
+    // only then does the tracker record the new ignition state.
+    val ingest = IngestService(deps.db, deps.clock, deps.rules, listOf(engine, VehicleStateTracker(deps.db, vehicleModes), hub) + deps.extraIngestListeners)
     val trackers = TrackerService(deps.db, deps.clock, circles, deps.traccar, deps.deviceHost, deps.claimProofS)
     if (deps.startJobs) dz.hirz.server.traccar.TraccarSync(deps.db, deps.clock, deps.traccar, ingest).start(this)
     if (deps.startJobs) {
         SilenceScanner(deps.db, deps.clock, deps.rules, recorder).start(this)
         dz.hirz.server.rules.CheckInScanner(deps.db, deps.clock, recorder).start(this)
+        dz.hirz.server.jobs.JammingScanner(deps.db, deps.clock, deps.rules, vehicleModes, recorder).start(this)
         dz.hirz.server.sms.GatewaySilenceScanner(deps.db, deps.clock, deps.notifier).start(this)
         RetentionPurge(deps.db, deps.clock).start(this)
         escalation.start(this)
@@ -149,6 +156,7 @@ fun Application.module(deps: Deps) {
             gatewayMemberRoutes(gateways)
             custodyRoutes(custody)
             trackerRoutes(trackers)
+            vehicleRoutes(vehicleModes, dz.hirz.server.vehicles.RemoteEngine(deps.db, deps.clock, circles, deps.traccar))
             historyRoutes(deps, circles)
         }
         authenticate(SOURCE_AUTH) {

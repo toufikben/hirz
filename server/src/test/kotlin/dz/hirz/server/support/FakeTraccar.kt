@@ -23,6 +23,17 @@ class FakeTraccarAdmin : TraccarAdmin {
     val stored = CopyOnWriteArrayList<TraccarPosition>()
     /** When true, createDevice fails as an unreachable Traccar would. */
     @Volatile var down = false
+    @Volatile var status = "online"
+    @Volatile var commandResult = dz.hirz.server.traccar.CommandResult.SENT
+    val commands = CopyOnWriteArrayList<Pair<Long, String>>()
+    val queuedDeleted = CopyOnWriteArrayList<Long>()
+
+    override fun deviceStatus(id: Long): String = status
+    override fun sendCommand(deviceId: Long, type: String): dz.hirz.server.traccar.CommandResult { commands += deviceId to type; return commandResult }
+    @Volatile var version = "6.16.0"
+    @Volatile var withdrawFails = false
+    override fun serverVersion(): String = version
+    override fun deleteQueued(deviceId: Long) { if (withdrawFails) throw TraccarUnavailable("fake withdraw failed"); queuedDeleted += deviceId }
 
     override fun createDevice(uniqueId: String, name: String): Long {
         if (down) throw TraccarUnavailable("fake Traccar is down")

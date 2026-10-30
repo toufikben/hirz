@@ -1,0 +1,31 @@
+{
+  "name": "drift_with_speed_no_alarm",
+  "steps": [
+    {
+      "t": 0,
+      "action": "fix",
+      "north": 0
+    },
+    {
+      "t": 5,
+      "action": "arm"
+    },
+    {
+      "t": 60,
+      "action": "fix",
+      "north": 30,
+      "speed": 12,
+      "accuracy": 120
+    },
+    {
+      "t": 90,
+      "action": "fix",
+      "north": 40,
+      "speed": 24,
+      "accuracy": 120
+    }
+  ],
+  "expect": {
+    "rules": []
+  }
+}

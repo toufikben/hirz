@@ -61,12 +61,12 @@ class EndToEndIT {
     private val gt06Port = (System.getenv("TRACCAR_GT06_PORT") ?: "5023").toInt()
 
     /** A fresh family (circle + asset) and a claimed tracker; returns (api, circleId, assetId, claimId, imei). */
-    private fun family(tag: String): List<String> {
+    private fun family(tag: String, type: String = "child"): List<String> {
         val uid = "e2e-$tag-${UUID.randomUUID().toString().take(6)}"
         val api = CoreApi(core, uid)
         val circle = api.ok("POST", "/v1/circles", """{"name":"E2E $tag"}""")
         val circleId = api.string(circle, "id")
-        val asset = api.ok("POST", "/v1/circles/$circleId/assets", """{"type":"child","name":"Sim $tag"}""")
+        val asset = api.ok("POST", "/v1/circles/$circleId/assets", """{"type":"$type","name":"Sim $tag"}""")
         val assetId = api.string(asset, "id")
         val imei = withCheckDigit("86300000" + (100000 + (0..899999).random()).toString())
         val claim = api.ok("POST", "/v1/assets/$assetId/trackers", """{"model":"gt06n","imei":"$imei","simPhone":"0661000000","apn":"internet"}""")
@@ -142,5 +142,30 @@ class EndToEndIT {
         println("e2e source→Core delay p95 = ${p95} ms over ${delays.size} fixes")
         // GT06 times have 1 s resolution, so a fix can look up to 1 s older than it is.
         assertTrue(p95 < 5_000, "p95 $p95 ms")
+    }
+
+    /** P4 Task 7: an armed car that starts moving opens ARMED_MOVEMENT through the real GT06 → Traccar → Core path. */
+    @Test
+    fun armedVehicleMovedOpensIncident() {
+        val (uid, circleId, assetId, claimId, imei) = family("car", type = "car")
+        val api = CoreApi(core, uid)
+        Gt06Client(gt06Host, gt06Port).use { c ->
+            c.login(imei)
+            prove(c)
+            api.await("claim activation") { api.ok("GET", "/v1/trackers/claims/$claimId").takeIf { api.string(it, "state") == "active" } }
+            val armed = api.ok("POST", "/v1/assets/$assetId/mode", """{"mode":"armed"}""")
+            assertEquals("armed", api.string(armed, "mode"))
+            Thread.sleep(1_100)
+            c.heartbeat(ignition = true)
+            // Two moving fixes, 1.1 s apart (GT06 times have 1 s resolution), about 200 m and 400 m north of the parking spot.
+            repeat(2) { i ->
+                Thread.sleep(1_100)
+                c.send(Gt06Fix(36.7538 + 0.0018 * (i + 1), 3.0588, 30, 0, Instant.now(), 8))
+            }
+        }
+        val incident = api.await("an open ARMED_MOVEMENT incident", timeoutSec = 20) {
+            api.ok("GET", "/v1/circles/$circleId/incidents?state=open").jsonArray.firstOrNull { api.string(it, "rule") == "ARMED_MOVEMENT" }
+        }
+        assertTrue(api.string(incident, "tier") in setOf("P0", "P1"))
     }
 }

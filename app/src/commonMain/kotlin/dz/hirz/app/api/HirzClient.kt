@@ -1,5 +1,13 @@
 package dz.hirz.app.api
 
+import dz.hirz.shared.api.ActiveWindow
+import dz.hirz.shared.api.AuthorizationRequest
+import dz.hirz.shared.api.EngineRequest
+import dz.hirz.shared.api.EngineResultDto
+import dz.hirz.shared.api.ModeRequest
+import dz.hirz.shared.api.ScheduleRequest
+import dz.hirz.shared.api.VehicleMode
+import dz.hirz.shared.api.VehicleStateDto
 import dz.hirz.shared.api.ActionRequest
 import dz.hirz.shared.api.ApiErrorDto
 import dz.hirz.shared.api.AssetDto
@@ -174,6 +182,15 @@ class HirzClient(
     suspend fun trackerClaim(claimId: String): TrackerClaimDto = member { t -> http.get("$base/v1/trackers/claims/$claimId") { auth(t) } }.ok()
     suspend fun releaseTracker(assetId: String, sourceId: String) =
         member { t -> http.delete("$base/v1/assets/$assetId/trackers/$sourceId") { auth(t) } }.done()
+    suspend fun vehicle(assetId: String): VehicleStateDto = member { t -> http.get("$base/v1/assets/$assetId/vehicle") { auth(t) } }.ok()
+    suspend fun setMode(assetId: String, mode: VehicleMode): VehicleStateDto =
+        member { t -> http.post("$base/v1/assets/$assetId/mode") { auth(t); json(ModeRequest(mode)) } }.ok()
+    suspend fun authorize(assetId: String, req: AuthorizationRequest): VehicleStateDto =
+        member { t -> http.post("$base/v1/assets/$assetId/authorizations") { auth(t); json(req) } }.ok()
+    suspend fun setArmedSchedule(assetId: String, windows: List<ActiveWindow>): VehicleStateDto =
+        member { t -> http.put("$base/v1/assets/$assetId/armed-schedule") { auth(t); json(ScheduleRequest(windows)) } }.ok()
+    suspend fun engine(assetId: String, action: String): EngineResultDto =
+        member { t -> http.post("$base/v1/assets/$assetId/engine") { auth(t); json(EngineRequest(action)) } }.ok()
     suspend fun gatewayCode(circleId: String): GatewayCodeDto = member { t -> http.post("$base/v1/circles/$circleId/gateways") { auth(t) } }.ok()
     suspend fun addContact(circleId: String, name: String, phone: String, lang: String): MemberDto =
         member { t -> http.post("$base/v1/circles/$circleId/contacts") { auth(t); json(ContactRequest(name, phone, lang)) } }.ok()

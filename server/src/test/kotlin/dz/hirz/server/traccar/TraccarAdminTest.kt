@@ -76,4 +76,26 @@ class TraccarAdminTest {
             .positions(7, Instant.parse("2026-11-01T07:00:00Z"), Instant.parse("2026-11-01T08:00:00Z"))
         assertEquals(listOf(5L), list.map { it.id })
     }
+
+    @Test
+    fun stopRefusesQueueingAndWithdrawalQueuesAResume() {
+        val bodies = mutableListOf<String>()
+        var status = HttpStatusCode.Accepted
+        val engine = MockEngine { req ->
+            when (req.url.encodedPath) {
+                "/api/commands/send" -> { bodies += String(runBlocking { req.body.toByteArray() }); respond("{}", status, JSON) }
+                "/api/server" -> respond("""{"id":1,"version":"6.16.0"}""", HttpStatusCode.OK, JSON)
+                else -> respondError(HttpStatusCode.NotFound)
+            }
+        }
+        val admin = TraccarHttpAdmin("http://traccar:8082", "admin", "pw", engine)
+        assertEquals("6.16.0", admin.serverVersion())
+        assertEquals(CommandResult.QUEUED, admin.sendCommand(5, "engineStop"))
+        assertTrue("\"noQueue\":true" in bodies[0] && "engineStop" in bodies[0], bodies[0])
+        status = HttpStatusCode.OK
+        admin.deleteQueued(5)
+        assertTrue("engineResume" in bodies[1] && "noQueue" !in bodies[1], "the cancelling resume must be allowed to queue: ${bodies[1]}")
+        status = HttpStatusCode.BadRequest
+        assertFailsWith<TraccarUnavailable> { admin.deleteQueued(5) }
+    }
 }

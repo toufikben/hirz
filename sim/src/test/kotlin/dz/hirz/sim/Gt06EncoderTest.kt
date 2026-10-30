@@ -72,4 +72,14 @@ class Gt06EncoderTest {
         assertEquals(0x13, packet[3].toInt())
         assertEquals(Crc16X25.compute(packet, 2, packet.size - 4), embeddedCrc(packet))
     }
+
+    @Test
+    fun ignitionFromStatusPacket() {
+        val on = Gt06Encoder.heartbeat(1, batteryLevel0to6 = 6, gsmSignal0to4 = 4, ignition = true)
+        val off = Gt06Encoder.heartbeat(1, batteryLevel0to6 = 6, gsmSignal0to4 = 4, ignition = false)
+        // 78 78 len proto | terminal info: bit 1 = ACC (ignition) on
+        assertEquals(0x13, on[3].toInt())
+        assertEquals(0x02, on[4].toInt() and 0x02)
+        assertEquals(0x00, off[4].toInt() and 0x02)
+    }
 }

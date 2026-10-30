@@ -57,7 +57,8 @@ class TraccarMapperTest {
     fun alarmsMapOneToOne() {
         assertEquals(setOf(AlarmKind.SOS, AlarmKind.POWER_CUT), TraccarMapper.toSignal(position("gt06_sos.json").position).alarms)
         assertEquals(12.0, TraccarMapper.toSignal(position("gt06_sos.json").position).accuracyM)
-        assertTrue(TraccarMapper.toSignal(position("invalid_fix.json").position).alarms.isEmpty(), "vibration is not a contract alarm")
+        assertEquals(setOf(AlarmKind.VIBRATION), TraccarMapper.toSignal(position("invalid_fix.json").position).alarms, "vibration is a vehicle alarm since P4")
+        assertTrue(TraccarMapper.alarms("overspeed,lowBattery").isEmpty(), "anything outside the contract is ignored, never guessed")
         assertEquals(setOf(AlarmKind.TAMPER, AlarmKind.REMOVAL, AlarmKind.JAMMING, AlarmKind.FALL), TraccarMapper.alarms("tampering, removing,jamming,fallDown,overspeed"))
     }
 
@@ -94,5 +95,10 @@ class TraccarMapperTest {
         val sos1 = TraccarMapper.toSignal(beat.copy(attributes = sosAttr))
         val sos2 = TraccarMapper.toSignal(beat.copy(deviceTime = "2026-11-01T08:06:00.000+00:00", attributes = sosAttr))
         assertTrue(sos1.clientId != sos2.clientId, "a second SOS in a status packet is a new report")
+    }
+
+    @Test
+    fun vehicleAlarmsMap() {
+        assertEquals(setOf(AlarmKind.VIBRATION, AlarmKind.DOOR, AlarmKind.ANTENNA_CUT), TraccarMapper.alarms("vibration,door,gpsAntennaCut"))
     }
 }

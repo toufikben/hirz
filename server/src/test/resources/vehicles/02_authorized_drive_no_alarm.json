@@ -1,0 +1,13 @@
+{
+  "name": "authorized_drive_no_alarm",
+  "steps": [
+    { "t": 0, "action": "fix", "north": 0, "ignition": false },
+    { "t": 10, "action": "arm" },
+    { "t": 20, "action": "authorize", "hours": 2 },
+    { "t": 60, "action": "fix", "north": 0, "speed": 0, "ignition": true },
+    { "t": 120, "action": "fix", "north": 800, "speed": 50, "ignition": true },
+    { "t": 180, "action": "fix", "north": 2500, "speed": 70, "ignition": true },
+    { "t": 1800, "action": "fix", "north": 9000, "speed": 60, "ignition": true }
+  ],
+  "expect": { "rules": [] }
+}

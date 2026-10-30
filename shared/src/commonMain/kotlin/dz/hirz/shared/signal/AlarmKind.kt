@@ -13,4 +13,8 @@ enum class AlarmKind {
     @SerialName("jamming") JAMMING,
     @SerialName("fall") FALL,
     @SerialName("duress") DURESS,
+    /** Vehicles (design §12.2): shock or tilt while parked, a door opened, the GNSS antenna disconnected. */
+    @SerialName("vibration") VIBRATION,
+    @SerialName("door") DOOR,
+    @SerialName("antennaCut") ANTENNA_CUT,
 }
