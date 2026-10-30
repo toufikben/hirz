@@ -26,6 +26,7 @@ import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.delete
+import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import java.time.Clock
 import java.time.Duration
@@ -147,5 +148,5 @@ fun Route.bleMemberRoutes(service: BleService) {
 
 fun Route.bleRelayRoutes(service: BleService) {
     post("/v1/relay/sightings") { call.respond(service.relay(call.source(), call.receive<RelayBatch>())) }
-    io.ktor.server.routing.get("/v1/relay/tags") { call.respond(service.tagsFor(call.source())) }
+    get("/v1/relay/tags") { call.respond(service.tagsFor(call.source())) }
 }
