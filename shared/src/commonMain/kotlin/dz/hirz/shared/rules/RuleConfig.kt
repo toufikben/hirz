@@ -36,6 +36,10 @@ data class RuleConfig(
     val jammingSilenceMs: Long = 3 * 60_000,
     /** A hazard entry counts only on fixes this good: a pool or a rail line is small next to a coarse fix (P5). */
     val hazardAccuracyMaxM: Double = 25.0,
+    /** Readings outside home that confirm a night exit; fewer than by day because a night outing is rarer (P5). */
+    val nightExitReadings: Int = 2,
+    /** How far past an excepted night destination (e.g. the mosque) still counts as on the way. */
+    val nightExceptionSlackM: Double = 300.0,
 ) {
     companion object {
         val DEFAULT = RuleConfig()

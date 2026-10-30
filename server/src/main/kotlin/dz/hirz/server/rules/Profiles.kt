@@ -16,6 +16,7 @@ data class Profile(
     val nightWindow: List<ActiveWindow>,
     /** Good readings inside a hazard place before it counts as entered. */
     val hazardEntryReadings: Int,
+    val nightExceptions: List<dz.hirz.shared.api.NightException> = emptyList(),
     /** Overrides naming a rule this profile does not have; validate() refuses them. */
     val unknownOverrides: Set<RuleId> = emptySet(),
 ) {
@@ -47,14 +48,17 @@ object Profiles {
         }
     }
 
-    fun of(type: AssetType, condition: Condition, overrides: List<RuleOverride> = emptyList(), nightWindow: List<ActiveWindow>? = null): Profile {
+    fun of(
+        type: AssetType, condition: Condition, overrides: List<RuleOverride> = emptyList(), nightWindow: List<ActiveWindow>? = null,
+        nightExceptions: List<dz.hirz.shared.api.NightException> = emptyList(),
+    ): Profile {
         val byRule = overrides.associateBy { it.rule }
         val rules = defaults(type, condition).mapValues { (rule, def) ->
             val o = byRule[rule]
             RuleSetting(enabled = o?.enabled ?: true, tier = o?.tier ?: def, defaultTier = def)
         }
         return Profile(condition, rules, nightWindow?.takeIf { it.isNotEmpty() } ?: DEFAULT_NIGHT,
-            hazardEntryReadings = if (condition == Condition.AUTISM) 1 else 2,
+            hazardEntryReadings = if (condition == Condition.AUTISM) 1 else 2, nightExceptions = nightExceptions,
             unknownOverrides = byRule.keys.filter { it !in rules }.toSet())
     }
 

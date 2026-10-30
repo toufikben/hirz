@@ -7,6 +7,10 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class RuleSettingDto(val rule: RuleId, val enabled: Boolean, val tier: Tier, val defaultTier: Tier, val locked: Boolean = false)
 
+/** A night outing the owner expects, e.g. Fajr prayer at the mosque: leaving home toward [placeId] in [window] is fine. */
+@Serializable
+data class NightException(val placeId: String, val window: ActiveWindow)
+
 /** [birthDate]: ISO yyyy-MM-dd or null. [nightWindow]: Africa/Algiers time. */
 @Serializable
 data class ProfileDto(
@@ -15,6 +19,7 @@ data class ProfileDto(
     val nightWindow: List<ActiveWindow>,
     val birthDate: String? = null,
     val conditionOnSheet: Boolean = false,
+    val nightExceptions: List<NightException> = emptyList(),
 )
 
 /** [tier] null keeps the default tier. */
@@ -29,4 +34,5 @@ data class ProfileUpdate(
     val nightWindow: List<ActiveWindow>? = null,
     val birthDate: String? = null,
     val conditionOnSheet: Boolean? = null,
+    val nightExceptions: List<NightException>? = null,
 )

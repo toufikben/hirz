@@ -33,14 +33,18 @@ import javax.sql.DataSource
 
 private val overridesSer = ListSerializer(RuleOverride.serializer())
 private val windowsSer = ListSerializer(ActiveWindow.serializer())
+private val exceptionsSer = ListSerializer(dz.hirz.shared.api.NightException.serializer())
 
 /** The stored inputs of an asset's profile. */
 data class ProfileRow(
     val circleId: UUID, val type: dz.hirz.shared.asset.AssetType, val condition: Condition, val overrides: List<RuleOverride>,
     val nightWindow: List<ActiveWindow>?, val birthDate: LocalDate?, val conditionOnSheet: Boolean,
+    val nightExceptions: List<dz.hirz.shared.api.NightException> = emptyList(),
 ) {
-    fun profile(overrides: List<RuleOverride> = this.overrides, condition: Condition = this.condition, night: List<ActiveWindow>? = nightWindow): Profile =
-        Profiles.of(type, condition, overrides, night)
+    fun profile(
+        overrides: List<RuleOverride> = this.overrides, condition: Condition = this.condition, night: List<ActiveWindow>? = nightWindow,
+        exceptions: List<dz.hirz.shared.api.NightException> = nightExceptions,
+    ): Profile = Profiles.of(type, condition, overrides, night, exceptions)
 }
 
 /** Reads and changes behavior profiles (design §4.4). Owners decide the condition, birth date and anything lowered. */
@@ -48,14 +52,14 @@ class ProfileService(private val db: DataSource, private val circles: CircleServ
     companion object {
         fun row(c: Connection, assetId: UUID): ProfileRow? =
             c.prepareStatement(
-                "SELECT circle_id, type, condition, profile_overrides::text, night_window::text, birth_date, condition_on_sheet FROM assets WHERE id = ?",
+                "SELECT circle_id, type, condition, profile_overrides::text, night_window::text, birth_date, condition_on_sheet, night_exceptions::text FROM assets WHERE id = ?",
             ).apply { setObject(1, assetId) }.executeQuery().use {
                 if (!it.next()) null
                 else ProfileRow(
                     it.getObject(1, UUID::class.java), assetTypeOf(it.getString(2)), Condition.valueOf(it.getString(3).uppercase()),
                     apiJson.decodeFromString(overridesSer, it.getString(4)),
                     it.getString(5)?.let { w -> apiJson.decodeFromString(windowsSer, w) },
-                    it.getDate(6)?.toLocalDate(), it.getBoolean(7),
+                    it.getDate(6)?.toLocalDate(), it.getBoolean(7), apiJson.decodeFromString(exceptionsSer, it.getString(8)),
                 )
             }
 
@@ -78,7 +82,16 @@ class ProfileService(private val db: DataSource, private val circles: CircleServ
         val condition = req.condition ?: row.condition
         val overrides = req.overrides ?: row.overrides
         val before = row.profile()
-        val after = row.profile(overrides, condition, req.nightWindow ?: row.nightWindow)
+        val exceptions = req.nightExceptions ?: row.nightExceptions
+        exceptions.forEach { e ->
+            // An exception must name a place of this circle.
+            val ok = runCatching { UUID.fromString(e.placeId) }.getOrNull()?.let { pid ->
+                c.prepareStatement("SELECT 1 FROM places WHERE id = ? AND circle_id = ?").apply { setObject(1, pid); setObject(2, row.circleId) }
+                    .executeQuery().use { it.next() }
+            } ?: false
+            if (!ok) unprocessable("bad_exception_place")
+        }
+        val after = row.profile(overrides, condition, req.nightWindow ?: row.nightWindow, exceptions)
         when (val err = Profiles.validate(before, after, owner)) {
             null -> {}
             "owner_only" -> throw ApiException(HttpStatusCode.Forbidden, err)
@@ -86,11 +99,11 @@ class ProfileService(private val db: DataSource, private val circles: CircleServ
         }
         c.prepareStatement(
             """UPDATE assets SET condition = ?, profile_overrides = ?::jsonb, night_window = COALESCE(?::jsonb, night_window),
-                 birth_date = COALESCE(?, birth_date), condition_on_sheet = COALESCE(?, condition_on_sheet) WHERE id = ?""",
+                 birth_date = COALESCE(?, birth_date), condition_on_sheet = COALESCE(?, condition_on_sheet), night_exceptions = ?::jsonb WHERE id = ?""",
         ).apply {
             setString(1, condition.name.lowercase()); setString(2, apiJson.encodeToString(overridesSer, overrides))
             setString(3, req.nightWindow?.let { apiJson.encodeToString(windowsSer, it) })
-            setObject(4, birth); setObject(5, req.conditionOnSheet); setObject(6, assetId)
+            setObject(4, birth); setObject(5, req.conditionOnSheet); setString(6, apiJson.encodeToString(exceptionsSer, exceptions)); setObject(7, assetId)
         }.executeUpdate()
         // The audit records what changed, never the condition itself.
         audit(c, row.circleId, memberId, "profile_changed",
@@ -104,6 +117,7 @@ class ProfileService(private val db: DataSource, private val circles: CircleServ
             RuleSettingDto(rule, s.enabled, s.tier, s.defaultTier, locked = s.defaultTier == Tier.P0)
         },
         nightWindow = p.nightWindow, birthDate = row.birthDate?.toString(), conditionOnSheet = row.conditionOnSheet,
+        nightExceptions = row.nightExceptions,
     )
 }
 

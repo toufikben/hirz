@@ -38,21 +38,24 @@ object PlaceBoundary {
             (state.lastFixMs == null || r.fixMs > state.lastFixMs)
 
     /** [entryReadings]: readings inside before an entry counts (the profile's, e.g. 1 at a hazard for autism). */
-    fun step(state: PlaceState, place: PlaceDto, r: Reading, active: Boolean, cfg: RuleConfig, entryReadings: Int = cfg.exitReadings): StepResult {
+    fun step(
+        state: PlaceState, place: PlaceDto, r: Reading, active: Boolean, cfg: RuleConfig,
+        entryReadings: Int = cfg.exitReadings, exitReadings: Int = cfg.exitReadings,
+    ): StepResult {
         val s = state.copy(lastFixMs = r.fixMs)
         // A coarse fix near a hazard neither counts toward an entry nor resets one in progress.
         if (place.kind == PlaceKind.HAZARD && r.accuracyM > cfg.hazardAccuracyMaxM) return StepResult(s, null)
-        return if (place.kind.alarmsOnEntry()) entryStep(s, place, r, active, cfg, entryReadings) else exitStep(s, place, r, active, cfg)
+        return if (place.kind.alarmsOnEntry()) entryStep(s, place, r, active, cfg, entryReadings) else exitStep(s, place, r, active, cfg, exitReadings)
     }
 
-    private fun exitStep(s: PlaceState, place: PlaceDto, r: Reading, active: Boolean, cfg: RuleConfig): StepResult {
+    private fun exitStep(s: PlaceState, place: PlaceDto, r: Reading, active: Boolean, cfg: RuleConfig, exitReadings: Int): StepResult {
         val beyond = r.distanceOutsideM > place.marginM
         val deep = r.distanceOutsideM <= -cfg.reentryHysteresisM
         return when (s.status) {
             BoundaryStatus.INSIDE -> {
                 if (!beyond) return StepResult(s.copy(outsideCount = 0, insideCount = 0), null)
                 val count = s.outsideCount + 1
-                if (count < cfg.exitReadings) return StepResult(s.copy(outsideCount = count), null)
+                if (count < exitReadings) return StepResult(s.copy(outsideCount = count), null)
                 StepResult(PlaceState(BoundaryStatus.OUTSIDE, 0, 0, s.lastFixMs), if (active) reason("left_place", place, r, count) else null)
             }
             BoundaryStatus.OUTSIDE, BoundaryStatus.UNKNOWN -> {
