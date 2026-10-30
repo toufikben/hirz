@@ -1,0 +1,36 @@
+{
+  "name": "coast_by_day",
+  "start": "2026-11-02T13:00:00Z",
+  "type": "teen",
+  "places": [
+    {
+      "name": "Beach",
+      "kind": "coast",
+      "north": 2000,
+      "radius": 200
+    }
+  ],
+  "steps": [
+    {
+      "t": 0,
+      "action": "fix",
+      "north": 1500
+    },
+    {
+      "t": 10,
+      "action": "fix",
+      "north": 2000
+    },
+    {
+      "t": 20,
+      "action": "fix",
+      "north": 2010
+    },
+    {
+      "t": 30,
+      "action": "fix",
+      "north": 2020
+    }
+  ],
+  "expect": []
+}

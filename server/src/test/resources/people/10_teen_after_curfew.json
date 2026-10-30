@@ -1,0 +1,28 @@
+{
+  "name": "teen_after_curfew",
+  "start": "2026-11-02T21:20:00Z",
+  "type": "teen",
+  "curfew": "22:00",
+  "places": [
+    {
+      "name": "Home",
+      "kind": "home",
+      "radius": 50
+    }
+  ],
+  "steps": [
+    {
+      "t": 0,
+      "action": "fix",
+      "north": 1000
+    },
+    {
+      "t": 10,
+      "action": "curfew_scan"
+    }
+  ],
+  "expect": [
+    "CURFEW"
+  ],
+  "positiveFor": "CURFEW"
+}

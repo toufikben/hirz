@@ -1,0 +1,39 @@
+{
+  "name": "child_cycling_home",
+  "start": "2026-11-02T13:00:00Z",
+  "type": "child",
+  "places": [
+    {
+      "name": "Home",
+      "kind": "home",
+      "radius": 20
+    }
+  ],
+  "steps": [
+    {
+      "t": 0,
+      "action": "fix",
+      "north": 500,
+      "speed": 18
+    },
+    {
+      "t": 10,
+      "action": "fix",
+      "north": 450,
+      "speed": 18
+    },
+    {
+      "t": 20,
+      "action": "fix",
+      "north": 400,
+      "speed": 18
+    },
+    {
+      "t": 30,
+      "action": "fix",
+      "north": 350,
+      "speed": 18
+    }
+  ],
+  "expect": []
+}

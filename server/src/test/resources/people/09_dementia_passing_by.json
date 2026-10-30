@@ -1,0 +1,65 @@
+{
+  "name": "dementia_passing_by",
+  "start": "2026-11-02T08:00:00Z",
+  "type": "elder",
+  "condition": "dementia",
+  "places": [
+    {
+      "name": "Home",
+      "kind": "home",
+      "radius": 50
+    },
+    {
+      "name": "Old house",
+      "kind": "past_address",
+      "north": 450,
+      "east": 150,
+      "radius": 30
+    }
+  ],
+  "steps": [
+    {
+      "t": 0,
+      "action": "fix",
+      "north": 0
+    },
+    {
+      "t": 60,
+      "action": "fix",
+      "north": 0
+    },
+    {
+      "t": 120,
+      "action": "fix",
+      "north": 150
+    },
+    {
+      "t": 180,
+      "action": "fix",
+      "north": 300
+    },
+    {
+      "t": 240,
+      "action": "fix",
+      "north": 450
+    },
+    {
+      "t": 300,
+      "action": "fix",
+      "north": 600
+    },
+    {
+      "t": 360,
+      "action": "fix",
+      "north": 750
+    },
+    {
+      "t": 420,
+      "action": "fix",
+      "north": 900
+    }
+  ],
+  "expect": [
+    "PLACE_EXIT"
+  ]
+}

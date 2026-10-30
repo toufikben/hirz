@@ -1,0 +1,29 @@
+{
+  "name": "autism_pool_entered",
+  "start": "2026-11-02T13:00:00Z",
+  "type": "child",
+  "condition": "autism",
+  "places": [
+    {
+      "name": "Pool",
+      "kind": "hazard",
+      "radius": 30
+    }
+  ],
+  "steps": [
+    {
+      "t": 0,
+      "action": "fix",
+      "north": 300
+    },
+    {
+      "t": 10,
+      "action": "fix",
+      "north": 0
+    }
+  ],
+  "expect": [
+    "HAZARD_PROXIMITY"
+  ],
+  "positiveFor": "HAZARD_PROXIMITY"
+}
