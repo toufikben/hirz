@@ -19,6 +19,8 @@ data class SourceStatusDto(
     val circleName: String,
     val lastHeartbeatAtMs: Long? = null,
     val lastFixAtMs: Long? = null,
+    /** Lets the companion pick its layout (the elder's simple mode); never the person's condition. */
+    val assetType: dz.hirz.shared.asset.AssetType? = null,
 )
 
 @Serializable

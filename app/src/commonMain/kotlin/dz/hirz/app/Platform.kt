@@ -39,4 +39,10 @@ interface CompanionPort {
     suspend fun submitPin(pin: String)
     suspend fun lastHeartbeatMs(client: HirzClient): Long?
     fun openBatterySettings()
+    /** The paired asset's type, for the layout; null when unknown or offline. */
+    suspend fun assetType(client: HirzClient): dz.hirz.shared.asset.AssetType?
+    /** "I'm fine": a check-in reply sent now. */
+    suspend fun imFine()
+    /** Says [text] aloud in [lang] (ar or fr); silent when the phone has no voice for it. */
+    fun speak(text: String, lang: String)
 }

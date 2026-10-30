@@ -36,6 +36,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.fillMaxSize
 import dz.hirz.app.AppEnvironment
 import dz.hirz.app.CompanionPermissionsCard
 import dz.hirz.app.generated.resources.*
@@ -98,6 +101,9 @@ private fun CompanionHome(env: AppEnvironment, client: dz.hirz.app.api.HirzClien
     var pinDone by remember { mutableStateOf(false) }
     var lastBeat by remember { mutableStateOf<Long?>(null) }
     var now by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
+    var assetType by remember { mutableStateOf<dz.hirz.shared.asset.AssetType?>(null) }
+    LaunchedEffect(Unit) { assetType = env.companion.assetType(client) }
+    if (SimpleMode.isSimple(assetType)) { SimpleHome(env); return }
     LaunchedEffect(Unit) {
         env.companion.startSharing()
         while (true) {
@@ -141,3 +147,45 @@ private fun CompanionHome(env: AppEnvironment, client: dz.hirz.app.api.HirzClien
         OutlinedButton({ env.companion.openBatterySettings() }) { Text(stringResource(Res.string.battery_settings)) }
     }
 }
+
+/**
+ * The elder's screen (design §12.4): a very large SOS held for 2 seconds, an "I'm fine" button, both answered aloud.
+ * Text 24 sp or more, touch targets far above 72 dp.
+ */
+@Composable
+private fun SimpleHome(env: AppEnvironment) {
+    val scope = rememberCoroutineScope()
+    val lang = currentLang()
+    var sent by remember { mutableStateOf(false) }
+    var fine by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { env.companion.startSharing() }
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Surface(
+            color = MaterialTheme.colorScheme.error,
+            shape = MaterialTheme.shapes.extraLarge,
+            modifier = Modifier.fillMaxWidth().weight(3f).pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown()
+                    val released = withTimeoutOrNull(2_000) { waitForUpOrCancellation() }
+                    if (released == null) scope.launch {
+                        env.companion.sos(); sent = true
+                        env.companion.speak(SimpleMode.spokenAfterSos(lang), lang)
+                    }
+                }
+            },
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Text(stringResource(if (sent) Res.string.sos_sent else Res.string.sos_hold), color = MaterialTheme.colorScheme.onError,
+                    fontSize = 34.sp, textAlign = TextAlign.Center)
+            }
+        }
+        Button(
+            { scope.launch { env.companion.imFine(); fine = true; env.companion.speak(SimpleMode.spokenAfterFine(lang), lang) } },
+            modifier = Modifier.fillMaxWidth().weight(1f),
+        ) {
+            Text(if (fine) when (lang) { "fr" -> "Envoyé ✓"; "en" -> "Sent ✓"; else -> "أُرسل ✓" }
+                else when (lang) { "fr" -> "Je vais bien"; "en" -> "I'm fine"; else -> "أنا بخير" }, fontSize = 28.sp)
+        }
+    }
+}
+

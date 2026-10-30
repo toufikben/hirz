@@ -82,6 +82,29 @@ object ReasonText {
             "parked_tilt" -> t("اهتزاز أو إمالة والمركبة مركونة ومسلّحة", "Vibration ou inclinaison du véhicule armé à l'arrêt", "Vibration or tilt while parked and armed")
             "door_open_armed" -> t("فُتح باب والمركبة مسلّحة", "Portière ouverte alors que le véhicule est armé", "Door opened while armed")
             "antenna_cut" -> t("قُطع هوائي GPS", "Antenne GPS coupée", "GPS antenna cut")
+            "night_exit" -> t("خرج من البيت ليلًا", "Sorti de la maison la nuit", "Left home at night")
+            "night_exit_beyond" -> t(
+                "تجاوز «${a["place"]}» بمسافة ${a["distanceM"]} م من البيت ليلًا",
+                "Au-delà de « ${a["place"]} », à ${a["distanceM"]} m de la maison, la nuit",
+                "Went past \"${a["place"]}\", ${a["distanceM"]} m from home, at night",
+            )
+            "hazard_entered" -> t(
+                "دخل منطقة خطر «${a["place"]}» — ${a["readings"]} قراءات، دقة ±${a["accuracyM"]} م",
+                "Entré dans la zone dangereuse « ${a["place"]} » — ${a["readings"]} relevés, ±${a["accuracyM"]} m",
+                "Entered the hazard \"${a["place"]}\" — ${a["readings"]} readings, ±${a["accuracyM"]} m",
+            )
+            "running_away" -> t(
+                "يبتعد عن البيت بسرعة ${a["speedKmh"]} كم/سا (${a["distanceM"]} م)",
+                "S'éloigne de la maison à ${a["speedKmh"]} km/h (${a["distanceM"]} m)",
+                "Moving away from home at ${a["speedKmh"]} km/h (${a["distanceM"]} m)",
+            )
+            "heading_past_address" -> t(
+                "يتجه نحو «${a["place"]}» (باقي ${a["distanceM"]} م)",
+                "Se dirige vers « ${a["place"]} » (encore ${a["distanceM"]} m)",
+                "Heading toward \"${a["place"]}\" (${a["distanceM"]} m left)",
+            )
+            "curfew" -> t("خارج البيت بعد الساعة ${a["curfew"]}", "Dehors après ${a["curfew"]}", "Out after ${a["curfew"]}")
+            "coastal_night" -> t("عند «${a["place"]}» ليلًا", "À « ${a["place"]} » la nuit", "At \"${a["place"]}\" at night")
             else -> t("حدث", "Événement", "Event")
         }
     }

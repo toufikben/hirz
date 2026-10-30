@@ -78,6 +78,10 @@
     <string name="kind_relative">Relative's home</string>
     <string name="kind_forbidden">Forbidden</string>
     <string name="kind_other">Other</string>
+    <string name="kind_hazard">Hazard (water, road, rail)</string>
+    <string name="kind_past_address">Past address</string>
+    <string name="kind_coast">Shore</string>
+    <string name="kind_more">More</string>
     <string name="alarm_ready_title">Alarm readiness on this phone</string>
     <string name="perm_notifications">Notifications are not allowed</string>
     <string name="perm_fullscreen">Full-screen alerts are not allowed</string>
