@@ -108,8 +108,9 @@ fun Application.module(deps: Deps) {
     val recorder = FindingRecorder(deps.db, deps.clock, incidents)
     val vehicleModes = VehicleModes(deps.db, deps.clock, circles, deps.rules)
     val engine = RulesEngine(deps.db, deps.rules, recorder, vehicleModes)
-    // The ignition state is recorded before the rules read it.
-    val ingest = IngestService(deps.db, deps.clock, deps.rules, listOf(VehicleStateTracker(deps.db, vehicleModes), engine, hub) + deps.extraIngestListeners)
+    // The rules judge a report against the mode as it was before it (an engine starting on an auto-armed car is theft);
+    // only then does the tracker record the new ignition state.
+    val ingest = IngestService(deps.db, deps.clock, deps.rules, listOf(engine, VehicleStateTracker(deps.db, vehicleModes), hub) + deps.extraIngestListeners)
     val trackers = TrackerService(deps.db, deps.clock, circles, deps.traccar, deps.deviceHost, deps.claimProofS)
     if (deps.startJobs) dz.hirz.server.traccar.TraccarSync(deps.db, deps.clock, deps.traccar, ingest).start(this)
     if (deps.startJobs) {

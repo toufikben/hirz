@@ -1,0 +1,12 @@
+{
+  "name": "parked_drift_no_alarm",
+  "steps": [
+    { "t": 0, "action": "fix", "north": 0, "ignition": false },
+    { "t": 10, "action": "arm" },
+    { "t": 300, "action": "fix", "north": 45, "accuracy": 40, "ignition": false },
+    { "t": 600, "action": "fix", "north": 80, "accuracy": 45, "ignition": false },
+    { "t": 900, "action": "fix", "north": 130, "accuracy": 120, "ignition": false },
+    { "t": 1200, "action": "fix", "north": 30, "accuracy": 25, "ignition": false }
+  ],
+  "expect": { "rules": [] }
+}

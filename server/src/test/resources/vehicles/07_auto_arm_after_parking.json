@@ -1,0 +1,9 @@
+{
+  "name": "auto_arm_after_parking",
+  "steps": [
+    { "t": 0, "action": "fix", "north": 0, "ignition": false },
+    { "t": 300, "action": "fix", "north": 0, "ignition": false },
+    { "t": 700, "action": "heartbeat", "ignition": true }
+  ],
+  "expect": { "rules": ["ARMED_MOVEMENT"], "tiers": { "ARMED_MOVEMENT": "P1" }, "openedByT": { "ARMED_MOVEMENT": 700 } }
+}
