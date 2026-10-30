@@ -30,6 +30,7 @@ import kotlinx.coroutines.launch
 import dz.hirz.server.assets.AssetService
 import dz.hirz.server.assets.assetRoutes
 import dz.hirz.server.assets.profileRoutes
+import dz.hirz.server.herds.herdRoutes
 import dz.hirz.server.assets.pairRoutes
 import dz.hirz.server.assets.sourcePushRoutes
 import dz.hirz.server.auth.FirebaseTokenVerifier
@@ -149,6 +150,7 @@ fun Application.module(deps: Deps) {
             circleRoutes(circles)
             assetRoutes(assets)
             profileRoutes(dz.hirz.server.assets.ProfileService(deps.db, circles))
+            herdRoutes(dz.hirz.server.herds.HerdService(deps.db, circles))
             placeRoutes(places)
             incidentRoutes(incidents)
             codeWordRoutes(codeWords)

@@ -17,6 +17,10 @@ data class Profile(
     /** Good readings inside a hazard place before it counts as entered. */
     val hazardEntryReadings: Int,
     val nightExceptions: List<dz.hirz.shared.api.NightException> = emptyList(),
+    /** Store-and-forward devices: fixes are judged at their own time even when they arrive hours late (P6). */
+    val lateTolerant: Boolean = false,
+    /** Silence threshold for this profile; null keeps the global one. */
+    val silenceAfterMs: Long? = null,
     /** Overrides naming a rule this profile does not have; validate() refuses them. */
     val unknownOverrides: Set<RuleId> = emptySet(),
 ) {
@@ -39,6 +43,17 @@ object Profiles {
         put(RuleId.FORBIDDEN_ENTRY, Tier.P1)
         // A pet or a herd at the water or the railway matters too (it was FORBIDDEN_ENTRY before P5).
         put(RuleId.HAZARD_PROXIMITY, Tier.P1)
+        if (type == AssetType.LIVESTOCK) {
+            // Leaving the pasture by day is grazing more often than theft; the barn at night is the other way round.
+            put(RuleId.PLACE_EXIT, Tier.P2)
+            put(RuleId.NIGHT_EXIT, Tier.P1)
+            put(RuleId.HERD_NIGHT_MOVE, Tier.P1)
+            put(RuleId.HERD_DISPERSION, Tier.P2)
+            put(RuleId.VEHICLE_SPEED_UNEXPLAINED, Tier.P1)
+            put(RuleId.COLLAR_CUT, Tier.P1)
+            put(RuleId.ANIMAL_STILL, Tier.P2)
+            return@buildMap
+        }
         if (type !in PEOPLE) return@buildMap
         // Only where the owner drew a shore place; for any person, not only teens.
         put(RuleId.COASTAL_NIGHT, Tier.P1)
@@ -62,6 +77,8 @@ object Profiles {
         }
         return Profile(condition, rules, nightWindow?.takeIf { it.isNotEmpty() } ?: DEFAULT_NIGHT,
             hazardEntryReadings = if (condition == Condition.AUTISM) 1 else 2, nightExceptions = nightExceptions,
+            lateTolerant = type == AssetType.LIVESTOCK,
+            silenceAfterMs = if (type == AssetType.LIVESTOCK) 6 * 3_600_000L else null,
             unknownOverrides = byRule.keys.filter { it !in rules }.toSet())
     }
 
