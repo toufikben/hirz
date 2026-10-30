@@ -34,6 +34,8 @@ data class RuleConfig(
     val armedP0SpeedKmh: Double = 20.0,
     val armedP0DistanceM: Double = 500.0,
     val jammingSilenceMs: Long = 3 * 60_000,
+    /** A hazard entry counts only on fixes this good: a pool or a rail line is small next to a coarse fix (P5). */
+    val hazardAccuracyMaxM: Double = 25.0,
 ) {
     companion object {
         val DEFAULT = RuleConfig()

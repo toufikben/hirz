@@ -6,6 +6,7 @@ import dz.hirz.server.places.Geometry
 import dz.hirz.server.places.PlaceService
 import dz.hirz.shared.api.LatLon
 import dz.hirz.shared.api.RuleId
+import dz.hirz.shared.api.PlaceKind
 import dz.hirz.shared.api.Tier
 import dz.hirz.shared.rules.RuleConfig
 import dz.hirz.server.db.tx
@@ -86,10 +87,15 @@ class RulesEngine(
                 val state = load(c, s.assetId, placeId)
                 val reading = Reading(fixMs, Geometry.distanceOutsideM(c, place.shape, point), accuracy, s.signal.serverTimeMs - fixMs)
                 if (!PlaceBoundary.accepts(state, place, reading, cfg)) continue
-                val result = PlaceBoundary.step(state, place, reading, Geometry.isActive(place.activeHours, at), cfg)
+                val entryReadings = if (place.kind == PlaceKind.HAZARD) profile.hazardEntryReadings else cfg.exitReadings
+                val result = PlaceBoundary.step(state, place, reading, Geometry.isActive(place.activeHours, at), cfg, entryReadings)
                 save(c, s.assetId, placeId, result.state)
                 result.reason?.let {
-                    val rule = if (place.kind.alarmsOnEntry()) RuleId.FORBIDDEN_ENTRY else RuleId.PLACE_EXIT
+                    val rule = when {
+                        place.kind == PlaceKind.HAZARD -> RuleId.HAZARD_PROXIMITY
+                        place.kind.alarmsOnEntry() -> RuleId.FORBIDDEN_ENTRY
+                        else -> RuleId.PLACE_EXIT
+                    }
                     // The profile decides how urgent this is, or that it does not run for this asset at all.
                     profile.tierOf(rule)?.let { tier -> found += Finding(s.assetId, s.circleId, rule, tier, listOf(it), at) }
                 }

@@ -37,9 +37,12 @@ object PlaceBoundary {
             r.accuracyM <= maxOf(cfg.boundaryAccuracyFloorM, place.marginM.toDouble()) &&
             (state.lastFixMs == null || r.fixMs > state.lastFixMs)
 
-    fun step(state: PlaceState, place: PlaceDto, r: Reading, active: Boolean, cfg: RuleConfig): StepResult {
+    /** [entryReadings]: readings inside before an entry counts (the profile's, e.g. 1 at a hazard for autism). */
+    fun step(state: PlaceState, place: PlaceDto, r: Reading, active: Boolean, cfg: RuleConfig, entryReadings: Int = cfg.exitReadings): StepResult {
         val s = state.copy(lastFixMs = r.fixMs)
-        return if (place.kind.alarmsOnEntry()) entryStep(s, place, r, active, cfg) else exitStep(s, place, r, active, cfg)
+        // A coarse fix near a hazard neither counts toward an entry nor resets one in progress.
+        if (place.kind == PlaceKind.HAZARD && r.accuracyM > cfg.hazardAccuracyMaxM) return StepResult(s, null)
+        return if (place.kind.alarmsOnEntry()) entryStep(s, place, r, active, cfg, entryReadings) else exitStep(s, place, r, active, cfg)
     }
 
     private fun exitStep(s: PlaceState, place: PlaceDto, r: Reading, active: Boolean, cfg: RuleConfig): StepResult {
@@ -65,7 +68,7 @@ object PlaceBoundary {
         }
     }
 
-    private fun entryStep(s: PlaceState, place: PlaceDto, r: Reading, active: Boolean, cfg: RuleConfig): StepResult {
+    private fun entryStep(s: PlaceState, place: PlaceDto, r: Reading, active: Boolean, cfg: RuleConfig, entryReadings: Int): StepResult {
         val inside = r.distanceOutsideM <= 0.0
         val clearlyOut = r.distanceOutsideM > cfg.reentryHysteresisM
         return when (s.status) {
@@ -78,8 +81,9 @@ object PlaceBoundary {
             BoundaryStatus.OUTSIDE, BoundaryStatus.UNKNOWN -> {
                 if (!inside) return StepResult(s.copy(status = BoundaryStatus.OUTSIDE, insideCount = 0), null)
                 val count = s.insideCount + 1
-                if (count < cfg.exitReadings) return StepResult(s.copy(insideCount = count), null)
-                StepResult(PlaceState(BoundaryStatus.INSIDE, 0, 0, s.lastFixMs), if (active) reason("entered_place", place, r, count) else null)
+                if (count < entryReadings) return StepResult(s.copy(insideCount = count), null)
+                val code = if (place.kind == PlaceKind.HAZARD) "hazard_entered" else "entered_place"
+                StepResult(PlaceState(BoundaryStatus.INSIDE, 0, 0, s.lastFixMs), if (active) reason(code, place, r, count) else null)
             }
         }
     }
