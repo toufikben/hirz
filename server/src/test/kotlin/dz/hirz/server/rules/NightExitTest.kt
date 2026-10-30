@@ -49,7 +49,7 @@ private suspend fun HttpClient.elder(env: TestEnv, at: Instant): Elder {
     val mosque: PlaceDto = postJson("/v1/circles/${circle.id}/places", "test.mom",
         CreatePlaceRequest("Mosque", PlaceKind.MOSQUE, ShapeDto.Circle(north(400.0), 30.0), marginM = 50)).body()
     val asset = newAsset("test.mom", circle.id, AssetType.ELDER, "Jeddi")
-    val p: PairResponse = pair(pairingCode("test.mom", asset.id).code).body()
+    val p: PairResponse = pair(pairingCode("test.mom", asset.id).code, adult = true, consent = true).body()
     return Elder(circle.id, asset.id, p.sourceToken, mosque.id).also { walk(env, it, 0.0, 0.0) }
 }
 
