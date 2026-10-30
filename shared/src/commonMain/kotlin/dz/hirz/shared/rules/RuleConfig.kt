@@ -26,6 +26,14 @@ data class RuleConfig(
     val retentionDays: Int = 30,
     /** Vehicles (design §4.4): arm after the ignition has been off this long. */
     val autoArmAfterMs: Long = 10 * 60_000,
+    /** Vehicle theft rules (design §4.3); starting values to be measured on real cars. */
+    val vehicleAccuracyMaxM: Double = 50.0,
+    val armedMoveM: Double = 50.0,
+    val armedMovingKmh: Double = 10.0,
+    val armedMovingFixes: Int = 2,
+    val armedP0SpeedKmh: Double = 20.0,
+    val armedP0DistanceM: Double = 500.0,
+    val jammingSilenceMs: Long = 3 * 60_000,
 ) {
     companion object {
         val DEFAULT = RuleConfig()

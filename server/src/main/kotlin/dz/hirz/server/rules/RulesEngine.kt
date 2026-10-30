@@ -19,6 +19,8 @@ class RulesEngine(
     private val db: DataSource,
     private val cfg: RuleConfig,
     private val recorder: FindingRecorder,
+    /** Vehicles follow their own rules (design §4.4); null in tests of the people rules alone. */
+    private val vehicles: dz.hirz.server.vehicles.VehicleModes? = null,
 ) : IngestListener {
 
     override fun onIngested(s: IngestedSignal) {
@@ -29,11 +31,43 @@ class RulesEngine(
             )
         }
         if (s.cancelPin) recorder.appendToOpen(s.assetId, dz.hirz.shared.api.Reason("cancel_pin_entered"), RuleId.SOS)
+        if (vehicles != null && vehicleRules(vehicles, s, at)) return
         val findings = boundaries(s, at)
         if (findings.isEmpty()) return
         // Only PLACE_EXIT can be muted, and only by a handover that says so; SOS, duress and silence never are.
         val muted = findings.any { it.rule == RuleId.PLACE_EXIT } && db.connection.use { c -> dz.hirz.server.custody.Custody.muted(c, s.assetId, at) }
         findings.forEach { f -> if (muted && f.rule == RuleId.PLACE_EXIT) recorder.recordMuted(f) else recorder.record(f) }
+    }
+
+    /**
+     * Vehicle theft rules, under the same per-asset lock as the boundary state. Returns false for non-vehicles, which
+     * then get the people rules; vehicles never get place exits (their profile, design §4.4).
+     */
+    private fun vehicleRules(vehicles: dz.hirz.server.vehicles.VehicleModes, s: IngestedSignal, at: Instant): Boolean {
+        val hits = db.tx { c ->
+            if (!vehicles.isVehicle(c, s.assetId)) return@tx null
+            c.prepareStatement("SELECT pg_advisory_xact_lock(hashtext(?))").apply { setString(1, s.assetId.toString()) }.executeQuery().close()
+            val mode = vehicles.current(c, s.assetId, at)
+            val st = c.prepareStatement("SELECT moving_count, last_fix_ms FROM vehicle_rule_state WHERE asset_id = ?")
+                .apply { setObject(1, s.assetId) }.executeQuery().use {
+                    if (it.next()) VehicleRuleState(it.getInt(1), it.getLong(2).takeUnless { _ -> it.wasNull() }) else VehicleRuleState()
+                }
+            val pos = s.signal.position
+            val reading = VehicleReading(
+                fixMs = s.signal.fixTimeMs, position = pos?.let { LatLon(it.lat, it.lon) }, accuracyM = pos?.accuracyM,
+                speedKmh = s.signal.speedKmh, ignition = s.signal.ignition, alarms = s.signal.alarms,
+                isLatestFix = s.isLatestFix && s.quality == "ok",
+            )
+            val (next, found) = VehicleRules.evaluate(st, mode.mode, mode.armedPosition, reading, cfg)
+            // Any report ends a jamming-by-silence episode.
+            c.prepareStatement(
+                """INSERT INTO vehicle_rule_state (asset_id, moving_count, last_fix_ms, jamming_since) VALUES (?, ?, ?, NULL)
+                   ON CONFLICT (asset_id) DO UPDATE SET moving_count = EXCLUDED.moving_count, last_fix_ms = EXCLUDED.last_fix_ms, jamming_since = NULL""",
+            ).apply { setObject(1, s.assetId); setInt(2, next.movingCount); setObject(3, next.lastFixMs) }.executeUpdate()
+            found
+        } ?: return false
+        hits.forEach { h -> recorder.record(Finding(s.assetId, s.circleId, h.rule, h.tier, listOf(h.reason), at)) }
+        return true
     }
 
     private fun boundaries(s: IngestedSignal, at: Instant): List<Finding> {

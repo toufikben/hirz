@@ -106,8 +106,8 @@ fun Application.module(deps: Deps) {
     incidents.escalation = escalation
     incidents.subscribe(hub)
     val recorder = FindingRecorder(deps.db, deps.clock, incidents)
-    val engine = RulesEngine(deps.db, deps.rules, recorder)
     val vehicleModes = VehicleModes(deps.db, deps.clock, circles, deps.rules)
+    val engine = RulesEngine(deps.db, deps.rules, recorder, vehicleModes)
     // The ignition state is recorded before the rules read it.
     val ingest = IngestService(deps.db, deps.clock, deps.rules, listOf(VehicleStateTracker(deps.db, vehicleModes), engine, hub) + deps.extraIngestListeners)
     val trackers = TrackerService(deps.db, deps.clock, circles, deps.traccar, deps.deviceHost, deps.claimProofS)
@@ -115,6 +115,7 @@ fun Application.module(deps: Deps) {
     if (deps.startJobs) {
         SilenceScanner(deps.db, deps.clock, deps.rules, recorder).start(this)
         dz.hirz.server.rules.CheckInScanner(deps.db, deps.clock, recorder).start(this)
+        dz.hirz.server.jobs.JammingScanner(deps.db, deps.clock, deps.rules, vehicleModes, recorder).start(this)
         dz.hirz.server.sms.GatewaySilenceScanner(deps.db, deps.clock, deps.notifier).start(this)
         RetentionPurge(deps.db, deps.clock).start(this)
         escalation.start(this)
