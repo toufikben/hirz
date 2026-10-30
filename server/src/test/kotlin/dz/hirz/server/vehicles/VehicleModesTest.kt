@@ -24,6 +24,11 @@ import dz.hirz.shared.signal.AlarmKind
 import io.ktor.client.call.body
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.get
+import io.ktor.client.request.put
+import io.ktor.client.request.setBody
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
+import dz.hirz.shared.api.ScheduleRequest
 import io.ktor.http.HttpStatusCode
 import java.time.Duration
 import java.time.Instant
@@ -42,7 +47,8 @@ private fun input(
     schedule: List<ActiveWindow> = emptyList(),
     ignitionOn: Boolean? = null,
     ignitionSince: Instant? = null,
-) = ModeInput(override, authorizations, schedule, ignitionOn, ignitionSince)
+    latched: Latched? = null,
+) = ModeInput(override, authorizations, schedule, ignitionOn, ignitionSince, latched)
 
 class VehicleModesTest {
     @Test
@@ -158,6 +164,70 @@ class VehicleModesTest {
                 c.createStatement().executeQuery("SELECT count(*) FROM audit_log WHERE action = 'vehicle_authorized'").use { it.next(); assertEquals(1, it.getInt(1)) }
                 c.createStatement().executeQuery("SELECT count(*) FROM mode_switches WHERE asset_id = '${car.id}' AND reason = 'expired'").use { it.next(); assertEquals(1, it.getInt(1)) }
             }
+        }
+    }
+
+    // ---- P4 review ----
+
+    @Test
+    fun autoArmHoldsThroughTheIgnitionTurningOn() {
+        val armedAt = T0.minusSeconds(600)
+        val r = ModeResolver.resolve(input(ignitionOn = true, ignitionSince = T0, latched = Latched("auto_arm", armedAt)), T0.plusSeconds(30), cfg)
+        assertEquals(VehicleMode.ARMED, r.mode, "a thief starting the engine must not disarm the car")
+        assertEquals("auto_arm", r.reason)
+        val drive = AuthorizationWindow(T0.plusSeconds(60), T0.plusSeconds(3600))
+        assertEquals(VehicleMode.AUTHORIZED, ModeResolver.resolve(input(authorizations = listOf(drive), ignitionOn = true, ignitionSince = T0,
+            latched = Latched("auto_arm", armedAt)), T0.plusSeconds(120), cfg).mode)
+        assertEquals(VehicleMode.DISARMED, ModeResolver.resolve(input(override = ModeOverride(VehicleMode.DISARMED, T0.plusSeconds(10)),
+            ignitionOn = true, ignitionSince = T0, latched = Latched("auto_arm", armedAt)), T0.plusSeconds(30), cfg).mode, "the owner's own disarm wins")
+    }
+
+    @Test
+    fun scheduleLatchHoldsWhileRunningAndEndsWhenParked() {
+        val evening = listOf(ActiveWindow((1..7).toSet(), 0, 60)) // 00:00-01:00 Algiers
+        val inWindow = Instant.parse("2026-11-01T23:30:00Z") // 00:30 Algiers
+        val after = Instant.parse("2026-11-02T00:30:00Z") // 01:30 Algiers
+        val latch = Latched("schedule", inWindow.minusSeconds(600))
+        assertEquals(VehicleMode.ARMED, ModeResolver.resolve(input(schedule = evening, ignitionOn = true, ignitionSince = inWindow, latched = latch), after, cfg).mode)
+        assertEquals(VehicleMode.DISARMED, ModeResolver.resolve(input(schedule = evening, ignitionOn = false, ignitionSince = after.minusSeconds(60), latched = latch), after, cfg).mode)
+    }
+
+    @Test
+    fun scheduleMaintenanceAndDriverAreGuarded() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val circle = client.newCircle("test.mom")
+            client.join("test.mom", circle.id, "test.dad", Role.GUARDIAN)
+            val other = client.newCircle("test.stranger")
+            val car = client.newAsset("test.mom", circle.id, AssetType.CAR, "Clio")
+            assertEquals(HttpStatusCode.NotFound, client.postJson("/v1/assets/${car.id}/mode", "test.dad", ModeRequest(VehicleMode.MAINTENANCE)).status,
+                "maintenance switches the theft rules off: owner only")
+            val strangerId = env.db.connection.use { c ->
+                c.createStatement().executeQuery("SELECT member_id FROM circle_members WHERE circle_id = '${other.id}'").use { it.next(); it.getString(1) }
+            }
+            assertEquals(HttpStatusCode.UnprocessableEntity,
+                client.postJson("/v1/assets/${car.id}/authorizations", "test.mom", AuthorizationRequest(hours = 2, memberId = strangerId)).status)
+            val p: PairResponse = client.pair(client.pairingCode("test.mom", car.id).code).body()
+            client.postJson("/v1/assets/${car.id}/mode", "test.mom", ModeRequest(VehicleMode.ARMED))
+            client.postJson("/v1/ingest", p.sourceToken, IngestBatch(listOf(IngestSignal("sos", alarms = setOf(AlarmKind.SOS)))))
+            assertEquals(HttpStatusCode.Conflict, client.put("/v1/assets/${car.id}/armed-schedule") {
+                bearerAuth("test.dad"); contentType(ContentType.Application.Json); setBody(ScheduleRequest(emptyList()))
+            }.status)
+        }
+    }
+
+    @Test
+    fun anOlderIgnitionReportDoesNotRollBackTheState() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val circle = client.newCircle("test.mom")
+            val car = client.newAsset("test.mom", circle.id, AssetType.CAR, "Clio")
+            val p: PairResponse = client.pair(client.pairingCode("test.mom", car.id).code).body()
+            val now = env.clock.millis()
+            client.postJson("/v1/ingest", p.sourceToken, IngestBatch(listOf(IngestSignal("on", now, LatLon(36.75, 3.05), 10.0, ignition = true))))
+            client.postJson("/v1/ingest", p.sourceToken, IngestBatch(listOf(IngestSignal("old", now - 600_000, LatLon(36.75, 3.05), 10.0, ignition = false))))
+            val s: VehicleStateDto = client.get("/v1/assets/${car.id}/vehicle") { bearerAuth("test.mom") }.body()
+            assertEquals(true, s.ignition, "a buffered report from 10 min ago is history, not the engine now")
         }
     }
 }

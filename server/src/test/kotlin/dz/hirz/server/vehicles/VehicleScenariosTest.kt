@@ -56,7 +56,7 @@ class VehicleScenariosTest {
     @Test
     fun allVehicleScenariosHold() {
         val files = File(javaClass.getResource("/vehicles")!!.toURI()).listFiles { f -> f.extension == "json" }!!.sortedBy { it.name }
-        assertTrue(files.size >= 8, "every P4 scenario is present")
+        assertTrue(files.size >= 11, "every P4 scenario is present")
         val failures = files.mapNotNull { f ->
             val s = json.decodeFromString(Scenario.serializer(), f.readText())
             runCatching { run(s) }.exceptionOrNull()?.let { "${s.name}: ${it.message}" }

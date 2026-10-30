@@ -1,0 +1,39 @@
+{
+  "name": "towed_after_silent_auto_arm",
+  "steps": [
+    {
+      "t": 0,
+      "action": "fix",
+      "north": 0,
+      "ignition": false
+    },
+    {
+      "t": 60,
+      "action": "heartbeat",
+      "ignition": false
+    },
+    {
+      "t": 1800,
+      "action": "fix",
+      "north": 300,
+      "ignition": false
+    },
+    {
+      "t": 1830,
+      "action": "fix",
+      "north": 350,
+      "ignition": false
+    }
+  ],
+  "expect": {
+    "rules": [
+      "TOWING"
+    ],
+    "tiers": {
+      "TOWING": "P1"
+    },
+    "openedByT": {
+      "TOWING": 1800
+    }
+  }
+}

@@ -146,4 +146,44 @@ class RemoteEngineTest {
             assertEquals("not_owner", client.engine(car, "resume", "test.dad").reason)
         }
     }
+
+    @Test
+    fun unknownSpeedOrFutureFixRefused() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val car = client.car(env)
+            env.db.connection.use { c -> c.createStatement().executeUpdate("UPDATE positions SET speed_kmh = NULL") }
+            assertEquals("no_speed", client.engine(car, "stop").reason)
+            env.db.connection.use { c -> c.createStatement().executeUpdate("UPDATE positions SET speed_kmh = 0, fix_time = fix_time + interval '3 minutes'") }
+            assertEquals("stale_fix", client.engine(car, "stop").reason, "a fix from the future is not fresh")
+            assertTrue(env.traccar.commands.isEmpty())
+        }
+    }
+
+    @Test
+    fun gatewayThatCannotRefuseQueueingIsNotTrusted() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val car = client.car(env)
+            env.traccar.version = "6.6.0"
+            assertEquals("gateway_unsupported", client.engine(car, "stop").reason)
+            assertTrue(env.traccar.commands.isEmpty())
+        }
+    }
+
+    @Test
+    fun failedWithdrawalIsSaidPlainly() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val car = client.car(env)
+            env.traccar.commandResult = CommandResult.QUEUED
+            env.traccar.withdrawFails = true
+            assertEquals(EngineResultDto("unknown", "withdraw_failed"), client.engine(car, "stop"))
+            env.db.connection.use { c ->
+                c.createStatement().executeQuery("SELECT outcome, reason FROM engine_commands").use {
+                    it.next(); assertEquals("unknown", it.getString(1)); assertEquals("withdraw_failed", it.getString(2))
+                }
+            }
+        }
+    }
 }

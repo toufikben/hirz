@@ -1,0 +1,47 @@
+{
+  "name": "auto_arm_then_stolen_drive",
+  "steps": [
+    {
+      "t": 0,
+      "action": "fix",
+      "north": 0,
+      "ignition": false
+    },
+    {
+      "t": 300,
+      "action": "fix",
+      "north": 0,
+      "ignition": false
+    },
+    {
+      "t": 700,
+      "action": "heartbeat",
+      "ignition": true
+    },
+    {
+      "t": 720,
+      "action": "fix",
+      "north": 200,
+      "speed": 35,
+      "ignition": true
+    },
+    {
+      "t": 740,
+      "action": "fix",
+      "north": 400,
+      "speed": 40,
+      "ignition": true
+    }
+  ],
+  "expect": {
+    "rules": [
+      "ARMED_MOVEMENT"
+    ],
+    "tiers": {
+      "ARMED_MOVEMENT": "P0"
+    },
+    "openedByT": {
+      "ARMED_MOVEMENT": 700
+    }
+  }
+}
