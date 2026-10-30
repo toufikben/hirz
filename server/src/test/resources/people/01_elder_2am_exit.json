@@ -1,0 +1,38 @@
+{
+  "name": "elder_2am_exit",
+  "start": "2026-11-02T01:00:00Z",
+  "type": "elder",
+  "places": [
+    {
+      "name": "Home",
+      "kind": "home",
+      "radius": 50
+    }
+  ],
+  "steps": [
+    {
+      "t": 0,
+      "action": "fix",
+      "north": 0
+    },
+    {
+      "t": 10,
+      "action": "fix",
+      "north": 0
+    },
+    {
+      "t": 20,
+      "action": "fix",
+      "north": 200
+    },
+    {
+      "t": 30,
+      "action": "fix",
+      "north": 210
+    }
+  ],
+  "expect": [
+    "NIGHT_EXIT"
+  ],
+  "positiveFor": "NIGHT_EXIT"
+}

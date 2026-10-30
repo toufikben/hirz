@@ -29,6 +29,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import dz.hirz.server.assets.AssetService
 import dz.hirz.server.assets.assetRoutes
+import dz.hirz.server.assets.profileRoutes
 import dz.hirz.server.assets.pairRoutes
 import dz.hirz.server.assets.sourcePushRoutes
 import dz.hirz.server.auth.FirebaseTokenVerifier
@@ -117,6 +118,8 @@ fun Application.module(deps: Deps) {
         SilenceScanner(deps.db, deps.clock, deps.rules, recorder).start(this)
         dz.hirz.server.rules.CheckInScanner(deps.db, deps.clock, recorder).start(this)
         dz.hirz.server.jobs.JammingScanner(deps.db, deps.clock, deps.rules, vehicleModes, recorder).start(this)
+        dz.hirz.server.jobs.CurfewScanner(deps.db, deps.clock, deps.rules, recorder).start(this)
+        dz.hirz.server.jobs.AgeTransitionJob(deps.db, deps.clock, deps.notifier).start(this)
         dz.hirz.server.sms.GatewaySilenceScanner(deps.db, deps.clock, deps.notifier).start(this)
         RetentionPurge(deps.db, deps.clock).start(this)
         escalation.start(this)
@@ -145,6 +148,7 @@ fun Application.module(deps: Deps) {
             meRoutes(deps)
             circleRoutes(circles)
             assetRoutes(assets)
+            profileRoutes(dz.hirz.server.assets.ProfileService(deps.db, circles))
             placeRoutes(places)
             incidentRoutes(incidents)
             codeWordRoutes(codeWords)

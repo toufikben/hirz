@@ -78,6 +78,10 @@
     <string name="kind_relative">Chez un proche</string>
     <string name="kind_forbidden">Interdit</string>
     <string name="kind_other">Autre</string>
+    <string name="kind_hazard">Danger (eau, route, rail)</string>
+    <string name="kind_past_address">Ancienne adresse</string>
+    <string name="kind_coast">Rivage</string>
+    <string name="kind_more">Plus</string>
     <string name="alarm_ready_title">Préparation de l'alarme sur ce téléphone</string>
     <string name="perm_notifications">Notifications non autorisées</string>
     <string name="perm_fullscreen">Alerte plein écran non autorisée</string>

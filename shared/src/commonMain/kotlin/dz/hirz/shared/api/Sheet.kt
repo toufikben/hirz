@@ -23,6 +23,8 @@ data class SheetDto(
     val descriptors: JsonObject = JsonObject(emptyMap()),
     val todayClothes: String? = null,
     val hasPhoto: Boolean = false,
+    /** Shown only when the owner chose to put it on the police sheet. */
+    val condition: dz.hirz.shared.asset.Condition? = null,
     val lastFix: PositionDto? = null,
     val lastFixAgeS: Long? = null,
     val track: List<PositionDto> = emptyList(),

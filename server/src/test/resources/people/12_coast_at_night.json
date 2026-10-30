@@ -1,0 +1,34 @@
+{
+  "name": "coast_at_night",
+  "start": "2026-11-02T22:30:00Z",
+  "type": "teen",
+  "places": [
+    {
+      "name": "Beach",
+      "kind": "coast",
+      "north": 2000,
+      "radius": 200
+    }
+  ],
+  "steps": [
+    {
+      "t": 0,
+      "action": "fix",
+      "north": 1500
+    },
+    {
+      "t": 10,
+      "action": "fix",
+      "north": 2000
+    },
+    {
+      "t": 20,
+      "action": "fix",
+      "north": 2010
+    }
+  ],
+  "expect": [
+    "COASTAL_NIGHT"
+  ],
+  "positiveFor": "COASTAL_NIGHT"
+}

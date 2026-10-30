@@ -190,8 +190,12 @@ private fun MapTab(live: LiveState, now: Long) {
 private val PLACE_KINDS = listOf(
     PlaceKind.HOME to Res.string.kind_home, PlaceKind.SCHOOL to Res.string.kind_school, PlaceKind.MOSQUE to Res.string.kind_mosque,
     PlaceKind.LESSONS to Res.string.kind_lessons, PlaceKind.PARK to Res.string.kind_park, PlaceKind.RELATIVE to Res.string.kind_relative,
-    PlaceKind.FORBIDDEN to Res.string.kind_forbidden, PlaceKind.OTHER to Res.string.kind_other,
+    PlaceKind.FORBIDDEN to Res.string.kind_forbidden, PlaceKind.HAZARD to Res.string.kind_hazard,
+    PlaceKind.PAST_ADDRESS to Res.string.kind_past_address, PlaceKind.OTHER to Res.string.kind_other,
 )
+
+/** Offered only under "more", with a neutral label (design §12.2 COASTAL_NIGHT: set by hand, never promoted). */
+private val MORE_PLACE_KINDS = listOf(PlaceKind.COAST to Res.string.kind_coast)
 
 /** Sunday–Thursday 07:30–16:30, the Algerian school week (ISO days: 7, 1, 2, 3, 4). */
 private val SCHOOL_HOURS = listOf(ActiveWindow(setOf(7, 1, 2, 3, 4), 7 * 60 + 30, 16 * 60 + 30))
@@ -238,7 +242,13 @@ private fun PlacesTab(client: HirzClient, circle: CircleDto) {
                     PLACE_KINDS.take(4).forEach { (k, label) -> FilterChip(kind == k, { kind = k }, { Text(stringResource(label)) }) }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    PLACE_KINDS.drop(4).forEach { (k, label) -> FilterChip(kind == k, { kind = k }, { Text(stringResource(label)) }) }
+                    PLACE_KINDS.drop(4).take(4).forEach { (k, label) -> FilterChip(kind == k, { kind = k }, { Text(stringResource(label)) }) }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    PLACE_KINDS.drop(8).forEach { (k, label) -> FilterChip(kind == k, { kind = k }, { Text(stringResource(label)) }) }
+                    var more by remember { mutableStateOf(false) }
+                    if (!more) TextButton({ more = true }) { Text(stringResource(Res.string.kind_more)) }
+                    else MORE_PLACE_KINDS.forEach { (k, label) -> FilterChip(kind == k, { kind = k }, { Text(stringResource(label)) }) }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(schoolHours, { schoolHours = it })
@@ -302,6 +312,7 @@ private fun CircleTab(env: AppEnvironment, client: HirzClient, circle: CircleDto
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(a.name, style = MaterialTheme.typography.titleMedium)
+                    if (a.type !in VEHICLE_TYPES) ProfileCard(client, a, isOwner = circle.myRole == Role.OWNER)
                     if (a.type in VEHICLE_TYPES) {
                         VehicleCard(client, a, isOwner = circle.myRole == Role.OWNER, canEdit = circle.myRole == Role.OWNER || circle.myRole == Role.GUARDIAN)
                         if (circle.myRole == Role.OWNER || circle.myRole == Role.GUARDIAN) OutlinedButton({ wizardFor = a.id }) {

@@ -38,6 +38,11 @@ fun Route.pairRoutes(service: AssetService) {
 }
 
 fun Route.sourcePushRoutes(service: AssetService) {
+    // The carrier's own consent, given on their phone: an adult (or a child who turned 18) agrees to be tracked.
+    post("/v1/sources/me/consent") {
+        service.consent(call.source().sourceId)
+        call.respond(HttpStatusCode.OK, mapOf("consent" to "given"))
+    }
     put("/v1/sources/me/push-token") {
         service.setSourcePushToken(call.source().sourceId, call.receive<PushTokenDto>().token)
         call.respond(HttpStatusCode.NoContent)

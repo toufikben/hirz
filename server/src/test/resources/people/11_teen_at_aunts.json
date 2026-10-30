@@ -1,0 +1,30 @@
+{
+  "name": "teen_at_aunts",
+  "start": "2026-11-02T21:20:00Z",
+  "type": "teen",
+  "curfew": "22:00",
+  "places": [
+    {
+      "name": "Home",
+      "kind": "home",
+      "radius": 50
+    },
+    {
+      "name": "Khalti",
+      "kind": "relative",
+      "north": 500
+    }
+  ],
+  "steps": [
+    {
+      "t": 0,
+      "action": "fix",
+      "north": 500
+    },
+    {
+      "t": 10,
+      "action": "curfew_scan"
+    }
+  ],
+  "expect": []
+}

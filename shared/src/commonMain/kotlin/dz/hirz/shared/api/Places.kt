@@ -34,6 +34,10 @@ enum class PlaceKind {
     @SerialName("route") ROUTE,
     @SerialName("forbidden") FORBIDDEN,
     @SerialName("hazard") HAZARD,
+    /** An old address a person with dementia may head for (P5). */
+    @SerialName("past_address") PAST_ADDRESS,
+    /** A shore point watched at night for teens; set by hand, never promoted (P5). */
+    @SerialName("coast") COAST,
     @SerialName("other") OTHER,
 }
 

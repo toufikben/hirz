@@ -34,7 +34,9 @@ class FcmNotifier(app: FirebaseApp) : Notifier {
             m.incidentId?.let { put("id", it.toString()) }
             m.tier?.let { put("tier", it) }
             put("asset", m.assetName)
-            m.rule?.let { put("rule", it) }
+            // RUN_AWAY_SPEED and PAST_ADDRESS_HEADING exist only for autism and dementia: on a lock screen or at FCM,
+            // the rule would name the condition. The app reads the reason from the incident itself.
+            m.rule?.let { put("rule", if (it in CONDITION_RULES) "PERSON_ALERT" else it) }
         }
 
         fun ttlMsFor(tier: String?): Long = when (tier) {
@@ -44,3 +46,5 @@ class FcmNotifier(app: FirebaseApp) : Notifier {
         }
     }
 }
+
+private val CONDITION_RULES = setOf("RUN_AWAY_SPEED", "PAST_ADDRESS_HEADING")

@@ -1,0 +1,43 @@
+{
+  "name": "autism_bolting",
+  "start": "2026-11-02T13:00:00Z",
+  "type": "child",
+  "condition": "autism",
+  "places": [
+    {
+      "name": "Home",
+      "kind": "home",
+      "radius": 20
+    }
+  ],
+  "steps": [
+    {
+      "t": 0,
+      "action": "fix",
+      "north": 0,
+      "speed": 0
+    },
+    {
+      "t": 10,
+      "action": "fix",
+      "north": 0,
+      "speed": 0
+    },
+    {
+      "t": 20,
+      "action": "fix",
+      "north": 40,
+      "speed": 11
+    },
+    {
+      "t": 30,
+      "action": "fix",
+      "north": 75,
+      "speed": 12
+    }
+  ],
+  "expect": [
+    "RUN_AWAY_SPEED"
+  ],
+  "positiveFor": "RUN_AWAY_SPEED"
+}

@@ -170,6 +170,27 @@ class AndroidCompanionPort(private val activity: ComponentActivity) : CompanionP
     override suspend fun lastHeartbeatMs(client: HirzClient): Long? =
         vault.credentials()?.let { runCatching { client.sourceMe(it.sourceToken).lastHeartbeatAtMs }.getOrNull() }
 
+    override suspend fun status(client: HirzClient): dz.hirz.shared.api.SourceStatusDto? =
+        vault.credentials()?.let { runCatching { client.sourceMe(it.sourceToken) }.getOrNull() }
+
+    override suspend fun consent(client: HirzClient): Boolean =
+        vault.credentials()?.let { runCatching { client.sourceConsent(it.sourceToken) }.isSuccess } ?: false
+
+    override suspend fun imFine() {
+        CompanionEngine.sendNow(activity.applicationContext, CompanionSignals.checkIn(dz.hirz.shared.api.CheckInReply.OK))
+    }
+
+    private var tts: android.speech.tts.TextToSpeech? = null
+
+    override fun speak(text: String, lang: String) {
+        val locale = java.util.Locale.forLanguageTag(if (lang == "fr") "fr-FR" else "ar")
+        val existing = tts
+        if (existing != null) { existing.language = locale; existing.speak(text, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "hirz"); return }
+        tts = android.speech.tts.TextToSpeech(activity.applicationContext) { status ->
+            if (status == android.speech.tts.TextToSpeech.SUCCESS) tts?.let { it.language = locale; it.speak(text, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "hirz") }
+        }
+    }
+
     override fun openBatterySettings() {
         // The settings list, not the one-tap exemption request (that needs a restricted permission).
         runCatching { activity.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }

@@ -6,6 +6,7 @@ import dz.hirz.server.circles.audit
 import dz.hirz.server.db.toList
 import dz.hirz.server.db.tx
 import dz.hirz.server.gone
+import dz.hirz.server.conflict
 import dz.hirz.server.notFound
 import dz.hirz.server.ts
 import dz.hirz.server.unprocessable
@@ -111,12 +112,16 @@ class AssetService(private val db: DataSource, private val clock: Clock, private
         }
         if (code.used) gone("pairing_code_used")
         if (code.expired) gone("pairing_code_expired")
-        val (circleId, type, assetName, circleName) = c.prepareStatement(
-            "SELECT a.circle_id, a.type, a.name, ci.name FROM assets a JOIN circles ci ON ci.id = a.circle_id WHERE a.id = ?",
+        val row = c.prepareStatement(
+            "SELECT a.circle_id, a.type, a.name, ci.name, a.birth_date FROM assets a JOIN circles ci ON ci.id = a.circle_id WHERE a.id = ?",
         ).apply { setObject(1, code.assetId) }.executeQuery().use {
-            it.next(); listOf(it.getString(1), it.getString(2), it.getString(3), it.getString(4))
+            it.next(); listOf(it.getString(1), it.getString(2), it.getString(3), it.getString(4), it.getString(5))
         }
-        val adult = req.carrierIsAdult || assetTypeOf(type) in ADULT_TYPES
+        val (circleId, type, assetName, circleName) = row
+        // A child who has turned 18 is an adult: a new source needs their own consent (design §12.5.6).
+        val today = clock.instant().atZone(java.time.ZoneId.of("Africa/Algiers")).toLocalDate()
+        val grown = row[4]?.let { java.time.Period.between(java.time.LocalDate.parse(it), today).years >= 18 } == true
+        val adult = req.carrierIsAdult || assetTypeOf(type) in ADULT_TYPES || grown
         if (adult && !req.consentGiven) unprocessable("consent_required")
         val token = Codes.newSourceToken()
         val deviceInfo = buildJsonObject {
@@ -143,6 +148,17 @@ class AssetService(private val db: DataSource, private val clock: Clock, private
             .apply { setTimestamp(1, clock.instant().ts()); setObject(2, sourceId); setObject(3, assetId) }.executeUpdate()
         if (updated == 0) notFound()
         audit(c, circleId, memberId, "source_revoked", """{"source":"$sourceId"}""")
+    }
+
+    fun consent(sourceId: UUID) = db.tx { c ->
+        val circleId = c.prepareStatement(
+            """UPDATE sources s SET adult = true, consent_at = ?, paused_reason = NULL FROM assets a
+               WHERE s.id = ? AND a.id = s.asset_id AND s.paused_reason = 'age_18' AND s.revoked_at IS NULL RETURNING a.circle_id""",
+        ).apply { setTimestamp(1, clock.instant().ts()); setObject(2, sourceId) }.executeQuery().use {
+            // Only the person, once 18 and paused: a parent holding a child's phone cannot pre-consent for them.
+            if (it.next()) it.getObject(1, UUID::class.java) else conflict("not_paused")
+        }
+        audit(c, circleId, null, "source_consent_given", """{"source":"$sourceId"}""")
     }
 
     fun setSourcePushToken(sourceId: UUID, token: String) {

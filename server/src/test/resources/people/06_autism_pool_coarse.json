@@ -1,0 +1,33 @@
+{
+  "name": "autism_pool_coarse",
+  "start": "2026-11-02T13:00:00Z",
+  "type": "child",
+  "condition": "autism",
+  "places": [
+    {
+      "name": "Pool",
+      "kind": "hazard",
+      "radius": 30
+    }
+  ],
+  "steps": [
+    {
+      "t": 0,
+      "action": "fix",
+      "north": 300
+    },
+    {
+      "t": 10,
+      "action": "fix",
+      "north": 0,
+      "acc": 40
+    },
+    {
+      "t": 20,
+      "action": "fix",
+      "north": 5,
+      "acc": 45
+    }
+  ],
+  "expect": []
+}

@@ -1,0 +1,63 @@
+{
+  "name": "elder_fajr_mosque",
+  "start": "2026-11-02T03:45:00Z",
+  "type": "elder",
+  "places": [
+    {
+      "name": "Home",
+      "kind": "home",
+      "radius": 50
+    },
+    {
+      "name": "Mosque",
+      "kind": "mosque",
+      "north": 400,
+      "radius": 30
+    }
+  ],
+  "exceptions": [
+    {
+      "place": "Mosque",
+      "from": "04:30",
+      "to": "06:30"
+    }
+  ],
+  "steps": [
+    {
+      "t": 0,
+      "action": "fix",
+      "north": 0
+    },
+    {
+      "t": 10,
+      "action": "fix",
+      "north": 0
+    },
+    {
+      "t": 20,
+      "action": "fix",
+      "north": 150
+    },
+    {
+      "t": 30,
+      "action": "fix",
+      "north": 250
+    },
+    {
+      "t": 40,
+      "action": "fix",
+      "north": 350
+    },
+    {
+      "t": 50,
+      "action": "fix",
+      "north": 400
+    },
+    {
+      "t": 60,
+      "action": "fix",
+      "north": 405
+    }
+  ],
+  "expect": []
+}
