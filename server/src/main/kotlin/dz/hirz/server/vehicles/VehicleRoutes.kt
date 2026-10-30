@@ -3,6 +3,7 @@ package dz.hirz.server.vehicles
 import dz.hirz.server.circles.uuidOrNotFound
 import dz.hirz.server.member
 import dz.hirz.shared.api.AuthorizationRequest
+import dz.hirz.shared.api.EngineRequest
 import dz.hirz.shared.api.ModeRequest
 import dz.hirz.shared.api.ScheduleRequest
 import io.ktor.server.request.receive
@@ -13,7 +14,7 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 
-fun Route.vehicleRoutes(modes: VehicleModes) {
+fun Route.vehicleRoutes(modes: VehicleModes, engine: RemoteEngine) {
     get("/v1/assets/{id}/vehicle") {
         call.respond(modes.state(uuidOrNotFound(call.parameters["id"]), call.member().memberId))
     }
@@ -30,5 +31,8 @@ fun Route.vehicleRoutes(modes: VehicleModes) {
     }
     put("/v1/assets/{id}/armed-schedule") {
         call.respond(modes.setSchedule(uuidOrNotFound(call.parameters["id"]), call.member().memberId, call.receive<ScheduleRequest>().windows))
+    }
+    post("/v1/assets/{id}/engine") {
+        call.respond(engine.command(uuidOrNotFound(call.parameters["id"]), call.member().memberId, call.receive<EngineRequest>().action))
     }
 }

@@ -72,4 +72,34 @@ class TraccarHttpAdmin(baseUrl: String, private val user: String, private val pa
         if (!r.status.isSuccess()) r.fail("positions")
         TraccarJson.json.decodeFromString(ListSerializer(TraccarPosition.serializer()), r.bodyAsText())
     }
+
+    override fun deviceStatus(id: Long): String = call("device status") {
+        val r = http.get("$base/api/devices") { basicAuth(user, password); parameter("id", id) }
+        if (!r.status.isSuccess()) r.fail("device status")
+        TraccarJson.json.parseToJsonElement(r.bodyAsText()).jsonArray.firstOrNull()?.jsonObject?.get("status")?.jsonPrimitive?.content ?: "unknown"
+    }
+
+    override fun sendCommand(deviceId: Long, type: String): CommandResult = call("send command") {
+        val r = http.post("$base/api/commands/send") {
+            basicAuth(user, password); contentType(ContentType.Application.Json)
+            // noQueue: Traccar 6.7+ refuses rather than queues for an offline device; older versions ignore it.
+            setBody(buildJsonObject {
+                put("deviceId", deviceId); put("type", type)
+                put("attributes", buildJsonObject { put("noQueue", true) })
+            }.toString())
+        }
+        when {
+            r.status == HttpStatusCode.Accepted -> CommandResult.QUEUED
+            r.status.isSuccess() -> CommandResult.SENT
+            else -> r.fail("send command")
+        }
+    }
+
+    /**
+     * Traccar has no API to remove a queued command, so a resume is queued right behind it: on reconnect the device
+     * receives stop then resume and ends running, never cut later at speed.
+     */
+    override fun deleteQueued(deviceId: Long) {
+        sendCommand(deviceId, "engineResume")
+    }
 }

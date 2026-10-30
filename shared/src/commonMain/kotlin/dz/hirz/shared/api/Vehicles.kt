@@ -37,3 +37,11 @@ data class VehicleStateDto(
     val ignition: Boolean? = null,
     val schedule: List<ActiveWindow> = emptyList(),
 )
+
+/** [action]: stop or resume. */
+@Serializable
+data class EngineRequest(val action: String)
+
+/** [outcome]: sent or refused; [reason] says why a refusal happened (not_owner, no_theft_incident, not_supported, device_offline, stale_fix, too_fast, queued_withdrawn). */
+@Serializable
+data class EngineResultDto(val outcome: String, val reason: String? = null)

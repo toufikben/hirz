@@ -156,7 +156,7 @@ fun Application.module(deps: Deps) {
             gatewayMemberRoutes(gateways)
             custodyRoutes(custody)
             trackerRoutes(trackers)
-            vehicleRoutes(vehicleModes)
+            vehicleRoutes(vehicleModes, dz.hirz.server.vehicles.RemoteEngine(deps.db, deps.clock, circles, deps.traccar))
             historyRoutes(deps, circles)
         }
         authenticate(SOURCE_AUTH) {
