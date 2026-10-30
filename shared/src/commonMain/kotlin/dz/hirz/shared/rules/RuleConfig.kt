@@ -24,6 +24,8 @@ data class RuleConfig(
     val nearestLeadM: Double = 300.0,
     val singleGuardianConfirmMs: Long = 120_000,
     val retentionDays: Int = 30,
+    /** Vehicles (design §4.4): arm after the ignition has been off this long. */
+    val autoArmAfterMs: Long = 10 * 60_000,
 ) {
     companion object {
         val DEFAULT = RuleConfig()

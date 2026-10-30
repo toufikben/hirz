@@ -1,5 +1,8 @@
 package dz.hirz.server
 
+import dz.hirz.server.vehicles.VehicleModes
+import dz.hirz.server.vehicles.VehicleStateTracker
+import dz.hirz.server.vehicles.vehicleRoutes
 import dz.hirz.server.traccar.TrackerService
 import dz.hirz.server.traccar.traccarForwardRoutes
 import dz.hirz.server.traccar.trackerRoutes
@@ -104,7 +107,9 @@ fun Application.module(deps: Deps) {
     incidents.subscribe(hub)
     val recorder = FindingRecorder(deps.db, deps.clock, incidents)
     val engine = RulesEngine(deps.db, deps.rules, recorder)
-    val ingest = IngestService(deps.db, deps.clock, deps.rules, listOf(engine, hub) + deps.extraIngestListeners)
+    val vehicleModes = VehicleModes(deps.db, deps.clock, circles, deps.rules)
+    // The ignition state is recorded before the rules read it.
+    val ingest = IngestService(deps.db, deps.clock, deps.rules, listOf(VehicleStateTracker(deps.db, vehicleModes), engine, hub) + deps.extraIngestListeners)
     val trackers = TrackerService(deps.db, deps.clock, circles, deps.traccar, deps.deviceHost, deps.claimProofS)
     if (deps.startJobs) dz.hirz.server.traccar.TraccarSync(deps.db, deps.clock, deps.traccar, ingest).start(this)
     if (deps.startJobs) {
@@ -149,6 +154,7 @@ fun Application.module(deps: Deps) {
             gatewayMemberRoutes(gateways)
             custodyRoutes(custody)
             trackerRoutes(trackers)
+            vehicleRoutes(vehicleModes)
             historyRoutes(deps, circles)
         }
         authenticate(SOURCE_AUTH) {
