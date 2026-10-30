@@ -24,6 +24,8 @@ data class Deps(
     val traccar: dz.hirz.server.traccar.TraccarAdmin = dz.hirz.server.traccar.TraccarAdmin.NONE,
     /** Public host trackers are told to report to (HIRZ_DEVICE_HOST). */
     val deviceHost: String = "localhost",
+    /** Range of the claim's challenge interval in seconds (HIRZ_CLAIM_PROOF_S). */
+    val claimProofS: IntRange = 45..95,
     val startJobs: Boolean = true,
     /** Extra observers of accepted signals (tests); the rules engine and live hub are wired inside the module. */
     val extraIngestListeners: List<IngestListener> = emptyList(),

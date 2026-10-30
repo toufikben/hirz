@@ -12,6 +12,7 @@ data class TrackerClaimRequest(
     val imei: String,
     val simPhone: String? = null,
     val apn: String? = null,
+    /** Ignored since the P3 review: the server picks the interval as the proof challenge ([TrackerClaimDto.proofIntervalS]). */
     val intervalS: Int = 60,
     /** The device's current password; the catalogue default when null. */
     val devicePassword: String? = null,
@@ -31,4 +32,9 @@ data class TrackerClaimDto(
     val expiresAtMs: Long,
     val sourceId: String? = null,
     val commands: List<SmsCommandDto> = emptyList(),
+    /**
+     * The reporting interval the setup SMS sets. The claim activates only when the tracker's fixes arrive at this
+     * interval: a device already reporting to Hirz at its old interval cannot activate someone else's claim.
+     */
+    val proofIntervalS: Int? = null,
 )

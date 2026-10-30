@@ -35,7 +35,7 @@ object TraccarMapper {
         val alarmText = listOfNotNull((a["alarm"] as? JsonPrimitive)?.content, eventAlarm).joinToString(",")
         val alarms = alarms(alarmText)
         return IngestSignal(
-            clientId = clientId(p, alarms),
+            clientId = clientId(p, alarms, hasFix),
             fixTimeMs = if (hasFix) instantMs(p.fixTime!!) else null,
             position = if (hasFix) LatLon(p.latitude, p.longitude) else null,
             accuracyM = if (hasFix) p.accuracy.takeIf { it > 0 } else null,
@@ -58,9 +58,11 @@ object TraccarMapper {
      * the device and the device's own time, plus any alarm: the forward, the event forward and the REST backup sync all
      * produce the same key for the same report, and an alarm in the same second as a fix is never lost as a duplicate.
      */
-    fun clientId(p: TraccarPosition, alarms: Set<AlarmKind>): String {
-        val at = listOfNotNull(p.fixTime, p.deviceTime, p.serverTime).firstNotNullOfOrNull { runCatching { instantMs(it) }.getOrNull() }
-            ?: return "tc-${p.id}"
+    fun clientId(p: TraccarPosition, alarms: Set<AlarmKind>, hasFix: Boolean = p.valid && !p.outdated): String {
+        // A report without a fix carries the last fix's time: key it on the device's own time instead (review C2).
+        val times = if (hasFix) listOfNotNull(p.fixTime, p.deviceTime, p.serverTime) else listOfNotNull(p.deviceTime, p.serverTime)
+        val at = times.firstNotNullOfOrNull { runCatching { instantMs(it) }.getOrNull() }
+            ?: return "tc-${p.deviceId}-id${p.id}"
         val suffix = if (alarms.isEmpty()) "" else "-" + alarms.map { it.name.lowercase() }.sorted().joinToString("+")
         return "tc-${p.deviceId}-$at$suffix"
     }

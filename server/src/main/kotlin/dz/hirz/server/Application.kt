@@ -105,7 +105,7 @@ fun Application.module(deps: Deps) {
     val recorder = FindingRecorder(deps.db, deps.clock, incidents)
     val engine = RulesEngine(deps.db, deps.rules, recorder)
     val ingest = IngestService(deps.db, deps.clock, deps.rules, listOf(engine, hub) + deps.extraIngestListeners)
-    val trackers = TrackerService(deps.db, deps.clock, circles, deps.traccar, deps.deviceHost)
+    val trackers = TrackerService(deps.db, deps.clock, circles, deps.traccar, deps.deviceHost, deps.claimProofS)
     if (deps.startJobs) dz.hirz.server.traccar.TraccarSync(deps.db, deps.clock, deps.traccar, ingest).start(this)
     if (deps.startJobs) {
         SilenceScanner(deps.db, deps.clock, deps.rules, recorder).start(this)
@@ -186,6 +186,7 @@ fun main() {
         traccarSecret = cfg.traccarSecret,
         traccar = traccarAdmin(cfg),
         deviceHost = cfg.deviceHost,
+        claimProofS = cfg.claimProofS,
     )
     val port = System.getenv("PORT")?.toIntOrNull() ?: 8080
     embeddedServer(Netty, port = port) { module(deps) }.start(wait = true)

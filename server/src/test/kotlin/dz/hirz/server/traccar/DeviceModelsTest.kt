@@ -67,7 +67,7 @@ class DeviceModelsTest {
             assertTrue(claim.commands.all { it.to == "0661000000" })
             val server = claim.commands.single { it.purpose == "server" }.text
             assertTrue("devices.hirz.test" in server && "5013" in server, server)
-            assertTrue(claim.commands.single { it.purpose == "interval" }.text.contains("30"))
+            assertTrue(claim.commands.single { it.purpose == "interval" }.text.contains(claim.proofIntervalS.toString()), "the server picks the interval")
             assertEquals(HttpStatusCode.UnprocessableEntity,
                 client.postJson("/v1/assets/${asset.id}/trackers", "test.mom", TrackerClaimRequest("gt06n", validImei("35933907512345"))).status,
                 "the APN is needed to render the setup SMS")

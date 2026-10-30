@@ -80,4 +80,19 @@ class TraccarMapperTest {
         assertEquals(s.clientId, TraccarMapper.toSignal(e.position!!.copy(attributes = kotlinx.serialization.json.buildJsonObject { put("alarm", kotlinx.serialization.json.JsonPrimitive("sos")) })).clientId,
             "the position forward and the event forward of one alarm share a key")
     }
+
+    /** Review C2: a report without a fix carries the last fix's time; keyed on that, every heartbeat would be a duplicate. */
+    @Test
+    fun heartbeatsAreKeyedOnTheirOwnTime() {
+        val beat = position("gt06_heartbeat_outdated.json").position
+        val fix = TraccarMapper.toSignal(position("gt06_fix.json").position)
+        val a = TraccarMapper.toSignal(beat)
+        val b = TraccarMapper.toSignal(beat.copy(id = 1241, deviceTime = "2026-11-01T08:08:00.000+00:00", serverTime = "2026-11-01T08:08:00.000+00:00"))
+        assertEquals("tc-7-${Instant.parse("2026-11-01T08:05:00Z").toEpochMilli()}", a.clientId)
+        assertTrue(a.clientId != b.clientId && a.clientId != fix.clientId)
+        val sosAttr = kotlinx.serialization.json.buildJsonObject { put("alarm", kotlinx.serialization.json.JsonPrimitive("sos")) }
+        val sos1 = TraccarMapper.toSignal(beat.copy(attributes = sosAttr))
+        val sos2 = TraccarMapper.toSignal(beat.copy(deviceTime = "2026-11-01T08:06:00.000+00:00", attributes = sosAttr))
+        assertTrue(sos1.clientId != sos2.clientId, "a second SOS in a status packet is a new report")
+    }
 }

@@ -50,7 +50,8 @@ fun Route.traccarForwardRoutes(secret: String?, trackers: TrackerService, ingest
     post("/v1/traccar/positions") {
         if (!call.fromTraccar(secret)) return@post call.respond(HttpStatusCode.Unauthorized)
         val f = TraccarJson.positionForward(call.receiveText())
-        trackers.sourceFor(f.device.uniqueId, f.position.serverTime)?.let { source ->
+        val hasFix = f.position.valid && !f.position.outdated
+        trackers.sourceFor(f.device.uniqueId, f.position.serverTime, hasFix)?.let { source ->
             ingest.ingest(source, IngestBatch(listOf(TraccarMapper.toSignal(f.position))))
         }
         call.respondText("{}", ContentType.Application.Json)
@@ -62,7 +63,7 @@ fun Route.traccarForwardRoutes(secret: String?, trackers: TrackerService, ingest
         val position = f.position
         // Only alarms matter here; they share the position's client id, so a forward of both stores one row.
         if (f.event.type == "alarm" && alarm != null && position != null) {
-            trackers.sourceFor(f.device.uniqueId, position.serverTime)?.let { source ->
+            trackers.sourceFor(f.device.uniqueId, position.serverTime, hasFix = false)?.let { source ->
                 ingest.ingest(source, IngestBatch(listOf(TraccarMapper.toSignal(position, alarm))))
             }
         }

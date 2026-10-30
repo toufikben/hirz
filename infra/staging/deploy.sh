@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploys a Core image (the CI commit sha, or "main") and waits until https://$HIRZ_HOST/health answers.
+# Deploys a Core image (the CI commit sha, or "main") and waits until https://$HIRZ_HOST/health answers. Run with sudo.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 export HIRZ_CORE_TAG="${1:?usage: deploy.sh <image-tag>}"

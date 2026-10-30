@@ -70,7 +70,19 @@ class EndToEndIT {
         val assetId = api.string(asset, "id")
         val imei = withCheckDigit("86300000" + (100000 + (0..899999).random()).toString())
         val claim = api.ok("POST", "/v1/assets/$assetId/trackers", """{"model":"gt06n","imei":"$imei","simPhone":"0661000000","apn":"internet"}""")
+        proofS = api.string(claim, "proofIntervalS").toLong()
         return listOf(uid, circleId, assetId, api.string(claim, "claimId"), imei)
+    }
+
+    /** The challenge interval of the last claim (CI runs Core with HIRZ_CLAIM_PROOF_S=5-6). */
+    private var proofS = 0L
+
+    /** Proof of control: three fixes at the challenge interval, as a reconfigured tracker sends them. */
+    private fun prove(c: Gt06Client) {
+        repeat(3) { i ->
+            if (i > 0) Thread.sleep(proofS * 1_000)
+            c.send(Gt06Fix(36.7538, 3.0588, 0, 0, Instant.now(), 8))
+        }
     }
 
     @Test
@@ -79,7 +91,7 @@ class EndToEndIT {
         val api = CoreApi(core, uid)
         Gt06Client(gt06Host, gt06Port).use { c ->
             c.login(imei)
-            c.send(Gt06Fix(36.7538, 3.0588, 0, 0, Instant.now(), 8))
+            prove(c)
         }
         api.await("claim activation") { api.ok("GET", "/v1/trackers/claims/$claimId").takeIf { api.string(it, "state") == "active" } }
         val positions = api.await("the fix in Core") {
@@ -95,7 +107,7 @@ class EndToEndIT {
         val api = CoreApi(core, uid)
         Gt06Client(gt06Host, gt06Port).use { c ->
             c.login(imei)
-            c.send(Gt06Fix(36.7538, 3.0588, 0, 0, Instant.now(), 8))
+            prove(c)
             Thread.sleep(1_000)
             c.alarm(Gt06Fix(36.7539, 3.0589, 0, 0, Instant.now(), 8), Gt06Alarm.SOS)
         }
@@ -111,7 +123,7 @@ class EndToEndIT {
         val api = CoreApi(core, uid)
         Gt06Client(gt06Host, gt06Port).use { c ->
             c.login(imei)
-            c.send(Gt06Fix(36.7538, 3.0588, 0, 0, Instant.now(), 8))
+            prove(c)
             api.await("claim activation") { api.ok("GET", "/v1/trackers/claims/$claimId").takeIf { api.string(it, "state") == "active" } }
             // GT06 times have 1 s resolution; real trackers report every 10 s or more, so one fix per 1.1 s is generous.
             repeat(12) { i ->

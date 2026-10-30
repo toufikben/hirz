@@ -40,5 +40,7 @@ services:
       HIRZ_TRACCAR_USER: ${E2E_TRACCAR_USER}
       HIRZ_TRACCAR_PASSWORD: ${E2E_TRACCAR_PASSWORD}
       HIRZ_DEVICE_HOST: localhost
+      # A short challenge interval keeps the proof-of-control steps fast in CI (production: 45-95 s).
+      HIRZ_CLAIM_PROOF_S: "5-6"
     ports:
       - "8080:8080"
