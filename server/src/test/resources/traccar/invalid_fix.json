@@ -1,0 +1,9 @@
+{
+  "position": {
+    "id": 1300, "deviceId": 7, "protocol": "gt06",
+    "serverTime": "2026-11-01T08:20:00.000+00:00", "fixTime": "2026-11-01T08:19:58.000+00:00",
+    "outdated": false, "valid": false, "latitude": 36.0, "longitude": 3.0, "speed": 0.0, "course": 0.0, "accuracy": 0.0,
+    "attributes": { "alarm": "vibration", "batteryLevel": 140, "power": 12.6 }
+  },
+  "device": { "id": 7, "uniqueId": "359339075123456" }
+}

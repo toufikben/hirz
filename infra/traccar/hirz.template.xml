@@ -11,9 +11,18 @@
     <entry key='web.address'>127.0.0.1</entry>
     <entry key='web.port'>8082</entry>
 
-    <entry key='protocols.enable'>gt06,osmand</entry>
+    <entry key='protocols.enable'>gt06,h02,osmand</entry>
     <entry key='gt06.port'>5023</entry>
+    <entry key='h02.port'>5013</entry>
     <entry key='osmand.port'>5055</entry>
+
+    <!-- Traccar is a device gateway only (design §2): every position and event goes to Core, privately. -->
+    <entry key='forward.type'>json</entry>
+    <entry key='forward.url'>http://core:8080/v1/traccar/positions</entry>
+    <entry key='forward.header'>Authorization: Bearer ${HIRZ_TRACCAR_SECRET}</entry>
+    <entry key='forward.retry.enable'>true</entry>
+    <entry key='event.forward.url'>http://core:8080/v1/traccar/events</entry>
+    <entry key='event.forward.header'>Authorization: Bearer ${HIRZ_TRACCAR_SECRET}</entry>
 
     <entry key='geocoder.enable'>false</entry>
     <entry key='logger.console'>true</entry>

@@ -22,6 +22,7 @@ import io.ktor.server.routing.get
 import io.ktor.server.websocket.webSocket
 import io.ktor.websocket.CloseReason
 import io.ktor.websocket.close
+import dz.hirz.server.custody.SHARED_ASSETS_SQL
 import java.sql.Connection
 import java.sql.ResultSet
 import java.util.UUID
@@ -69,18 +70,19 @@ private fun snapshot(c: Connection, memberId: UUID, circles: Set<UUID>, incident
     val ids = c.createArrayOf("uuid", circles.toTypedArray())
     val latest = c.prepareStatement(
         """SELECT DISTINCT ON (p.asset_id) $POSITION_COLUMNS FROM positions p JOIN assets a ON a.id = p.asset_id
-           WHERE a.circle_id = ANY(?) AND p.quality = 'ok' AND p.geog IS NOT NULL AND p.fix_time IS NOT NULL
+           WHERE (a.circle_id = ANY(?) OR a.id IN ($SHARED_ASSETS_SQL)) AND p.quality = 'ok' AND p.geog IS NOT NULL AND p.fix_time IS NOT NULL
            ORDER BY p.asset_id, p.fix_time DESC""",
-    ).apply { setArray(1, ids) }.executeQuery().toList { positionRow(it) }.associateBy { it.assetId }
+    ).apply { setArray(1, ids); setArray(2, ids) }.executeQuery().toList { positionRow(it) }.associateBy { it.assetId }
     val assets = c.prepareStatement(
         """SELECT a.id, a.circle_id, a.name, a.type, (SELECT max(s.last_heartbeat_at) FROM sources s WHERE s.asset_id = a.id AND s.revoked_at IS NULL)
-           FROM assets a WHERE a.circle_id = ANY(?) ORDER BY a.created_at""",
-    ).apply { setArray(1, ids) }.executeQuery().toList {
+           FROM assets a WHERE a.circle_id = ANY(?) OR a.id IN ($SHARED_ASSETS_SQL) ORDER BY a.created_at""",
+    ).apply { setArray(1, ids); setArray(2, ids) }.executeQuery().toList {
         AssetLiveDto(it.getString(1), it.getString(2), it.getString(3), assetTypeOf(it.getString(4)), latest[it.getString(1)], it.getTimestamp(5)?.time)
     }
     assets.forEach { logView(c, memberId, UUID.fromString(it.assetId), "live", now) }
-    val open = c.prepareStatement("SELECT id FROM incidents WHERE circle_id = ANY(?) AND state = 'open' ORDER BY opened_at DESC")
-        .apply { setArray(1, ids) }.executeQuery().toList { it.getObject(1, UUID::class.java) }.map { incidents.load(c, it) }
+    val open = c.prepareStatement(
+        "SELECT id FROM incidents WHERE (circle_id = ANY(?) OR asset_id IN ($SHARED_ASSETS_SQL)) AND state = 'open' ORDER BY opened_at DESC",
+    ).apply { setArray(1, ids); setArray(2, ids) }.executeQuery().toList { it.getObject(1, UUID::class.java) }.map { incidents.load(c, it) }
     return LiveEvent.Snapshot(assets, open, now.toEpochMilli())
 }
 

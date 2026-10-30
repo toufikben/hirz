@@ -42,6 +42,9 @@ import dz.hirz.shared.api.ShareDto
 import dz.hirz.shared.api.ShareRequest
 import dz.hirz.shared.api.SheetDto
 import dz.hirz.shared.api.SmsResultRequest
+import dz.hirz.shared.api.TrackerClaimDto
+import dz.hirz.shared.api.TrackerClaimRequest
+import dz.hirz.shared.devices.DeviceModel
 import dz.hirz.shared.api.SourceStatusDto
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -165,6 +168,12 @@ class HirzClient(
         member { t -> http.put("$base/v1/circles/$circleId/code-word") { auth(t); json(CodeWordDto(word)) } }.done()
     suspend fun emergencyNumbers(circleId: String, country: String = "DZ"): List<EmergencyNumberDto> =
         member { t -> http.get("$base/v1/emergency-numbers") { auth(t); parameter("country", country); parameter("circleId", circleId) } }.ok()
+    suspend fun deviceModels(): List<DeviceModel> = member { t -> http.get("$base/v1/device-models") { auth(t) } }.ok()
+    suspend fun claimTracker(assetId: String, req: TrackerClaimRequest): TrackerClaimDto =
+        member { t -> http.post("$base/v1/assets/$assetId/trackers") { auth(t); json(req) } }.ok()
+    suspend fun trackerClaim(claimId: String): TrackerClaimDto = member { t -> http.get("$base/v1/trackers/claims/$claimId") { auth(t) } }.ok()
+    suspend fun releaseTracker(assetId: String, sourceId: String) =
+        member { t -> http.delete("$base/v1/assets/$assetId/trackers/$sourceId") { auth(t) } }.done()
     suspend fun gatewayCode(circleId: String): GatewayCodeDto = member { t -> http.post("$base/v1/circles/$circleId/gateways") { auth(t) } }.ok()
     suspend fun addContact(circleId: String, name: String, phone: String, lang: String): MemberDto =
         member { t -> http.post("$base/v1/circles/$circleId/contacts") { auth(t); json(ContactRequest(name, phone, lang)) } }.ok()

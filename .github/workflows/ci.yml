@@ -73,13 +73,13 @@ jobs:
         with:
           node-version: '22'
       - name: Guard tests
-        run: node --test "infra/traccar/tools/*.test.mjs" "tools/forbidden-claims/*.test.mjs" "tools/latency/*.test.mjs"
+        run: node --test "infra/traccar/tools/*.test.mjs" "infra/staging/*.test.mjs" "tools/forbidden-claims/*.test.mjs" "tools/latency/*.test.mjs"
       - name: Traccar template
         run: node infra/traccar/tools/check-config.mjs --template infra/traccar/hirz.template.xml
       - name: Forbidden claims in app strings
         run: node tools/forbidden-claims/check.mjs "app/src/**/strings.xml"
 
-  traccar-integration:
+  e2e:
     needs: gradle
     runs-on: ubuntu-latest
     steps:
@@ -89,39 +89,93 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
-      - name: Render CI Traccar config
-        # CI-only override: web.address must be reachable from the runner through Docker port mapping.
+      - name: Package Hirz Core
+        run: ./gradlew --no-daemon :server:installDist
+      - name: Render CI secrets and the Traccar config
+        # CI-only: Traccar binds 0.0.0.0 inside Docker and its port is mapped for the round-trip test.
         run: |
-          password=$(openssl rand -hex 16)
-          sed -e "s/\${HIRZ_TRACCAR_DB_PASSWORD}/$password/" \
+          secret=$(openssl rand -hex 32)
+          {
+            echo "E2E_TRACCAR_SECRET=$secret"
+            echo "E2E_DATA_KEY=$(openssl rand -base64 32)"
+            echo "E2E_TRACCAR_USER=admin@hirz.test"
+            echo "E2E_TRACCAR_PASSWORD=$(openssl rand -hex 16)"
+            echo "E2E_TRACCAR_XML=$RUNNER_TEMP/traccar.xml"
+          } >> "$GITHUB_ENV"
+          sed -e "s/\${HIRZ_TRACCAR_DB_PASSWORD}/$(openssl rand -hex 16)/" -e "s/\${HIRZ_TRACCAR_SECRET}/$secret/g" \
               -e "s#<entry key='web.address'>127.0.0.1</entry>#<entry key='web.address'>0.0.0.0</entry>#" \
               infra/traccar/hirz.template.xml > "$RUNNER_TEMP/traccar.xml"
-          grep -q "0.0.0.0" "$RUNNER_TEMP/traccar.xml"
-          ! grep -q '\${' "$RUNNER_TEMP/traccar.xml"
-      - name: Start Traccar 6.16.0
+          node infra/traccar/tools/check-config.mjs --container "$RUNNER_TEMP/traccar.xml"
+      - name: Start PostGIS and Traccar 6.16.0, then Traccar's first (admin) account
         run: |
-          docker run -d --name traccar -p 8082:8082 -p 5023:5023 -p 5055:5055 \
-            -v "$RUNNER_TEMP/traccar.xml:/opt/traccar/conf/traccar.xml:ro" traccar/traccar:6.16.0
-          for i in $(seq 1 120); do
-            if curl -fsS http://localhost:8082/api/server > /dev/null; then echo "Traccar up after ${i}s"; exit 0; fi
+          docker compose -f infra/ci/compose.e2e.yml up -d postgres traccar
+          for i in $(seq 1 120); do curl -fsS http://localhost:8082/api/server > /dev/null && break; sleep 1; done
+          curl -fsS -X POST http://localhost:8082/api/users -H 'Content-Type: application/json' \
+            -d "{\"name\":\"admin\",\"email\":\"$E2E_TRACCAR_USER\",\"password\":\"$E2E_TRACCAR_PASSWORD\"}" > /dev/null
+      - name: Start Core
+        run: |
+          docker compose -f infra/ci/compose.e2e.yml up -d --build core
+          for i in $(seq 1 90); do
+            if curl -fsS http://localhost:8080/health > /dev/null; then echo "Core up after ${i}s"; exit 0; fi
             sleep 1
           done
-          docker logs traccar
+          docker compose -f infra/ci/compose.e2e.yml logs core | tail -80
           exit 1
-      - name: Round-trip a simulated GT06 fix
+      - name: End-to-end tests (simulated GT06 → Traccar → Core)
         env:
           TRACCAR_URL: http://localhost:8082
+          CORE_URL: http://localhost:8080
+          TRACCAR_USER: ${{ env.E2E_TRACCAR_USER }}
+          TRACCAR_PASSWORD: ${{ env.E2E_TRACCAR_PASSWORD }}
           TRACCAR_GT06_HOST: localhost
           TRACCAR_GT06_PORT: '5023'
         run: ./gradlew --no-daemon :sim:integrationTest
       - name: Integration tests really ran (a skip must fail)
         run: |
-          report=sim/build/test-results/integrationTest/TEST-dz.hirz.sim.TraccarRoundTripIT.xml
-          cat "$report" | head -3
-          grep -q 'tests="2"' "$report"
-          grep -q 'skipped="0"' "$report"
-          grep -q 'failures="0"' "$report"
-          grep -q 'errors="0"' "$report"
-      - name: Traccar logs
+          for t in TraccarRoundTripIT:2 EndToEndIT:3; do
+            report="sim/build/test-results/integrationTest/TEST-dz.hirz.sim.${t%%:*}.xml"
+            head -3 "$report"
+            grep -q "tests=\"${t##*:}\"" "$report"
+            grep -q 'skipped="0"' "$report"
+            grep -q 'failures="0"' "$report"
+            grep -q 'errors="0"' "$report"
+          done
+      - name: Stack logs
         if: always()
-        run: docker logs traccar 2>&1 | tail -80
+        run: |
+          docker compose -f infra/ci/compose.e2e.yml logs core 2>&1 | tail -120
+          docker compose -f infra/ci/compose.e2e.yml logs traccar 2>&1 | tail -80
+
+  image:
+    needs: gradle
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Package Hirz Core
+        run: ./gradlew --no-daemon :server:installDist
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        if: github.ref == 'refs/heads/main'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Built for both architectures on every push (staging is an ARM VM); pushed from main only.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: server/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.ref == 'refs/heads/main' }}
+          tags: |
+            ghcr.io/toufikben/hirz-core:${{ github.sha }}
+            ghcr.io/toufikben/hirz-core:main

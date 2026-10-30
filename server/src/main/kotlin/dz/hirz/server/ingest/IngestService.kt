@@ -125,8 +125,9 @@ class IngestService(
 
         val inserted = c.prepareStatement(
             """INSERT INTO positions (source_id, asset_id, client_id, fix_time, server_time, geog, accuracy_m, accuracy_estimated,
-                                      fix_source, speed_kmh, heading, battery, charging, alarms, quality, checkin_reply)
-               VALUES (?, ?, ?, ?, ?, CASE WHEN ?::text IS NULL THEN NULL ELSE ST_GeogFromText(?) END, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                      fix_source, speed_kmh, heading, battery, charging, alarms, quality, checkin_reply,
+                                      external_power, ignition, motion)
+               VALUES (?, ?, ?, ?, ?, CASE WHEN ?::text IS NULL THEN NULL ELSE ST_GeogFromText(?) END, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT (source_id, client_id) DO NOTHING RETURNING id""",
         ).apply {
             val wkt = s.position?.let { "SRID=4326;POINT(${it.lon} ${it.lat})" }
@@ -138,6 +139,7 @@ class IngestService(
             setArray(15, c.createArrayOf("text", alarms.map { apiJson.encodeToString(AlarmKind.serializer(), it).trim('"') }.toTypedArray()))
             setString(16, quality)
             setString(17, reply?.let { apiJson.encodeToString(CheckInReply.serializer(), it).trim('"') })
+            setObject(18, s.externalPower); setObject(19, s.ignition); setObject(20, s.motion)
         }.executeQuery().use { if (it.next()) it.getLong(1) else null }
         if (inserted == null) return duplicate(c, p, s, fixTime, alarms, reply)
 
@@ -158,8 +160,8 @@ class IngestService(
             fixTimeMs = s.fixTimeMs, serverTimeMs = now.toEpochMilli(),
             position = s.position?.let { Position(it.lat, it.lon, accuracy, s.accuracyM == null) },
             fixSource = s.fixSource, speedKmh = s.speedKmh, heading = s.heading, heartbeat = s.heartbeat,
-            battery = s.battery, charging = s.charging, externalPower = null,
-            ignition = null, motion = null, tilt = null, alarms = alarms,
+            battery = s.battery, charging = s.charging, externalPower = s.externalPower,
+            ignition = s.ignition, motion = s.motion, tilt = null, alarms = alarms,
         )
         val isLatest = fixTime != null && (previousLastFix == null || !fixTime.isBefore(previousLastFix))
         // Any reply (or the cancel PIN) answers the asset's latest open check-in; a duress PIN never does.
@@ -188,7 +190,7 @@ class IngestService(
             sourceId = p.sourceId.toString(), assetId = p.assetId.toString(), fixTimeMs = s.fixTimeMs, serverTimeMs = row.serverMs,
             position = s.position?.let { Position(it.lat, it.lon, row.accuracy, row.estimated) }, fixSource = s.fixSource,
             speedKmh = s.speedKmh, heading = s.heading, heartbeat = s.heartbeat, battery = s.battery, charging = s.charging,
-            externalPower = null, ignition = null, motion = null, tilt = null, alarms = alarms,
+            externalPower = s.externalPower, ignition = s.ignition, motion = s.motion, tilt = null, alarms = alarms,
         )
         val isLatest = fixTime != null && (lastFix == null || !fixTime.isBefore(lastFix))
         return Stored(row.id, duplicate = true, IngestedSignal(s.clientId, p.sourceId, p.assetId, p.circleId, signal, row.quality, reply, isLatest))

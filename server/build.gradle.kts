@@ -26,10 +26,13 @@ dependencies {
     implementation(libs.ktor.server.status.pages)
     implementation(libs.ktor.server.websockets)
     implementation(libs.firebase.admin)
+    implementation(libs.ktor.client.core)
+    implementation(libs.ktor.client.cio)
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.kotlin.test.junit5)
     testImplementation(libs.ktor.client.content.negotiation)
     testImplementation(libs.ktor.client.websockets)
+    testImplementation(libs.ktor.client.mock)
 }
 
 tasks.test {

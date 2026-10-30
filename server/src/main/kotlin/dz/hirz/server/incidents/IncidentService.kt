@@ -6,6 +6,8 @@ import dz.hirz.server.circles.audit
 import dz.hirz.server.ApiException
 import dz.hirz.server.badRequest
 import dz.hirz.server.conflict
+import dz.hirz.server.custody.AssetAccess
+import dz.hirz.server.custody.SHARED_ASSETS_SQL
 import dz.hirz.server.gone
 import dz.hirz.server.db.toList
 import dz.hirz.server.db.tx
@@ -128,10 +130,11 @@ class IncidentService(
                 """SELECT cm.member_id, pt.token FROM circle_members cm
                    LEFT JOIN push_tokens pt ON pt.member_id = cm.member_id
                      AND pt.token NOT IN (SELECT push_token FROM sources WHERE asset_id = ? AND push_token IS NOT NULL)
-                   WHERE cm.circle_id = ? AND cm.role = ANY(?) AND (cm.expires_at IS NULL OR cm.expires_at > ?)
+                   WHERE cm.circle_id = ANY(?) AND cm.role = ANY(?) AND (cm.expires_at IS NULL OR cm.expires_at > ?)
                    ORDER BY cm.priority""",
             ).apply {
-                setObject(1, f.assetId); setObject(2, f.circleId)
+                // Shared custody: the other circle's members are alerted too (design §12.1).
+                setObject(1, f.assetId); setArray(2, c.createArrayOf("uuid", AssetAccess.circlesSeeing(c, f.assetId).toTypedArray()))
                 setArray(3, c.createArrayOf("text", RECIPIENT_ROLES.toTypedArray())); setTimestamp(4, now.ts())
             }.executeQuery().toList { Recipient(it.getObject(1, UUID::class.java), it.getString(2)) }
             name to list
@@ -175,19 +178,20 @@ class IncidentService(
     fun list(circleId: UUID, memberId: UUID, openOnly: Boolean): List<IncidentDto> = db.connection.use { c ->
         circles.requireRole(c, circleId, memberId)
         c.prepareStatement(
-            "SELECT id FROM incidents WHERE circle_id = ? ${if (openOnly) "AND state = 'open'" else ""} ORDER BY opened_at DESC LIMIT 200",
-        ).apply { setObject(1, circleId) }.executeQuery().toList { it.getObject(1, UUID::class.java) }.map { load(c, it) }
+            """SELECT id FROM incidents WHERE (circle_id = ? OR asset_id IN ($SHARED_ASSETS_SQL))
+               ${if (openOnly) "AND state = 'open'" else ""} ORDER BY opened_at DESC LIMIT 200""",
+        ).apply { setObject(1, circleId); setArray(2, c.createArrayOf("uuid", arrayOf(circleId))) }.executeQuery().toList { it.getObject(1, UUID::class.java) }.map { load(c, it) }
     }
 
     fun get(incidentId: UUID, memberId: UUID): IncidentDto = db.connection.use { c ->
-        circles.requireRole(c, circleOf(c, incidentId), memberId)
+        requireSeeing(c, incidentId, memberId, Role.entries.toSet())
         load(c, incidentId)
     }
 
     fun receipt(incidentId: UUID, memberId: UUID, state: ReceiptState) {
         val now = clock.instant()
         db.tx { c ->
-            circles.requireRole(c, circleOf(c, incidentId), memberId)
+            requireSeeing(c, incidentId, memberId, Role.entries.toSet())
             val column = if (state == ReceiptState.DELIVERED) "delivered_at" else "opened_at"
             c.prepareStatement("UPDATE deliveries SET $column = COALESCE($column, ?) WHERE incident_id = ? AND member_id = ?").apply {
                 setTimestamp(1, now.ts()); setObject(2, incidentId); setObject(3, memberId)
@@ -199,7 +203,7 @@ class IncidentService(
 
     fun claim(incidentId: UUID, memberId: UUID) {
         var won = false
-        mutate(incidentId, memberId, CLAIMERS) { c, now ->
+        mutate(incidentId, memberId, CLAIMERS, shared = true) { c, now ->
             val claimed = c.prepareStatement(
                 "UPDATE incidents SET owner_member = ?, claimed_at = ? WHERE id = ? AND state = 'open' AND owner_member IS NULL",
             ).apply { setObject(1, memberId); setTimestamp(2, now.ts()); setObject(3, incidentId) }.executeUpdate()
@@ -226,7 +230,7 @@ class IncidentService(
     }
 
     fun contest(incidentId: UUID, memberId: UUID) {
-        mutate(incidentId, memberId) { c, now ->
+        mutate(incidentId, memberId, shared = true) { c, now ->
             c.prepareStatement("UPDATE incidents SET owner_member = NULL, claimed_at = NULL WHERE id = ? AND state = 'open'")
                 .apply { setObject(1, incidentId) }.executeUpdate()
             event(c, incidentId, "contested", memberId, "{}", now)
@@ -451,10 +455,17 @@ class IncidentService(
 
     // ---- helpers ------------------------------------------------------------------------------------------------
 
-    private fun mutate(incidentId: UUID, memberId: UUID, roles: Set<Role> = Role.entries.toSet(), block: (Connection, java.time.Instant) -> Unit) {
+    /**
+     * [shared]: members of a circle the asset is shared with may act too (claim, contest). Everything else stays with the
+     * owning circle's members.
+     */
+    private fun mutate(
+        incidentId: UUID, memberId: UUID, roles: Set<Role> = Role.entries.toSet(), shared: Boolean = false,
+        block: (Connection, java.time.Instant) -> Unit,
+    ) {
         val circleId = db.tx { c ->
             val circleId = circleOf(c, incidentId)
-            circles.requireRole(c, circleId, memberId, roles)
+            if (shared) requireSeeing(c, incidentId, memberId, roles) else circles.requireRole(c, circleId, memberId, roles)
             block(c, clock.instant())
             circleId
         }
@@ -469,6 +480,14 @@ class IncidentService(
         }
         notifyChanged(circleId, incidentId)
         return result
+    }
+
+    /** The member holds one of [roles] in a circle that sees the incident's asset (own or shared custody); else 404. */
+    private fun requireSeeing(c: Connection, incidentId: UUID, memberId: UUID, roles: Set<Role>) {
+        val assetId = c.prepareStatement("SELECT asset_id FROM incidents WHERE id = ?").apply { setObject(1, incidentId) }
+            .executeQuery().use { if (it.next()) it.getObject(1, UUID::class.java) else notFound() }
+        val ok = AssetAccess.circlesSeeing(c, assetId).any { circle -> runCatching { circles.requireRole(c, circle, memberId, roles) }.isSuccess }
+        if (!ok) notFound()
     }
 
     private fun circleOf(c: Connection, incidentId: UUID): UUID =

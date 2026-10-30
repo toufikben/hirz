@@ -279,11 +279,13 @@ private fun CircleTab(env: AppEnvironment, client: HirzClient, circle: CircleDto
     var assetType by remember { mutableStateOf(AssetType.CHILD) }
     var cancelPin by remember { mutableStateOf("") }
     var duressPin by remember { mutableStateOf("") }
+    var wizardFor by remember { mutableStateOf<String?>(null) }
     suspend fun reload() {
         runCatching { client.members(circle.id) }.onSuccess { members = it }
         runCatching { client.assets(circle.id) }.onSuccess { assets = it }
     }
     LaunchedEffect(circle.id) { reload() }
+    wizardFor?.let { id -> TrackerWizard(client, id) { wizardFor = null; scope.launch { reload() } } }
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item { Text(stringResource(Res.string.members), style = MaterialTheme.typography.titleMedium) }
         items(members, key = { it.memberId }) { m -> Text("${m.priority}. ${m.displayName ?: m.memberId.take(8)} — ${m.role.name.lowercase()}") }
@@ -309,6 +311,9 @@ private fun CircleTab(env: AppEnvironment, client: HirzClient, circle: CircleDto
                         }) { Text(stringResource(Res.string.pair_device)) }
                         OutlinedButton({ scope.launch { runCatching { client.checkIn(a.id) } } }) { Text(stringResource(Res.string.ask_checkin)) }
                         RingButton(client, a.id)
+                        if (circle.myRole == Role.OWNER || circle.myRole == Role.GUARDIAN) OutlinedButton({ wizardFor = a.id }) {
+                            Text(when (currentLang()) { "ar" -> "جهاز تتبع"; "fr" -> "Traceur"; else -> "Tracker" })
+                        }
                     }
                     pairing?.takeIf { it.first == a.id }?.let { Text(stringResource(Res.string.pairing_code, it.second), style = MaterialTheme.typography.titleLarge) }
                 }

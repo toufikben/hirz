@@ -19,6 +19,13 @@ data class Deps(
     val dataKey: ByteArray,
     /** Where public share links point, e.g. https://hirz.example; no trailing slash needed. */
     val publicBaseUrl: String = "http://localhost:8080",
+    /** Shared secret Traccar's forwarders send (HIRZ_TRACCAR_SECRET); null refuses every forward. */
+    val traccarSecret: String? = null,
+    val traccar: dz.hirz.server.traccar.TraccarAdmin = dz.hirz.server.traccar.TraccarAdmin.NONE,
+    /** Public host trackers are told to report to (HIRZ_DEVICE_HOST). */
+    val deviceHost: String = "localhost",
+    /** Range of the claim's challenge interval in seconds (HIRZ_CLAIM_PROOF_S). */
+    val claimProofS: IntRange = 45..95,
     val startJobs: Boolean = true,
     /** Extra observers of accepted signals (tests); the rules engine and live hub are wired inside the module. */
     val extraIngestListeners: List<IngestListener> = emptyList(),

@@ -1,5 +1,8 @@
 package dz.hirz.server
 
+import dz.hirz.server.traccar.TrackerService
+import dz.hirz.server.traccar.traccarForwardRoutes
+import dz.hirz.server.traccar.trackerRoutes
 import dz.hirz.server.custody.CustodyService
 import dz.hirz.server.custody.custodyRoutes
 import dz.hirz.server.sms.GatewayService
@@ -102,12 +105,20 @@ fun Application.module(deps: Deps) {
     val recorder = FindingRecorder(deps.db, deps.clock, incidents)
     val engine = RulesEngine(deps.db, deps.rules, recorder)
     val ingest = IngestService(deps.db, deps.clock, deps.rules, listOf(engine, hub) + deps.extraIngestListeners)
+    val trackers = TrackerService(deps.db, deps.clock, circles, deps.traccar, deps.deviceHost, deps.claimProofS)
+    if (deps.startJobs) dz.hirz.server.traccar.TraccarSync(deps.db, deps.clock, deps.traccar, ingest).start(this)
     if (deps.startJobs) {
         SilenceScanner(deps.db, deps.clock, deps.rules, recorder).start(this)
         dz.hirz.server.rules.CheckInScanner(deps.db, deps.clock, recorder).start(this)
         dz.hirz.server.sms.GatewaySilenceScanner(deps.db, deps.clock, deps.notifier).start(this)
         RetentionPurge(deps.db, deps.clock).start(this)
         escalation.start(this)
+        launch {
+            while (isActive) {
+                runCatching { trackers.expireClaims() }
+                delay(60_000)
+            }
+        }
         launch {
             while (isActive) {
                 runCatching { incidents.expireCloseRequests() }
@@ -120,6 +131,7 @@ fun Application.module(deps: Deps) {
         pairRoutes(assets)
         publicShareRoutes(shares)
         gatewayPairRoutes(gateways)
+        traccarForwardRoutes(deps.traccarSecret, trackers, ingest)
         gatewayRoutes(gateways)
         liveRoutes(deps, hub, incidents)
         authenticate(MEMBER_AUTH) {
@@ -136,6 +148,7 @@ fun Application.module(deps: Deps) {
             shareRoutes(shares)
             gatewayMemberRoutes(gateways)
             custodyRoutes(custody)
+            trackerRoutes(trackers)
             historyRoutes(deps, circles)
         }
         authenticate(SOURCE_AUTH) {
@@ -146,19 +159,34 @@ fun Application.module(deps: Deps) {
     }
 }
 
+/** The Traccar admin client when all three settings are present; none of them means no Traccar (local runs). */
+private fun traccarAdmin(cfg: AppConfig): dz.hirz.server.traccar.TraccarAdmin {
+    val parts = listOf(cfg.traccarUrl, cfg.traccarUser, cfg.traccarPassword)
+    if (parts.all { it == null }) return dz.hirz.server.traccar.TraccarAdmin.NONE
+    require(parts.none { it.isNullOrBlank() }) { "HIRZ_TRACCAR_URL, HIRZ_TRACCAR_USER and HIRZ_TRACCAR_PASSWORD go together" }
+    return dz.hirz.server.traccar.TraccarHttpAdmin(cfg.traccarUrl!!, cfg.traccarUser!!, cfg.traccarPassword!!, io.ktor.client.engine.cio.CIO.create())
+}
+
 fun main() {
     val cfg = AppConfig.fromEnv()
-    val firebase = FirebaseTokenVerifier.firebaseApp(
+    // The end-to-end CI stack has no Firebase: `test.<uid>` tokens and logged pushes, refused outside HIRZ_ENV=ci.
+    val testAuth = System.getenv("HIRZ_TEST_AUTH") == "true"
+    if (testAuth) require(System.getenv("HIRZ_ENV") == "ci") { "HIRZ_TEST_AUTH is allowed only with HIRZ_ENV=ci" }
+    val firebase = if (testAuth) null else FirebaseTokenVerifier.firebaseApp(
         cfg.firebaseProjectId ?: error("HIRZ_FIREBASE_PROJECT_ID is required: members sign in with Firebase"),
     )
     val deps = Deps(
         db = connectDatabase(cfg),
-        verifier = FirebaseTokenVerifier(firebase),
-        notifier = FcmNotifier(firebase),
+        verifier = firebase?.let { FirebaseTokenVerifier(it) } ?: dz.hirz.server.auth.CiTokenVerifier,
+        notifier = firebase?.let { FcmNotifier(it) } ?: dz.hirz.server.notify.LogNotifier,
         clock = Clock.systemUTC(),
         rules = RuleConfig.DEFAULT,
         dataKey = cfg.dataKey,
         publicBaseUrl = cfg.publicBaseUrl,
+        traccarSecret = cfg.traccarSecret,
+        traccar = traccarAdmin(cfg),
+        deviceHost = cfg.deviceHost,
+        claimProofS = cfg.claimProofS,
     )
     val port = System.getenv("PORT")?.toIntOrNull() ?: 8080
     embeddedServer(Netty, port = port) { module(deps) }.start(wait = true)

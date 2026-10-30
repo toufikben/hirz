@@ -1,0 +1,9 @@
+{
+  "position": {
+    "id": 2001, "deviceId": 9, "protocol": "h02",
+    "serverTime": "2026-11-01T09:00:03.000+00:00", "fixTime": "2026-11-01T09:00:00.000+00:00",
+    "outdated": false, "valid": true, "latitude": 36.70, "longitude": 3.10, "speed": 0.0, "course": 180.0, "accuracy": 0.0,
+    "attributes": { "alarm": "powerCut", "power": 0.0, "ignition": false }
+  },
+  "device": { "id": 9, "uniqueId": "4209876543" }
+}

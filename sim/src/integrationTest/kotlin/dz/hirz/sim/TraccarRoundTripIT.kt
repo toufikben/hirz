@@ -78,7 +78,11 @@ class TraccarRoundTripIT {
     private val api = TraccarApi(baseUrl)
 
     @BeforeTest
-    fun session() = api.ensureSession("ci@hirz.test", "ci-${UUID.nameUUIDFromBytes(baseUrl.toByteArray())}")
+    // In the e2e stack an admin already exists and self-registration is closed: use it when given.
+    fun session() = api.ensureSession(
+        System.getenv("TRACCAR_USER") ?: "ci@hirz.test",
+        System.getenv("TRACCAR_PASSWORD") ?: "ci-${UUID.nameUUIDFromBytes(baseUrl.toByteArray())}",
+    )
 
     @Test
     fun gt06FixAppearsInTraccar() {
