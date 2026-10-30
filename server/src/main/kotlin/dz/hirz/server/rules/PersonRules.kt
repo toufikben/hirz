@@ -21,8 +21,14 @@ object PersonRules {
         if (st.lastFixMs != null && f.fixMs <= st.lastFixMs) return st to false
         if (f.accuracyM > cfg.runAwayAccuracyMaxM) return st to false
         if (f.homeDistanceM <= 0.0) return RunAwayState(f.fixMs, f.homeDistanceM) to false
-        val away = st.lastHomeDistanceM != null && f.homeDistanceM - st.lastHomeDistanceM >= cfg.runAwayMinStepM
-        val fast = (f.speedKmh ?: 0.0) >= cfg.runAwayKmh
+        val step = st.lastHomeDistanceM?.let { f.homeDistanceM - it }
+        val dtS = st.lastFixMs?.let { (f.fixMs - it) / 1000.0 }
+        // Half of what a run covers between these two fixes, between 5 m (fixes every few seconds) and the configured step.
+        val minStep = dtS?.let { (0.5 * cfg.runAwayKmh / 3.6 * it).coerceIn(5.0, cfg.runAwayMinStepM) } ?: cfg.runAwayMinStepM
+        val away = step != null && step >= minStep
+        // Many trackers send no speed: derive it from the step away.
+        val speed = f.speedKmh ?: if (step != null && dtS != null && dtS > 0) step / dtS * 3.6 else 0.0
+        val fast = speed >= cfg.runAwayKmh
         val count = if (away && fast) st.count + 1 else 0
         val fire = !st.raised && count >= cfg.runAwayFixes
         return RunAwayState(f.fixMs, f.homeDistanceM, count, st.raised || fire) to fire

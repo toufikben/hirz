@@ -101,9 +101,10 @@ private fun CompanionHome(env: AppEnvironment, client: dz.hirz.app.api.HirzClien
     var pinDone by remember { mutableStateOf(false) }
     var lastBeat by remember { mutableStateOf<Long?>(null) }
     var now by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
-    var assetType by remember { mutableStateOf<dz.hirz.shared.asset.AssetType?>(null) }
-    LaunchedEffect(Unit) { assetType = env.companion.assetType(client) }
-    if (SimpleMode.isSimple(assetType)) { SimpleHome(env); return }
+    var status by remember { mutableStateOf<dz.hirz.shared.api.SourceStatusDto?>(null) }
+    LaunchedEffect(Unit) { status = env.companion.status(client) }
+    if (status?.pausedReason == "age_18") { ConsentAt18(env, client) { status = status?.copy(pausedReason = null) }; return }
+    if (SimpleMode.isSimple(status?.assetType)) { SimpleHome(env, info); return }
     LaunchedEffect(Unit) {
         env.companion.startSharing()
         while (true) {
@@ -152,8 +153,28 @@ private fun CompanionHome(env: AppEnvironment, client: dz.hirz.app.api.HirzClien
  * The elder's screen (design §12.4): a very large SOS held for 2 seconds, an "I'm fine" button, both answered aloud.
  * Text 24 sp or more, touch targets far above 72 dp.
  */
+/** At 18 sharing pauses (design §12.5.6): only the person, on this phone, can turn it back on. SOS keeps working. */
 @Composable
-private fun SimpleHome(env: AppEnvironment) {
+private fun ConsentAt18(env: AppEnvironment, client: dz.hirz.app.api.HirzClient, done: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val lang = currentLang()
+    var failed by remember { mutableStateOf(false) }
+    Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Text(when (lang) {
+            "fr" -> "Vous avez 18 ans. Le partage de votre position est en pause. Votre famille ne le voit plus tant que vous n'acceptez pas. Le bouton SOS fonctionne toujours."
+            "en" -> "You are 18. Sharing your location is paused; your family no longer sees it unless you agree. The SOS button still works."
+            else -> "بلغت 18 سنة. مشاركة موقعك متوقفة، ولن تراه عائلتك إلا إذا وافقت. زر الاستغاثة يعمل دائمًا."
+        }, style = MaterialTheme.typography.titleMedium)
+        Button({ scope.launch { if (env.companion.consent(client)) done() else failed = true } }) {
+            Text(when (lang) { "fr" -> "J'accepte de partager"; "en" -> "I agree to share"; else -> "أوافق على المشاركة" })
+        }
+        OutlinedButton({ scope.launch { env.companion.sos() } }) { Text(stringResource(Res.string.sos_hold)) }
+        if (failed) Text(stringResource(Res.string.pair_failed), color = MaterialTheme.colorScheme.error)
+    }
+}
+
+@Composable
+private fun SimpleHome(env: AppEnvironment, info: dz.hirz.app.PairedInfo) {
     val scope = rememberCoroutineScope()
     val lang = currentLang()
     var sent by remember { mutableStateOf(false) }
@@ -186,6 +207,16 @@ private fun SimpleHome(env: AppEnvironment) {
             Text(if (fine) when (lang) { "fr" -> "Envoyé ✓"; "en" -> "Sent ✓"; else -> "أُرسل ✓" }
                 else when (lang) { "fr" -> "Je vais bien"; "en" -> "I'm fine"; else -> "أنا بخير" }, fontSize = 28.sp)
         }
+        // Small, below the two big buttons: the permissions the family sets up once, and the PIN for a coerced elder.
+        CompanionPermissionsCard()
+        if (info.hasPin) {
+            var pin by remember { mutableStateOf("") }
+            OutlinedTextField(pin, { pin = it.filter(Char::isDigit).take(8) }, label = { Text(stringResource(Res.string.enter_pin)) },
+                singleLine = true, visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword))
+            Button({ scope.launch { env.companion.submitPin(pin); pin = "" } }, enabled = pin.length >= 4) { Text(stringResource(Res.string.save)) }
+        }
+        OutlinedButton({ env.companion.openBatterySettings() }) { Text(stringResource(Res.string.battery_settings)) }
     }
 }
 

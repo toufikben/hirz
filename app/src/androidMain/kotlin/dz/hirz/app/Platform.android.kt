@@ -170,8 +170,11 @@ class AndroidCompanionPort(private val activity: ComponentActivity) : CompanionP
     override suspend fun lastHeartbeatMs(client: HirzClient): Long? =
         vault.credentials()?.let { runCatching { client.sourceMe(it.sourceToken).lastHeartbeatAtMs }.getOrNull() }
 
-    override suspend fun assetType(client: HirzClient): dz.hirz.shared.asset.AssetType? =
-        vault.credentials()?.let { runCatching { client.sourceMe(it.sourceToken).assetType }.getOrNull() }
+    override suspend fun status(client: HirzClient): dz.hirz.shared.api.SourceStatusDto? =
+        vault.credentials()?.let { runCatching { client.sourceMe(it.sourceToken) }.getOrNull() }
+
+    override suspend fun consent(client: HirzClient): Boolean =
+        vault.credentials()?.let { runCatching { client.sourceConsent(it.sourceToken) }.isSuccess } ?: false
 
     override suspend fun imFine() {
         CompanionEngine.sendNow(activity.applicationContext, CompanionSignals.checkIn(dz.hirz.shared.api.CheckInReply.OK))

@@ -71,20 +71,26 @@ class ProfileService(private val db: DataSource, private val circles: CircleServ
 
     fun get(assetId: UUID, memberId: UUID): ProfileDto = db.tx { c ->
         val row = row(c, assetId) ?: notFound()
-        circles.requireRole(c, row.circleId, memberId)
+        // Not contacts or temporary members (a babysitter): the profile names a condition.
+        circles.requireRole(c, row.circleId, memberId, setOf(Role.OWNER, Role.GUARDIAN, Role.VIEWER))
         dto(row, row.profile())
     }
 
     fun update(assetId: UUID, memberId: UUID, req: ProfileUpdate): ProfileDto = db.tx { c ->
+        c.prepareStatement("SELECT 1 FROM assets WHERE id = ? FOR UPDATE").apply { setObject(1, assetId) }.executeQuery().close()
         val row = row(c, assetId) ?: notFound()
         val role = circles.requireRole(c, row.circleId, memberId, setOf(Role.OWNER, Role.GUARDIAN))
         val owner = role == Role.OWNER
-        if (!owner && (req.condition != null || req.birthDate != null || req.conditionOnSheet != null)) throw ApiException(HttpStatusCode.Forbidden, "owner_only")
+        // Windows, exceptions and the curfew can silence NIGHT_EXIT or CURFEW as surely as a switch: the owner's call.
+        val ownerOnly = req.condition != null || req.birthDate != null || req.conditionOnSheet != null ||
+            req.nightWindow != null || req.nightExceptions != null || req.curfewMinute != null
+        if (!owner && ownerOnly) throw ApiException(HttpStatusCode.Forbidden, "owner_only")
         val birth = req.birthDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() ?: unprocessable("bad_birth_date") }
         val condition = req.condition ?: row.condition
         val overrides = req.overrides ?: row.overrides
         val before = row.profile()
-        if (req.curfewMinute != null && req.curfewMinute !in 0..1439) unprocessable("bad_curfew")
+        // -1 clears the curfew; a curfew between 06:00 and noon would be due all day.
+        if (req.curfewMinute != null && req.curfewMinute != -1 && (req.curfewMinute !in 0..1439 || req.curfewMinute in 360 until 720)) unprocessable("bad_curfew")
         val exceptions = req.nightExceptions ?: row.nightExceptions
         exceptions.forEach { e ->
             // An exception must name a place of this circle.
@@ -103,12 +109,12 @@ class ProfileService(private val db: DataSource, private val circles: CircleServ
         c.prepareStatement(
             """UPDATE assets SET condition = ?, profile_overrides = ?::jsonb, night_window = COALESCE(?::jsonb, night_window),
                  birth_date = COALESCE(?, birth_date), condition_on_sheet = COALESCE(?, condition_on_sheet), night_exceptions = ?::jsonb,
-                 curfew_minute = COALESCE(?, curfew_minute) WHERE id = ?""",
+                 curfew_minute = CASE WHEN ?::int = -1 THEN NULL ELSE COALESCE(?::int, curfew_minute) END WHERE id = ?""",
         ).apply {
             setString(1, condition.name.lowercase()); setString(2, apiJson.encodeToString(overridesSer, overrides))
             setString(3, req.nightWindow?.let { apiJson.encodeToString(windowsSer, it) })
             setObject(4, birth); setObject(5, req.conditionOnSheet); setString(6, apiJson.encodeToString(exceptionsSer, exceptions))
-            setObject(7, req.curfewMinute); setObject(8, assetId)
+            setObject(7, req.curfewMinute); setObject(8, req.curfewMinute); setObject(9, assetId)
         }.executeUpdate()
         // The audit records what changed, never the condition itself.
         audit(c, row.circleId, memberId, "profile_changed",

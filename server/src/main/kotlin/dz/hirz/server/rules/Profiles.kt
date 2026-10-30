@@ -37,9 +37,12 @@ object Profiles {
     fun defaults(type: AssetType, condition: Condition): Map<RuleId, Tier> = buildMap {
         put(RuleId.PLACE_EXIT, Tier.P1)
         put(RuleId.FORBIDDEN_ENTRY, Tier.P1)
-        if (type !in PEOPLE) return@buildMap
+        // A pet or a herd at the water or the railway matters too (it was FORBIDDEN_ENTRY before P5).
         put(RuleId.HAZARD_PROXIMITY, Tier.P1)
-        if (type == AssetType.TEEN) { put(RuleId.CURFEW, Tier.P2); put(RuleId.COASTAL_NIGHT, Tier.P1) }
+        if (type !in PEOPLE) return@buildMap
+        // Only where the owner drew a shore place; for any person, not only teens.
+        put(RuleId.COASTAL_NIGHT, Tier.P1)
+        if (type == AssetType.TEEN) put(RuleId.CURFEW, Tier.P2)
         if (type == AssetType.ELDER) put(RuleId.NIGHT_EXIT, Tier.P1)
         when (condition) {
             Condition.DEMENTIA -> { put(RuleId.PAST_ADDRESS_HEADING, Tier.P1); put(RuleId.NIGHT_EXIT, Tier.P1) }

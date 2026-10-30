@@ -30,7 +30,7 @@ fun Route.sourceSelfRoutes(deps: Deps) {
         val s = call.source()
         val dto = deps.db.connection.use { c ->
             c.prepareStatement(
-                """SELECT a.name, ci.name, s.last_heartbeat_at, s.last_fix_at, a.type
+                """SELECT a.name, ci.name, s.last_heartbeat_at, s.last_fix_at, a.type, s.paused_reason
                    FROM sources s JOIN assets a ON a.id = s.asset_id JOIN circles ci ON ci.id = a.circle_id
                    WHERE s.id = ?""",
             ).apply { setObject(1, s.sourceId) }.executeQuery().use { rs ->
@@ -43,6 +43,7 @@ fun Route.sourceSelfRoutes(deps: Deps) {
                     lastHeartbeatAtMs = rs.getTimestamp(3)?.time,
                     lastFixAtMs = rs.getTimestamp(4)?.time,
                     assetType = dz.hirz.server.assets.assetTypeOf(rs.getString(5)),
+                    pausedReason = rs.getString(6),
                 )
             }
         }

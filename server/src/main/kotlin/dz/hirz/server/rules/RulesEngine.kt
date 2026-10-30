@@ -82,8 +82,11 @@ class RulesEngine(
             // One evaluation per asset at a time: overlapping batches never lose a reading (P1 minor #11).
             c.prepareStatement("SELECT pg_advisory_xact_lock(hashtext(?))").apply { setString(1, s.assetId.toString()) }.executeQuery().close()
             val profile = dz.hirz.server.assets.ProfileService.load(c, s.assetId) ?: return@tx
+            // Night windows are judged at the fix's own time: a phone that uploads its 02:00 fixes at 06:10 was out at 02:00.
+            val fixAt = Instant.ofEpochMilli(fixMs)
+            val night = Geometry.isActive(profile.nightWindow, fixAt)
             // Night exit watches home only, at night, for profiles that have it (design §4.3).
-            val nightTier = profile.tierOf(RuleId.NIGHT_EXIT)?.takeIf { Geometry.isActive(profile.nightWindow, at) }
+            val nightTier = profile.tierOf(RuleId.NIGHT_EXIT)?.takeIf { night }
             val places = PlaceService.placesOf(c, s.circleId)
             for (place in places) {
                 val placeId = UUID.fromString(place.id)
@@ -97,20 +100,29 @@ class RulesEngine(
                     else -> cfg.exitReadings
                 }
                 val exitReadings = if (homeAtNight) cfg.nightExitReadings else cfg.exitReadings
-                // A coast place matters only at night; by day the beach is just the beach.
-                val active = if (place.kind == PlaceKind.COAST) Geometry.isActive(profile.nightWindow, at)
-                    else Geometry.isActive(place.activeHours, at) || homeAtNight
+                // A coast place is judged below on its state, not on entry: being there at night is what matters.
+                val active = if (place.kind == PlaceKind.COAST) false else Geometry.isActive(place.activeHours, at) || homeAtNight
                 val result = PlaceBoundary.step(state, place, reading, active, cfg, entryReadings, exitReadings)
                 save(c, s.assetId, placeId, result.state)
+                if (place.kind == PlaceKind.COAST && night && result.state.status == BoundaryStatus.INSIDE) {
+                    profile.tierOf(RuleId.COASTAL_NIGHT)?.let { tier ->
+                        // Once per night and place, whether the teen walked in at 23:00 or was already there at dusk.
+                        val key = "COAST:${place.id}"
+                        val tonight = nightKey(fixAt)
+                        if (PersonState.load(c, s.assetId, key, NightKey.serializer())?.night != tonight) {
+                            PersonState.save(c, s.assetId, key, NightKey.serializer(), NightKey(tonight))
+                            found += Finding(s.assetId, s.circleId, RuleId.COASTAL_NIGHT, tier, listOf(dz.hirz.shared.api.Reason("coastal_night", mapOf("place" to place.name))), at)
+                        }
+                    }
+                }
                 if (place.kind == PlaceKind.HOME && result.state.status == BoundaryStatus.INSIDE) PersonState.clear(c, s.assetId, NIGHT_OUT)
                 result.reason?.let {
                     if (homeAtNight && it.code == "left_place") {
-                        found += nightExit(c, s, place, places, profile, nightTier!!, it, at) ?: return@let
+                        found += nightExit(c, s, place, places, profile, nightTier!!, it, fixAt, at) ?: return@let
                         return@let
                     }
                     val rule = when {
                         place.kind == PlaceKind.HAZARD -> RuleId.HAZARD_PROXIMITY
-                        place.kind == PlaceKind.COAST -> RuleId.COASTAL_NIGHT
                         place.kind.alarmsOnEntry() -> RuleId.FORBIDDEN_ENTRY
                         else -> RuleId.PLACE_EXIT
                     }
@@ -118,10 +130,9 @@ class RulesEngine(
                     profile.tierOf(rule)?.let { tier -> found += Finding(s.assetId, s.circleId, rule, tier, listOf(it), at) }
                 }
             }
-            // Running away from home at speed (autism): measured from home, never from a guardian's phone.
+            // Running away from home at speed (autism): measured from the nearest home, never from a guardian's phone.
             profile.tierOf(RuleId.RUN_AWAY_SPEED)?.let { tier ->
-                val home = places.firstOrNull { it.kind == PlaceKind.HOME } ?: return@let
-                val homeM = Geometry.distanceOutsideM(c, home.shape, point)
+                val homeM = places.filter { it.kind == PlaceKind.HOME }.minOfOrNull { Geometry.distanceOutsideM(c, it.shape, point) } ?: return@let
                 val st = PersonState.load(c, s.assetId, RUN_AWAY, RunAwayState.serializer()) ?: RunAwayState()
                 val (next, fire) = PersonRules.runAway(st, PersonFix(fixMs, homeM, s.signal.speedKmh, accuracy), cfg)
                 PersonState.save(c, s.assetId, RUN_AWAY, RunAwayState.serializer(), next)
@@ -145,14 +156,20 @@ class RulesEngine(
                     ))), at)
                 }
             }
-            // An excepted night outing (Fajr at the mosque) still raises once it goes well past where it was headed.
+            // An excepted night outing (Fajr at the mosque) holds only on the way there and back, and only in its window.
             PersonState.load(c, s.assetId, NIGHT_OUT, NightOut.serializer())?.takeIf { !it.raised }?.let { out ->
                 val home = places.firstOrNull { it.id == out.homeId } ?: return@let
-                val beyond = Geometry.distanceOutsideM(c, home.shape, point)
-                if (accuracy <= cfg.boundaryAccuracyFloorM && beyond > out.limitM) {
+                val target = places.firstOrNull { it.id == out.placeId } ?: return@let
+                if (accuracy > cfg.boundaryAccuracyFloorM) return@let
+                val fromHome = Geometry.distanceOutsideM(c, home.shape, point).coerceAtLeast(0.0)
+                val fromTarget = Geometry.distanceOutsideM(c, target.shape, point)
+                // On the way: inside an ellipse around home and the place, slack on each side. The other direction is not.
+                val offRoute = fromTarget > 0.0 && fromHome + fromTarget > out.homeToTargetM + 2 * cfg.nightExceptionSlackM
+                val overstayed = fromTarget > 0.0 && night && !Geometry.isActive(listOf(out.window), fixAt)
+                if (offRoute || overstayed) {
                     PersonState.save(c, s.assetId, NIGHT_OUT, NightOut.serializer(), out.copy(raised = true))
                     found += Finding(s.assetId, s.circleId, RuleId.NIGHT_EXIT, out.tier, listOf(
-                        dz.hirz.shared.api.Reason("night_exit_beyond", mapOf("place" to out.placeName, "distanceM" to beyond.toInt().toString())),
+                        dz.hirz.shared.api.Reason("night_exit_beyond", mapOf("place" to target.name, "distanceM" to fromHome.toInt().toString())),
                     ), at)
                 }
             }
@@ -166,14 +183,20 @@ class RulesEngine(
      */
     private fun nightExit(
         c: Connection, s: IngestedSignal, home: dz.hirz.shared.api.PlaceDto, places: List<dz.hirz.shared.api.PlaceDto>,
-        profile: Profile, tier: Tier, left: dz.hirz.shared.api.Reason, at: Instant,
+        profile: Profile, tier: Tier, left: dz.hirz.shared.api.Reason, fixAt: Instant, at: Instant,
     ): Finding? {
-        val exception = profile.nightExceptions.firstOrNull { e -> Geometry.isActive(listOf(e.window), at) && places.any { it.id == e.placeId } }
+        val exception = profile.nightExceptions.firstOrNull { e -> Geometry.isActive(listOf(e.window), fixAt) && places.any { it.id == e.placeId } }
             ?: return Finding(s.assetId, s.circleId, RuleId.NIGHT_EXIT, tier, listOf(dz.hirz.shared.api.Reason("night_exit", left.args)), at)
         val target = places.first { it.id == exception.placeId }
-        val limit = Geometry.distanceOutsideM(c, home.shape, centre(target.shape)) + cfg.nightExceptionSlackM
-        PersonState.save(c, s.assetId, NIGHT_OUT, NightOut.serializer(), NightOut(home.id, target.name, limit, tier))
+        val d = Geometry.distanceOutsideM(c, home.shape, centre(target.shape))
+        PersonState.save(c, s.assetId, NIGHT_OUT, NightOut.serializer(), NightOut(home.id, target.id, d, exception.window, tier))
         return null
+    }
+
+    /** The evening a night belongs to, as its local date: before noon it is still last night. */
+    private fun nightKey(at: Instant): String {
+        val local = at.atZone(java.time.ZoneId.of("Africa/Algiers"))
+        return (if (local.hour < 12) local.toLocalDate().minusDays(1) else local.toLocalDate()).toString()
     }
 
     private fun centre(shape: dz.hirz.shared.api.ShapeDto): LatLon = when (shape) {
@@ -207,6 +230,12 @@ private const val NIGHT_OUT = "NIGHT_OUT"
 private const val RUN_AWAY = "RUN_AWAY_SPEED"
 private const val PAST_ADDRESS = "PAST_ADDRESS_HEADING"
 
-/** An excepted night outing in progress: raise if it goes farther from home than [limitM]. */
+/** An excepted night outing in progress: from [homeId] toward [placeId] ([homeToTargetM] apart) during [window]. */
 @kotlinx.serialization.Serializable
-private data class NightOut(val homeId: String, val placeName: String, val limitM: Double, val tier: Tier, val raised: Boolean = false)
+private data class NightOut(
+    val homeId: String, val placeId: String, val homeToTargetM: Double, val window: dz.hirz.shared.api.ActiveWindow, val tier: Tier,
+    val raised: Boolean = false,
+)
+
+@kotlinx.serialization.Serializable
+private data class NightKey(val night: String)

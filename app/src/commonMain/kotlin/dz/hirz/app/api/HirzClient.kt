@@ -185,6 +185,11 @@ class HirzClient(
     suspend fun profile(assetId: String): dz.hirz.shared.api.ProfileDto = member { t -> http.get("$base/v1/assets/$assetId/profile") { auth(t) } }.ok()
     suspend fun setProfile(assetId: String, req: dz.hirz.shared.api.ProfileUpdate): dz.hirz.shared.api.ProfileDto =
         member { t -> http.put("$base/v1/assets/$assetId/profile") { auth(t); json(req) } }.ok()
+    /** The carrier's own consent, from their phone, after sharing paused at 18. */
+    suspend fun sourceConsent(sourceToken: String) {
+        val r = http.post("$base/v1/sources/me/consent") { auth(sourceToken) }
+        if (!r.status.isSuccess()) throw HirzApiException(r.status.value, "consent_failed")
+    }
     suspend fun vehicle(assetId: String): VehicleStateDto = member { t -> http.get("$base/v1/assets/$assetId/vehicle") { auth(t) } }.ok()
     suspend fun setMode(assetId: String, mode: VehicleMode): VehicleStateDto =
         member { t -> http.post("$base/v1/assets/$assetId/mode") { auth(t); json(ModeRequest(mode)) } }.ok()

@@ -20,7 +20,7 @@ class ProfilesTest {
         assertEquals(Tier.P1, tier(p, RuleId.PLACE_EXIT))
         assertEquals(Tier.P1, tier(p, RuleId.FORBIDDEN_ENTRY))
         assertEquals(Tier.P1, tier(p, RuleId.HAZARD_PROXIMITY))
-        listOf(RuleId.NIGHT_EXIT, RuleId.RUN_AWAY_SPEED, RuleId.PAST_ADDRESS_HEADING, RuleId.CURFEW, RuleId.COASTAL_NIGHT)
+        listOf(RuleId.NIGHT_EXIT, RuleId.RUN_AWAY_SPEED, RuleId.PAST_ADDRESS_HEADING, RuleId.CURFEW)
             .forEach { assertNull(tier(p, it), "$it is not a child rule") }
     }
 

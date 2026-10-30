@@ -23,7 +23,8 @@ import java.time.ZoneId
 import java.util.UUID
 import javax.sql.DataSource
 
-private val MINORS = setOf(AssetType.CHILD, AssetType.TEEN, AssetType.SPECIAL_NEEDS)
+/** Special needs is left out: an adult who may not be able to consent must not be cut off by a birthday. */
+private val MINORS = setOf(AssetType.CHILD, AssetType.TEEN)
 
 /**
  * Age transition (design §12.5.6). At 15 the owner is asked, once, to review what the child sees about being tracked.

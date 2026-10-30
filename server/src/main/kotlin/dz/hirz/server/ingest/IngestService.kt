@@ -68,16 +68,17 @@ class IngestService(
 
     fun ingest(p: SourcePrincipal, batch: IngestBatch): IngestResult {
         if (batch.signals.isEmpty()) badRequest("empty_batch")
-        // A source paused at 18 sends nothing until the person consents on their own phone (design §12.5.6).
+        // A source paused at 18 shares nothing until the person consents on their own phone (design §12.5.6), but an SOS,
+        // a duress or cancel PIN always gets through, and the answer is never an error: trackers and sync keep going.
         val paused = db.connection.use { c ->
             c.prepareStatement("SELECT paused_reason FROM sources WHERE id = ?").apply { setObject(1, p.sourceId) }.executeQuery().use { it.next() && it.getString(1) != null }
         }
-        if (paused) throw ApiException(HttpStatusCode.Forbidden, "consent_required")
+        val (signals, held) = if (paused) batch.signals.partition { it.alarms.isNotEmpty() || it.pinHash != null } else batch.signals to emptyList()
         if (batch.signals.size > MAX_BATCH) throw ApiException(HttpStatusCode.PayloadTooLarge, "batch_too_large")
         val now = clock.instant()
         // Fix-time order, so rules see the asset's story in the order it happened.
-        val ordered = batch.signals.sortedBy { it.fixTimeMs ?: now.toEpochMilli() }
-        val rejected = mutableListOf<Rejection>()
+        val ordered = signals.sortedBy { it.fixTimeMs ?: now.toEpochMilli() }
+        val rejected = held.map { Rejection(it.clientId, "consent_required") }.toMutableList()
         val toEvaluate = mutableListOf<Pair<Long, IngestedSignal>>()
         var accepted = 0
         var duplicates = 0
