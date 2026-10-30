@@ -45,6 +45,11 @@ data class RuleConfig(
     val runAwayFixes: Int = 2,
     val runAwayAccuracyMaxM: Double = 25.0,
     val runAwayMinStepM: Double = 15.0,
+    /** Heading toward a past address (dementia, P5): fixes in a row each closer, adding up to this much closer. */
+    val pastAddressHeadingFixes: Int = 4,
+    val pastAddressCloserM: Double = 300.0,
+    /** A step closer smaller than this is GPS noise, not walking toward the place. */
+    val pastAddressMinStepM: Double = 10.0,
 ) {
     companion object {
         val DEFAULT = RuleConfig()

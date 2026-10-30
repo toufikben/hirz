@@ -122,6 +122,22 @@ class RulesEngine(
                     "distanceM" to homeM.toInt().toString(), "speedKmh" to (s.signal.speedKmh ?: 0.0).toInt().toString(),
                 ))), at)
             }
+            // Heading toward an old address (dementia), a known wandering pattern.
+            profile.tierOf(RuleId.PAST_ADDRESS_HEADING)?.let { tier ->
+                val home = places.firstOrNull { it.kind == PlaceKind.HOME } ?: return@let
+                val targets = places.filter { it.kind == PlaceKind.PAST_ADDRESS }.takeIf { it.isNotEmpty() } ?: return@let
+                val outside = Geometry.distanceOutsideM(c, home.shape, point) > 0.0
+                val distances = targets.associate { it.id to Geometry.distanceOutsideM(c, it.shape, point) }
+                val st = PersonState.load(c, s.assetId, PAST_ADDRESS, PastAddressState.serializer()) ?: PastAddressState()
+                val (next, fired) = PersonRules.pastAddress(st, fixMs, outside, accuracy, distances, cfg)
+                PersonState.save(c, s.assetId, PAST_ADDRESS, PastAddressState.serializer(), next)
+                fired.forEach { id ->
+                    val place = targets.first { it.id == id }
+                    found += Finding(s.assetId, s.circleId, RuleId.PAST_ADDRESS_HEADING, tier, listOf(dz.hirz.shared.api.Reason("heading_past_address", mapOf(
+                        "place" to place.name, "distanceM" to distances.getValue(id).toInt().toString(),
+                    ))), at)
+                }
+            }
             // An excepted night outing (Fajr at the mosque) still raises once it goes well past where it was headed.
             PersonState.load(c, s.assetId, NIGHT_OUT, NightOut.serializer())?.takeIf { !it.raised }?.let { out ->
                 val home = places.firstOrNull { it.id == out.homeId } ?: return@let
@@ -182,6 +198,7 @@ class RulesEngine(
 
 private const val NIGHT_OUT = "NIGHT_OUT"
 private const val RUN_AWAY = "RUN_AWAY_SPEED"
+private const val PAST_ADDRESS = "PAST_ADDRESS_HEADING"
 
 /** An excepted night outing in progress: raise if it goes farther from home than [limitM]. */
 @kotlinx.serialization.Serializable
