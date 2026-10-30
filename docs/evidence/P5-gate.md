@@ -25,6 +25,20 @@
 - **AC-20:** no change under `escalation/` or `notify/`; under `incidents/` only the police sheet's opt-in condition
   line. Findings carry the profile's tier and the existing incident path does the rest.
 
+## Whole-branch review
+A fresh review found three critical defects, all fixed with tests (CI 41097476656):
+- A source paused at 18 answered 403, which stopped the Traccar sync for every tracker after it. Paused sources now get
+  200 with each held signal rejected as `consent_required`, the sync skips them, and one tracker's failure never stops
+  the others.
+- The pause also blocked SOS and could cut off a special-needs adult who cannot consent. SOS, duress and PIN signals
+  always pass; special needs is never paused; the companion shows a consent screen at 18 with SOS still on.
+- The Fajr exception muted a night exit in any direction. It now covers only the way to and from the place, inside its
+  window.
+Also fixed: hazards alarm for every asset (pets, herds), the shore at night for every person (also when already there
+at dusk), night windows judged at fix time, night and curfew settings owner-only, consent only for a source paused at
+18, paused sources not counted as silent, running away detected at 5 s fixes without a speed, pushes never carry a rule
+that names a condition, and the elder's simple mode keeps permissions, PIN and battery settings.
+
 ## Family trial
 **Not run yet.** It needs one family with an elder or an autistic child for two weeks. Steps:
 `docs/runbooks/P5-family-trial.md`. Results (guided tests, every alert real or false, false alarms per rule per 1000
