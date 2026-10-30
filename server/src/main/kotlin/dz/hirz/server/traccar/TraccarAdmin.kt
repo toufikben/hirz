@@ -14,8 +14,10 @@ interface TraccarAdmin {
     fun positions(deviceId: Long, from: Instant, to: Instant): List<TraccarPosition>
     /** online, offline or unknown. */
     fun deviceStatus(id: Long): String
+    /** Traccar's version, e.g. "6.16.0"; null when unknown. */
+    fun serverVersion(): String?
     fun sendCommand(deviceId: Long, type: String): CommandResult
-    /** Cancels whatever is queued for the device; best effort (see [TraccarHttpAdmin.deleteQueued]). */
+    /** Counters a queued command (see [TraccarHttpAdmin.deleteQueued]); throws when that could not be done. */
     fun deleteQueued(deviceId: Long)
 
     companion object {
@@ -25,6 +27,7 @@ interface TraccarAdmin {
             override fun deleteDevice(id: Long) {}
             override fun positions(deviceId: Long, from: Instant, to: Instant): List<TraccarPosition> = emptyList()
             override fun deviceStatus(id: Long): String = "unknown"
+            override fun serverVersion(): String? = null
             override fun sendCommand(deviceId: Long, type: String): CommandResult = throw TraccarUnavailable("no Traccar configured")
             override fun deleteQueued(deviceId: Long) {}
         }

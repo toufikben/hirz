@@ -51,7 +51,15 @@ object VehicleLogic {
         "stale_fix" -> t(lang, "آخر موقع قديم (أكثر من دقيقة)", "Dernière position trop ancienne (plus d'une minute)", "The last position is over a minute old")
         "too_fast" -> t(lang, "المركبة تسير بسرعة؛ الإيقاف خطر الآن", "Le véhicule roule trop vite ; couper est dangereux", "The vehicle is moving too fast to stop safely")
         "queued_withdrawn" -> t(lang, "انقطع الجهاز أثناء الإرسال؛ أُلغي الأمر", "Le traceur s'est déconnecté ; commande annulée", "The tracker dropped while sending; the command was cancelled")
-        "traccar_unavailable" -> t(lang, "خادم الأجهزة غير متاح؛ حاول لاحقًا", "Serveur des traceurs indisponible ; réessayez", "The device server is unavailable; try again")
+        "no_speed" -> t(lang, "سرعة المركبة غير معروفة؛ لا إيقاف", "Vitesse inconnue ; pas de coupure", "The vehicle's speed is unknown, so no stop")
+        "gateway_unsupported" -> t(lang, "خادم الأجهزة قديم ولا يضمن الإيقاف الآمن", "Serveur des traceurs trop ancien pour couper sans risque", "The device server is too old to stop safely")
+        "withdraw_failed" -> t(
+            lang,
+            "تعذّر إلغاء الأمر المؤجّل؛ قد يُنفَّذ عند عودة الاتصال — اضغط «إعادة تشغيل المحرّك»",
+            "Annulation impossible ; la coupure peut s'exécuter à la reconnexion — appuyez sur « Remettre le moteur »",
+            "Could not cancel the queued stop; it may run on reconnect — press \"Resume the engine\"",
+        )
+        "traccar_unavailable" ->t(lang, "خادم الأجهزة غير متاح؛ حاول لاحقًا", "Serveur des traceurs indisponible ; réessayez", "The device server is unavailable; try again")
         else -> t(lang, "رُفض الأمر", "Commande refusée", "Command refused")
     }
 

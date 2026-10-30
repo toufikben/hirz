@@ -5,7 +5,7 @@ CREATE TABLE engine_commands (
     member_id    uuid REFERENCES members(id) ON DELETE SET NULL,
     incident_id  uuid REFERENCES incidents(id) ON DELETE SET NULL,
     action       text NOT NULL CHECK (action IN ('stop', 'resume')),
-    outcome      text NOT NULL CHECK (outcome IN ('sent', 'refused')),
+    outcome      text NOT NULL CHECK (outcome IN ('pending', 'sent', 'refused', 'unknown')),
     reason       text,
     at           timestamptz NOT NULL
 );

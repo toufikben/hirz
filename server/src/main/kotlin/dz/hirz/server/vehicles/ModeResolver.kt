@@ -9,6 +9,9 @@ import java.time.Instant
 data class ModeOverride(val mode: VehicleMode, val at: Instant)
 data class AuthorizationWindow(val startsAt: Instant, val endsAt: Instant)
 
+/** The stored mode when the schedule or auto-arm armed the car ([reason] auto_arm or schedule, since [since]). */
+data class Latched(val reason: String, val since: Instant)
+
 data class ModeInput(
     val override: ModeOverride?,
     val authorizations: List<AuthorizationWindow>,
@@ -17,6 +20,8 @@ data class ModeInput(
     val ignitionOn: Boolean?,
     /** Since when the ignition has been in that state. */
     val ignitionSince: Instant?,
+    /** Set while the car is armed by auto-arm or the schedule: that arming outlives the ignition turning on. */
+    val latched: Latched? = null,
 )
 
 data class Resolved(val mode: VehicleMode, val reason: String, val since: Instant?)
@@ -25,6 +30,9 @@ data class Resolved(val mode: VehicleMode, val reason: String, val since: Instan
  * The vehicle's mode now (design §12.1), a pure function. Order: maintenance, an active authorization, a manual
  * switch, the armed schedule, auto-arm after the ignition has been off for [RuleConfig.autoArmAfterMs].
  * A schedule or auto-arm never arms a car whose engine is running; a manual disarm holds until the next parking.
+ * Once they have armed it, the arming holds when the engine starts (a thief turning the key must not disarm the car):
+ * only an authorization, the owner's own switch or maintenance ends it. A schedule arming also ends at the end of its
+ * window if the car is still parked then.
  */
 object ModeResolver {
     fun resolve(i: ModeInput, at: Instant, cfg: RuleConfig): Resolved {
@@ -37,6 +45,12 @@ object ModeResolver {
         val autoArmAt = parkedSince?.plusMillis(cfg.autoArmAfterMs)
         val autoArm = autoArmAt != null && !at.isBefore(autoArmAt)
         val lastAuthEnd = i.authorizations.map { it.endsAt }.filter { !it.isAfter(at) }.maxOrNull()
+
+        val l = i.latched
+        if (l != null && (o == null || o.at.isBefore(l.since)) && (lastAuthEnd == null || lastAuthEnd.isBefore(l.since))) {
+            if (l.reason == "auto_arm") return Resolved(VehicleMode.ARMED, "auto_arm", l.since)
+            if (l.reason == "schedule" && (i.ignitionOn == true || Geometry.isActive(i.schedule, at))) return Resolved(VehicleMode.ARMED, "schedule", l.since)
+        }
 
         if (o?.mode == VehicleMode.ARMED && (lastAuthEnd == null || lastAuthEnd.isBefore(o.at))) return Resolved(VehicleMode.ARMED, "manual", o.at)
         if (o?.mode == VehicleMode.DISARMED && (lastAuthEnd == null || lastAuthEnd.isBefore(o.at))) {

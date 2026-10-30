@@ -43,6 +43,7 @@ class JammingScanner(
         }
         for (r in candidates) {
             val hit = db.tx { c ->
+                c.prepareStatement("SELECT pg_advisory_xact_lock(hashtext(?))").apply { setString(1, r.asset.toString()) }.executeQuery().close()
                 val last = c.prepareStatement(
                     "SELECT max(GREATEST(COALESCE(last_heartbeat_at, last_fix_at), COALESCE(last_fix_at, last_heartbeat_at))) FROM sources WHERE asset_id = ? AND revoked_at IS NULL",
                 ).apply { setObject(1, r.asset) }.executeQuery().use { it.next(); it.getTimestamp(1)?.toInstant() }

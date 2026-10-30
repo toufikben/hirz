@@ -44,7 +44,12 @@ object VehicleRules {
         var next = st
         val fresh = r.position != null && r.fixMs != null && r.isLatestFix && (st.lastFixMs == null || r.fixMs > st.lastFixMs)
         val goodFix = fresh && (r.accuracyM ?: Double.MAX_VALUE) <= cfg.vehicleAccuracyMaxM
-        if (fresh) next = next.copy(lastFixMs = r.fixMs, movingCount = if ((r.speedKmh ?: 0.0) >= cfg.armedMovingKmh) st.movingCount + 1 else 0)
+        // A coarse fix's speed is noise as much as its position: it neither counts nor resets the moving streak.
+        if (fresh) next = next.copy(lastFixMs = r.fixMs, movingCount = when {
+            !goodFix -> st.movingCount
+            (r.speedKmh ?: 0.0) >= cfg.armedMovingKmh -> st.movingCount + 1
+            else -> 0
+        })
         if (!armed) return next to hits
 
         if (AlarmKind.DOOR in r.alarms) hits += VehicleHit(RuleId.DOOR_OPEN_ARMED, Tier.P1, Reason("door_open_armed"))
@@ -56,7 +61,7 @@ object VehicleRules {
         val tier = if (speed >= cfg.armedP0SpeedKmh && (moved || r.ignition == true) || grossM >= cfg.armedP0DistanceM) Tier.P0 else Tier.P1
         val args = mapOf("distanceM" to grossM.roundToInt().toString(), "speedKmh" to speed.roundToInt().toString())
         when {
-            moved && r.ignition == false -> hits += VehicleHit(RuleId.TOWING, Tier.P1, Reason("towed", args))
+            moved && r.ignition == false -> hits += VehicleHit(RuleId.TOWING, tier, Reason("towed", args))
             moved -> hits += VehicleHit(RuleId.ARMED_MOVEMENT, tier, Reason("armed_moved", args))
             r.ignition == true -> hits += VehicleHit(RuleId.ARMED_MOVEMENT, tier, Reason("armed_ignition_on", args))
             AlarmKind.VIBRATION in r.alarms -> hits += VehicleHit(RuleId.PARKED_TILT, Tier.P1, Reason("parked_tilt"))

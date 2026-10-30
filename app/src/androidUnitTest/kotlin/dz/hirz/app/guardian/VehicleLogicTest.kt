@@ -38,7 +38,7 @@ class VehicleLogicTest {
 
     @Test
     fun refusalReasonsAreReadable() {
-        val codes = listOf("not_owner", "no_theft_incident", "not_supported", "device_offline", "stale_fix", "too_fast", "queued_withdrawn", "traccar_unavailable")
+        val codes = listOf("not_owner", "no_theft_incident", "not_supported", "device_offline", "stale_fix", "too_fast", "queued_withdrawn", "traccar_unavailable", "no_speed", "gateway_unsupported", "withdraw_failed")
         val fallback = VehicleLogic.refusal("something_new", "en")
         for (lang in listOf("ar", "fr", "en")) for (code in codes) {
             val text = VehicleLogic.refusal(code, lang)

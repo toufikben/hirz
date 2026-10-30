@@ -79,13 +79,22 @@ class TraccarHttpAdmin(baseUrl: String, private val user: String, private val pa
         TraccarJson.json.parseToJsonElement(r.bodyAsText()).jsonArray.firstOrNull()?.jsonObject?.get("status")?.jsonPrimitive?.content ?: "unknown"
     }
 
-    override fun sendCommand(deviceId: Long, type: String): CommandResult = call("send command") {
+    override fun serverVersion(): String? = call("server") {
+        val r = http.get("$base/api/server") { basicAuth(user, password) }
+        if (!r.status.isSuccess()) r.fail("server")
+        TraccarJson.json.parseToJsonElement(r.bodyAsText()).jsonObject["version"]?.jsonPrimitive?.content
+    }
+
+    /** A stop must reach the device now or not at all; a resume may wait for the device to reconnect. */
+    override fun sendCommand(deviceId: Long, type: String): CommandResult = send(deviceId, type, noQueue = type != "engineResume")
+
+    private fun send(deviceId: Long, type: String, noQueue: Boolean): CommandResult = call("send command") {
         val r = http.post("$base/api/commands/send") {
             basicAuth(user, password); contentType(ContentType.Application.Json)
-            // noQueue: Traccar 6.7+ refuses rather than queues for an offline device; older versions ignore it.
+            // noQueue: Traccar 6.7+ answers with an error instead of queueing for an offline device.
             setBody(buildJsonObject {
                 put("deviceId", deviceId); put("type", type)
-                put("attributes", buildJsonObject { put("noQueue", true) })
+                if (noQueue) put("attributes", buildJsonObject { put("noQueue", true) })
             }.toString())
         }
         when {
@@ -96,10 +105,10 @@ class TraccarHttpAdmin(baseUrl: String, private val user: String, private val pa
     }
 
     /**
-     * Traccar has no API to remove a queued command, so a resume is queued right behind it: on reconnect the device
-     * receives stop then resume and ends running, never cut later at speed.
+     * Traccar has no API to remove a queued command, so a resume is queued behind it. On reconnect the device gets stop
+     * then resume: the engine may cut for a moment but ends running. Core reports this outcome as unknown, never refused.
      */
     override fun deleteQueued(deviceId: Long) {
-        sendCommand(deviceId, "engineResume")
+        send(deviceId, "engineResume", noQueue = false)
     }
 }

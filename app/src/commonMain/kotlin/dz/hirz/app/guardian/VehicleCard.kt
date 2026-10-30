@@ -104,7 +104,8 @@ fun VehicleCard(client: HirzClient, asset: AssetDto, isOwner: Boolean, canEdit: 
                 scope.launch {
                     if (!confirmDeviceCredential()) return@launch
                     runCatching { client.engine(asset.id, "stop") }.onSuccess { r ->
-                        if (r.outcome == "sent") { stopSent = true; message = t("أُرسل أمر الإيقاف", "Coupure envoyée", "Stop sent") }
+                        if (r.outcome == "sent" || r.outcome == "unknown") stopSent = true
+                        if (r.outcome == "sent") message = t("أُرسل أمر الإيقاف", "Coupure envoyée", "Stop sent")
                         else message = VehicleLogic.refusal(r.reason, lang)
                     }.onFailure { message = VehicleLogic.refusal(null, lang) }
                     reload()

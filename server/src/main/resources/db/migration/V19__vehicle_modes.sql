@@ -19,6 +19,7 @@ CREATE TABLE vehicle_state (
     asset_id        uuid PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,
     ignition        boolean,
     ignition_since  timestamptz,
+    ignition_at     timestamptz,  -- time of the newest report that carried ignition; older ones never roll it back
     mode            text,
     mode_since      timestamptz,
     mode_reason     text,
