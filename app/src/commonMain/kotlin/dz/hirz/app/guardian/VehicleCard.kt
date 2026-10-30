@@ -34,6 +34,7 @@ import kotlin.time.Clock
  * engine stop. The stop needs the device credential and a typed word; the server's refusal is shown as it is.
  */
 @Composable
+@OptIn(kotlin.time.ExperimentalTime::class)
 fun VehicleCard(client: HirzClient, asset: AssetDto, isOwner: Boolean, canEdit: Boolean) {
     val lang = currentLang()
     fun t(ar: String, fr: String, en: String) = when (lang) { "ar" -> ar; "fr" -> fr; else -> en }
