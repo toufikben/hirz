@@ -68,6 +68,11 @@ class IngestService(
 
     fun ingest(p: SourcePrincipal, batch: IngestBatch): IngestResult {
         if (batch.signals.isEmpty()) badRequest("empty_batch")
+        // A source paused at 18 sends nothing until the person consents on their own phone (design §12.5.6).
+        val paused = db.connection.use { c ->
+            c.prepareStatement("SELECT paused_reason FROM sources WHERE id = ?").apply { setObject(1, p.sourceId) }.executeQuery().use { it.next() && it.getString(1) != null }
+        }
+        if (paused) throw ApiException(HttpStatusCode.Forbidden, "consent_required")
         if (batch.signals.size > MAX_BATCH) throw ApiException(HttpStatusCode.PayloadTooLarge, "batch_too_large")
         val now = clock.instant()
         // Fix-time order, so rules see the asset's story in the order it happened.

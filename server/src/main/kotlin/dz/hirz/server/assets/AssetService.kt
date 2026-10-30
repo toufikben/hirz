@@ -145,6 +145,13 @@ class AssetService(private val db: DataSource, private val clock: Clock, private
         audit(c, circleId, memberId, "source_revoked", """{"source":"$sourceId"}""")
     }
 
+    fun consent(sourceId: UUID) = db.tx { c ->
+        val circleId = c.prepareStatement(
+            "UPDATE sources s SET adult = true, consent_at = ?, paused_reason = NULL FROM assets a WHERE s.id = ? AND a.id = s.asset_id RETURNING a.circle_id",
+        ).apply { setTimestamp(1, clock.instant().ts()); setObject(2, sourceId) }.executeQuery().use { if (it.next()) it.getObject(1, UUID::class.java) else notFound() }
+        audit(c, circleId, null, "source_consent_given", """{"source":"$sourceId"}""")
+    }
+
     fun setSourcePushToken(sourceId: UUID, token: String) {
         require(token.isNotBlank() && token.length <= 4096) { "invalid push token" }
         db.connection.use { c ->
