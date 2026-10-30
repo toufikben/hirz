@@ -126,4 +126,17 @@ class TeenRulesTest {
             assertTrue(client.open(t).none { it.rule == RuleId.COASTAL_NIGHT })
         }
     }
+
+    @Test
+    fun alreadyAtTheShoreWhenNightFalls() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val t = client.teen(env, Instant.parse("2026-11-02T19:00:00Z")) // 20:00 Algiers
+            client.fix(env, t, 1500.0); client.fix(env, t, 2000.0); client.fix(env, t, 2010.0)
+            assertTrue(client.open(t).isEmpty(), "the shore by day is just the shore")
+            env.clock.now = Instant.parse("2026-11-02T21:10:00Z") // 22:10
+            client.fix(env, t, 2005.0)
+            assertEquals(listOf(RuleId.COASTAL_NIGHT), client.open(t).map { it.rule })
+        }
+    }
 }

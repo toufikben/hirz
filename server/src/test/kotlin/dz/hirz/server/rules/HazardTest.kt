@@ -39,10 +39,10 @@ private fun north(m: Double) = LatLon(POOL.lat + m / 111_320.0, POOL.lon)
 private class Kid(val circleId: String, val token: String)
 
 /** A circle with one place of [kind] (30 m around POOL) and a paired child of [condition]; the child starts 300 m away. */
-private suspend fun HttpClient.kid(env: TestEnv, kind: PlaceKind, condition: Condition = Condition.NONE): Kid {
+private suspend fun HttpClient.kid(env: TestEnv, kind: PlaceKind, condition: Condition = Condition.NONE, type: AssetType = AssetType.CHILD): Kid {
     val circle = newCircle("test.mom")
     postJson("/v1/circles/${circle.id}/places", "test.mom", CreatePlaceRequest("Pool", kind, ShapeDto.Circle(POOL, 30.0), marginM = 50))
-    val asset = newAsset("test.mom", circle.id, AssetType.CHILD, "Yanis")
+    val asset = newAsset("test.mom", circle.id, type, "Yanis")
     if (condition != Condition.NONE) put("/v1/assets/${asset.id}/profile") {
         bearerAuth("test.mom"); contentType(ContentType.Application.Json); setBody(ProfileUpdate(condition = condition))
     }
@@ -105,6 +105,17 @@ class HazardTest {
             assertTrue(client.open(k).isEmpty(), "forbidden places keep three readings, whatever the profile")
             client.fix(env, k, 4.0, 8.0)
             assertEquals(listOf(RuleId.FORBIDDEN_ENTRY to Tier.P1), client.open(k).map { it.rule to it.tier })
+        }
+    }
+
+    @Test
+    fun hazardStillAlarmsForAPet() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val k = client.kid(env, PlaceKind.HAZARD, type = AssetType.PET)
+            client.fix(env, k, 0.0, 8.0)
+            client.fix(env, k, 2.0, 8.0)
+            assertEquals(listOf(RuleId.HAZARD_PROXIMITY to Tier.P1), client.open(k).map { it.rule to it.tier })
         }
     }
 }

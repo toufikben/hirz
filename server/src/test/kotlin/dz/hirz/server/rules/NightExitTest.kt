@@ -124,4 +124,35 @@ class NightExitTest {
             assertTrue(client.open(e).isEmpty())
         }
     }
+
+    @Test
+    fun wrongDirectionDuringFajrRaises() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val e = client.elder(env, Instant.parse("2026-11-02T03:45:00Z"))
+            client.put("/v1/assets/${e.assetId}/profile") {
+                bearerAuth("test.mom"); contentType(ContentType.Application.Json)
+                setBody(ProfileUpdate(nightExceptions = listOf(NightException(e.mosqueId, ActiveWindow((1..7).toSet(), 4 * 60 + 30, 6 * 60 + 30)))))
+            }
+            client.walk(env, e, -150.0, -250.0, -450.0, -650.0)
+            assertEquals(listOf(RuleId.NIGHT_EXIT), client.open(e).map { it.rule }, "away from the mosque is not the way to prayer")
+        }
+    }
+
+    @Test
+    fun stillOutWhenTheExceptionEndsRaises() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val e = client.elder(env, Instant.parse("2026-11-02T03:35:00Z")) // 04:35 Algiers
+            client.put("/v1/assets/${e.assetId}/profile") {
+                bearerAuth("test.mom"); contentType(ContentType.Application.Json)
+                setBody(ProfileUpdate(nightExceptions = listOf(NightException(e.mosqueId, ActiveWindow((1..7).toSet(), 4 * 60 + 30, 5 * 60)))))
+            }
+            client.walk(env, e, 150.0, 250.0, 330.0)
+            assertTrue(client.open(e).isEmpty())
+            env.clock.now = Instant.parse("2026-11-02T04:10:00Z") // 05:10, the exception is over and it is still night
+            client.walk(env, e, 340.0)
+            assertEquals(listOf(RuleId.NIGHT_EXIT), client.open(e).map { it.rule })
+        }
+    }
 }

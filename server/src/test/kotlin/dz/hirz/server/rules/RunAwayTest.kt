@@ -117,4 +117,17 @@ class RunAwayTest {
             assertTrue(client.open(c).none { it.rule == RuleId.RUN_AWAY_SPEED })
         }
     }
+
+    @Test
+    fun boltingWithFixesEvery5sAndNoSpeed() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val c = client.child(Condition.AUTISM)
+            listOf(0.0, 0.0, 14.0, 28.0, 42.0).forEach { m ->
+                client.postJson("/v1/ingest", c.token, IngestBatch(listOf(IngestSignal("q${env.clock.millis()}", env.clock.millis(), north(m), 8.0))))
+                env.clock.advance(5.seconds)
+            }
+            assertEquals(Tier.P0, client.open(c).single { it.rule == RuleId.RUN_AWAY_SPEED }.tier, "10 km/h every 5 s, speed derived from the fixes")
+        }
+    }
 }

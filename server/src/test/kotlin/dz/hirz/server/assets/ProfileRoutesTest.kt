@@ -1,5 +1,6 @@
 package dz.hirz.server.assets
 
+import dz.hirz.shared.api.ActiveWindow
 import dz.hirz.server.support.TestEnv
 import dz.hirz.server.support.join
 import dz.hirz.server.support.newAsset
@@ -150,6 +151,26 @@ class ProfileRoutesTest {
             val words = listOf("autism", "autisme", "توحد", "dementia", "démence", "زهايمر")
             texts.forEach { t -> words.forEach { w -> assertTrue(w !in t.lowercase(), "\"$w\" leaked: ${t.take(200)}") } }
             assertTrue(env.notifier.sent.isNotEmpty(), "the push did go out")
+        }
+    }
+
+    @Test
+    fun guardianCannotWeakenNightOrCurfewAndCurfewIsSane() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val circle = client.newCircle("test.mom")
+            client.join("test.mom", circle.id, "test.dad", Role.GUARDIAN)
+            client.join("test.mom", circle.id, "test.sitter", Role.TEMPORARY)
+            val teen = client.newAsset("test.mom", circle.id, AssetType.TEEN, "Amine")
+            val oneMinute = listOf(ActiveWindow((1..7).toSet(), 0, 1))
+            assertEquals(HttpStatusCode.Forbidden, client.putProfile(teen.id, "test.dad", ProfileUpdate(nightWindow = oneMinute)).status)
+            assertEquals(HttpStatusCode.Forbidden, client.putProfile(teen.id, "test.dad", ProfileUpdate(curfewMinute = 5 * 60 + 59)).status)
+            assertEquals(HttpStatusCode.UnprocessableEntity, client.putProfile(teen.id, "test.mom", ProfileUpdate(curfewMinute = 7 * 60)).status,
+                "a morning curfew would run all day")
+            assertEquals(HttpStatusCode.OK, client.putProfile(teen.id, "test.mom", ProfileUpdate(curfewMinute = 22 * 60)).status)
+            assertEquals(null, client.putProfile(teen.id, "test.mom", ProfileUpdate(curfewMinute = -1)).body<ProfileDto>().curfewMinute, "-1 clears it")
+            assertEquals(HttpStatusCode.NotFound, client.get("/v1/assets/${teen.id}/profile") { bearerAuth("test.sitter") }.status,
+                "a babysitter does not read a profile")
         }
     }
 }
