@@ -41,7 +41,14 @@ object Captions {
 
 /** Renders a server reason code; unknown codes fall back to a neutral line, never to an alarming one. */
 object ReasonText {
+    /** The reason, plus "reported N min late" when it came from a stored track (P6). */
     fun render(r: Reason, lang: String): String {
+        val base = renderBase(r, lang)
+        val late = r.args["lateMin"] ?: return base
+        return base + when (lang) { "ar" -> " — وصل متأخرًا بـ $late د"; "fr" -> " — reçu avec $late min de retard"; else -> " — reported $late min late" }
+    }
+
+    private fun renderBase(r: Reason, lang: String): String {
         val a = r.args
         fun t(ar: String, fr: String, en: String) = when (lang) { "ar" -> ar; "fr" -> fr; else -> en }
         return when (r.code) {

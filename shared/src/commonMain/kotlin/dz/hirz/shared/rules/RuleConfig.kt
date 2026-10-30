@@ -52,6 +52,8 @@ data class RuleConfig(
     val pastAddressMinStepM: Double = 10.0,
     /** Minutes after a teen's curfew before CURFEW fires; the check runs until 06:00. */
     val curfewGraceMin: Int = 15,
+    /** How far back a store-and-forward device's fixes are still judged (P6): three days in a pasture without coverage. */
+    val lateMaxAgeMs: Long = 72 * 3_600_000L,
     /** A fix older than this says nothing about where the teen is now. */
     val curfewFixMaxAgeMs: Long = 30 * 60_000,
 ) {

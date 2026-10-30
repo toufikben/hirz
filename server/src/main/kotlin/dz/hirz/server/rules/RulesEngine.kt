@@ -88,11 +88,13 @@ class RulesEngine(
             // Night exit watches home only, at night, for profiles that have it (design §4.3).
             val nightTier = profile.tierOf(RuleId.NIGHT_EXIT)?.takeIf { night }
             val places = PlaceService.placesOf(c, s.circleId)
+            // Store-and-forward devices (collars in pastures without coverage) are judged on fixes hours old (P6).
+            val placeCfg = if (profile.lateTolerant) cfg.copy(boundaryMaxAgeMs = cfg.lateMaxAgeMs) else cfg
             for (place in places) {
                 val placeId = UUID.fromString(place.id)
                 val state = load(c, s.assetId, placeId)
                 val reading = Reading(fixMs, Geometry.distanceOutsideM(c, place.shape, point), accuracy, s.signal.serverTimeMs - fixMs)
-                if (!PlaceBoundary.accepts(state, place, reading, cfg)) continue
+                if (!PlaceBoundary.accepts(state, place, reading, placeCfg)) continue
                 val homeAtNight = nightTier != null && place.kind == PlaceKind.HOME
                 val entryReadings = when (place.kind) {
                     PlaceKind.HAZARD -> profile.hazardEntryReadings
@@ -102,7 +104,7 @@ class RulesEngine(
                 val exitReadings = if (homeAtNight) cfg.nightExitReadings else cfg.exitReadings
                 // A coast place is judged below on its state, not on entry: being there at night is what matters.
                 val active = if (place.kind == PlaceKind.COAST) false else Geometry.isActive(place.activeHours, at) || homeAtNight
-                val result = PlaceBoundary.step(state, place, reading, active, cfg, entryReadings, exitReadings)
+                val result = PlaceBoundary.step(state, place, reading, active, placeCfg, entryReadings, exitReadings)
                 save(c, s.assetId, placeId, result.state)
                 if (place.kind == PlaceKind.COAST && night && result.state.status == BoundaryStatus.INSIDE) {
                     profile.tierOf(RuleId.COASTAL_NIGHT)?.let { tier ->
@@ -174,7 +176,20 @@ class RulesEngine(
                 }
             }
         }
-        return found
+        return found.map { late(it, s.signal.serverTimeMs - fixMs) }
+    }
+
+    /**
+     * A finding from a fix that arrived late says how late, and never rings as a P0: the moment it describes is past,
+     * and a P1 with the track is what the family can act on (P6).
+     */
+    private fun late(f: Finding, ageMs: Long): Finding {
+        if (ageMs <= cfg.boundaryMaxAgeMs) return f
+        val lateMin = (ageMs / 60_000).toString()
+        return f.copy(
+            tier = if (f.tier == Tier.P0) Tier.P1 else f.tier,
+            reasons = f.reasons.map { it.copy(args = it.args + ("lateMin" to lateMin)) },
+        )
     }
 
     /**

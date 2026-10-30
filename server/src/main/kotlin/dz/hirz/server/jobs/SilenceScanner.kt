@@ -61,9 +61,11 @@ class SilenceScanner(
         for (r in rows) {
             val sinceHeartbeat = nowMs - (r.heartbeatMs ?: r.createdMs)
             val sinceFix = nowMs - (r.fixMs ?: r.createdMs)
+            // A profile may wait longer: livestock in pastures without coverage is quiet for hours (P6).
+            val wait = db.connection.use { c -> dz.hirz.server.assets.ProfileService.load(c, r.asset) }?.silenceAfterMs
             val kind = when {
-                sinceHeartbeat > cfg.silentDeadMs -> "dead"
-                sinceFix > cfg.silentAliveNoFixMs -> "alive"
+                sinceHeartbeat > (wait ?: cfg.silentDeadMs) -> "dead"
+                sinceFix > (wait ?: cfg.silentAliveNoFixMs) -> "alive"
                 else -> null
             }
             // The episode lives in the database, so a restart never raises the same silence twice (P1 minor #17).
