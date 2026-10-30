@@ -50,6 +50,10 @@ data class RuleConfig(
     val pastAddressCloserM: Double = 300.0,
     /** A step closer smaller than this is GPS noise, not walking toward the place. */
     val pastAddressMinStepM: Double = 10.0,
+    /** Minutes after a teen's curfew before CURFEW fires; the check runs until 06:00. */
+    val curfewGraceMin: Int = 15,
+    /** A fix older than this says nothing about where the teen is now. */
+    val curfewFixMaxAgeMs: Long = 30 * 60_000,
 ) {
     companion object {
         val DEFAULT = RuleConfig()

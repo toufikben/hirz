@@ -20,6 +20,8 @@ data class ProfileDto(
     val birthDate: String? = null,
     val conditionOnSheet: Boolean = false,
     val nightExceptions: List<NightException> = emptyList(),
+    /** A teen's curfew in minutes from midnight, Africa/Algiers; null when none. */
+    val curfewMinute: Int? = null,
 )
 
 /** [tier] null keeps the default tier. */
@@ -35,4 +37,5 @@ data class ProfileUpdate(
     val birthDate: String? = null,
     val conditionOnSheet: Boolean? = null,
     val nightExceptions: List<NightException>? = null,
+    val curfewMinute: Int? = null,
 )

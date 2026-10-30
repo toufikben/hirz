@@ -118,6 +118,7 @@ fun Application.module(deps: Deps) {
         SilenceScanner(deps.db, deps.clock, deps.rules, recorder).start(this)
         dz.hirz.server.rules.CheckInScanner(deps.db, deps.clock, recorder).start(this)
         dz.hirz.server.jobs.JammingScanner(deps.db, deps.clock, deps.rules, vehicleModes, recorder).start(this)
+        dz.hirz.server.jobs.CurfewScanner(deps.db, deps.clock, deps.rules, recorder).start(this)
         dz.hirz.server.sms.GatewaySilenceScanner(deps.db, deps.clock, deps.notifier).start(this)
         RetentionPurge(deps.db, deps.clock).start(this)
         escalation.start(this)

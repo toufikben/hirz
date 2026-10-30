@@ -40,6 +40,7 @@ data class ProfileRow(
     val circleId: UUID, val type: dz.hirz.shared.asset.AssetType, val condition: Condition, val overrides: List<RuleOverride>,
     val nightWindow: List<ActiveWindow>?, val birthDate: LocalDate?, val conditionOnSheet: Boolean,
     val nightExceptions: List<dz.hirz.shared.api.NightException> = emptyList(),
+    val curfewMinute: Int? = null,
 ) {
     fun profile(
         overrides: List<RuleOverride> = this.overrides, condition: Condition = this.condition, night: List<ActiveWindow>? = nightWindow,
@@ -52,7 +53,7 @@ class ProfileService(private val db: DataSource, private val circles: CircleServ
     companion object {
         fun row(c: Connection, assetId: UUID): ProfileRow? =
             c.prepareStatement(
-                "SELECT circle_id, type, condition, profile_overrides::text, night_window::text, birth_date, condition_on_sheet, night_exceptions::text FROM assets WHERE id = ?",
+                "SELECT circle_id, type, condition, profile_overrides::text, night_window::text, birth_date, condition_on_sheet, night_exceptions::text, curfew_minute FROM assets WHERE id = ?",
             ).apply { setObject(1, assetId) }.executeQuery().use {
                 if (!it.next()) null
                 else ProfileRow(
@@ -60,6 +61,7 @@ class ProfileService(private val db: DataSource, private val circles: CircleServ
                     apiJson.decodeFromString(overridesSer, it.getString(4)),
                     it.getString(5)?.let { w -> apiJson.decodeFromString(windowsSer, w) },
                     it.getDate(6)?.toLocalDate(), it.getBoolean(7), apiJson.decodeFromString(exceptionsSer, it.getString(8)),
+                    it.getInt(9).takeUnless { _ -> it.wasNull() },
                 )
             }
 
@@ -82,6 +84,7 @@ class ProfileService(private val db: DataSource, private val circles: CircleServ
         val condition = req.condition ?: row.condition
         val overrides = req.overrides ?: row.overrides
         val before = row.profile()
+        if (req.curfewMinute != null && req.curfewMinute !in 0..1439) unprocessable("bad_curfew")
         val exceptions = req.nightExceptions ?: row.nightExceptions
         exceptions.forEach { e ->
             // An exception must name a place of this circle.
@@ -99,11 +102,13 @@ class ProfileService(private val db: DataSource, private val circles: CircleServ
         }
         c.prepareStatement(
             """UPDATE assets SET condition = ?, profile_overrides = ?::jsonb, night_window = COALESCE(?::jsonb, night_window),
-                 birth_date = COALESCE(?, birth_date), condition_on_sheet = COALESCE(?, condition_on_sheet), night_exceptions = ?::jsonb WHERE id = ?""",
+                 birth_date = COALESCE(?, birth_date), condition_on_sheet = COALESCE(?, condition_on_sheet), night_exceptions = ?::jsonb,
+                 curfew_minute = COALESCE(?, curfew_minute) WHERE id = ?""",
         ).apply {
             setString(1, condition.name.lowercase()); setString(2, apiJson.encodeToString(overridesSer, overrides))
             setString(3, req.nightWindow?.let { apiJson.encodeToString(windowsSer, it) })
-            setObject(4, birth); setObject(5, req.conditionOnSheet); setString(6, apiJson.encodeToString(exceptionsSer, exceptions)); setObject(7, assetId)
+            setObject(4, birth); setObject(5, req.conditionOnSheet); setString(6, apiJson.encodeToString(exceptionsSer, exceptions))
+            setObject(7, req.curfewMinute); setObject(8, assetId)
         }.executeUpdate()
         // The audit records what changed, never the condition itself.
         audit(c, row.circleId, memberId, "profile_changed",
@@ -117,7 +122,7 @@ class ProfileService(private val db: DataSource, private val circles: CircleServ
             RuleSettingDto(rule, s.enabled, s.tier, s.defaultTier, locked = s.defaultTier == Tier.P0)
         },
         nightWindow = p.nightWindow, birthDate = row.birthDate?.toString(), conditionOnSheet = row.conditionOnSheet,
-        nightExceptions = row.nightExceptions,
+        nightExceptions = row.nightExceptions, curfewMinute = row.curfewMinute,
     )
 }
 

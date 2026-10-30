@@ -91,9 +91,15 @@ class RulesEngine(
                 val reading = Reading(fixMs, Geometry.distanceOutsideM(c, place.shape, point), accuracy, s.signal.serverTimeMs - fixMs)
                 if (!PlaceBoundary.accepts(state, place, reading, cfg)) continue
                 val homeAtNight = nightTier != null && place.kind == PlaceKind.HOME
-                val entryReadings = if (place.kind == PlaceKind.HAZARD) profile.hazardEntryReadings else cfg.exitReadings
+                val entryReadings = when (place.kind) {
+                    PlaceKind.HAZARD -> profile.hazardEntryReadings
+                    PlaceKind.COAST -> cfg.reentryReadings
+                    else -> cfg.exitReadings
+                }
                 val exitReadings = if (homeAtNight) cfg.nightExitReadings else cfg.exitReadings
-                val active = Geometry.isActive(place.activeHours, at) || homeAtNight
+                // A coast place matters only at night; by day the beach is just the beach.
+                val active = if (place.kind == PlaceKind.COAST) Geometry.isActive(profile.nightWindow, at)
+                    else Geometry.isActive(place.activeHours, at) || homeAtNight
                 val result = PlaceBoundary.step(state, place, reading, active, cfg, entryReadings, exitReadings)
                 save(c, s.assetId, placeId, result.state)
                 if (place.kind == PlaceKind.HOME && result.state.status == BoundaryStatus.INSIDE) PersonState.clear(c, s.assetId, NIGHT_OUT)
@@ -104,6 +110,7 @@ class RulesEngine(
                     }
                     val rule = when {
                         place.kind == PlaceKind.HAZARD -> RuleId.HAZARD_PROXIMITY
+                        place.kind == PlaceKind.COAST -> RuleId.COASTAL_NIGHT
                         place.kind.alarmsOnEntry() -> RuleId.FORBIDDEN_ENTRY
                         else -> RuleId.PLACE_EXIT
                     }

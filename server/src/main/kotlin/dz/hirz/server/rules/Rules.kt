@@ -23,7 +23,7 @@ data class Reading(val fixMs: Long, val distanceOutsideM: Double, val accuracyM:
 data class StepResult(val state: PlaceState, val reason: Reason?)
 
 /** Places whose *entry* is the event (design §4.3 FORBIDDEN_PLACE / hazard). */
-fun PlaceKind.alarmsOnEntry(): Boolean = this == PlaceKind.FORBIDDEN || this == PlaceKind.HAZARD
+fun PlaceKind.alarmsOnEntry(): Boolean = this == PlaceKind.FORBIDDEN || this == PlaceKind.HAZARD || this == PlaceKind.COAST
 
 /**
  * Pure boundary state machine (design §4.2). For ordinary places, [RuleConfig.exitReadings] consecutive readings
@@ -85,7 +85,7 @@ object PlaceBoundary {
                 if (!inside) return StepResult(s.copy(status = BoundaryStatus.OUTSIDE, insideCount = 0), null)
                 val count = s.insideCount + 1
                 if (count < entryReadings) return StepResult(s.copy(insideCount = count), null)
-                val code = if (place.kind == PlaceKind.HAZARD) "hazard_entered" else "entered_place"
+                val code = when (place.kind) { PlaceKind.HAZARD -> "hazard_entered"; PlaceKind.COAST -> "coastal_night"; else -> "entered_place" }
                 StepResult(PlaceState(BoundaryStatus.INSIDE, 0, 0, s.lastFixMs), if (active) reason(code, place, r, count) else null)
             }
         }
