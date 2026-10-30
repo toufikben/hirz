@@ -19,7 +19,7 @@ class VehicleLogicTest {
         assertEquals("Armed — automatically after parking, 14 min ago", VehicleLogic.modeLine(armed, now, "en"))
         assertTrue("مسلّحة" in VehicleLogic.modeLine(armed, now, "ar") && "14" in VehicleLogic.modeLine(armed, now, "ar"))
         val driving = VehicleStateDto(VehicleMode.AUTHORIZED, "authorized", sinceMs = now - 5 * 60_000)
-        assertTrue("Autorisée" in VehicleLogic.modeLine(driving, now, "fr"))
+        assertTrue("autorisée" in VehicleLogic.modeLine(driving, now, "fr"))
         assertEquals("Disarmed", VehicleLogic.modeLine(VehicleStateDto(VehicleMode.DISARMED, "default"), now, "en"))
     }
 
