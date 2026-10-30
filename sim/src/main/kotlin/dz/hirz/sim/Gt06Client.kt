@@ -47,9 +47,9 @@ class Gt06Client(host: String, port: Int, private val ackTimeoutMs: Long = 5_000
         output.flush()
     }
 
-    fun heartbeat() {
+    fun heartbeat(ignition: Boolean = false) {
         check(loggedIn) { "login() must succeed before sending a heartbeat" }
-        output.write(Gt06Encoder.heartbeat(nextSerial(), batteryLevel0to6 = 6, gsmSignal0to4 = 4))
+        output.write(Gt06Encoder.heartbeat(nextSerial(), batteryLevel0to6 = 6, gsmSignal0to4 = 4, ignition = ignition))
         output.flush()
     }
 

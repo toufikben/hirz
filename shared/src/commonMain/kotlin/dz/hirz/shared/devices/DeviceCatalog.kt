@@ -38,7 +38,8 @@ object DeviceCatalog {
     val models: List<DeviceModel> = listOf(
         DeviceModel(
             id = "gt06n", name = "GT06N (GT06 family)", protocol = "gt06", port = 5023, level = SupportLevel.SUPPORTED,
-            capabilities = setOf("sos", "battery", "power_cut", "buffering"), missing = setOf("removal"),
+            // engine_cut needs the relay wired to the fuel pump or starter; Traccar sends engineStop/engineResume.
+            capabilities = setOf("sos", "battery", "power_cut", "buffering", "ignition", "vibration", "engine_cut"), missing = setOf("removal"),
             defaultPassword = "123456",
             commands = listOf(
                 CommandTemplate("password", "PASSWORD,{password},{newPassword}#"),
