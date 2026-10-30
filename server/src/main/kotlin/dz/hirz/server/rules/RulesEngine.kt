@@ -80,6 +80,7 @@ class RulesEngine(
         db.tx { c ->
             // One evaluation per asset at a time: overlapping batches never lose a reading (P1 minor #11).
             c.prepareStatement("SELECT pg_advisory_xact_lock(hashtext(?))").apply { setString(1, s.assetId.toString()) }.executeQuery().close()
+            val profile = dz.hirz.server.assets.ProfileService.load(c, s.assetId) ?: return@tx
             for (place in PlaceService.placesOf(c, s.circleId)) {
                 val placeId = UUID.fromString(place.id)
                 val state = load(c, s.assetId, placeId)
@@ -89,7 +90,8 @@ class RulesEngine(
                 save(c, s.assetId, placeId, result.state)
                 result.reason?.let {
                     val rule = if (place.kind.alarmsOnEntry()) RuleId.FORBIDDEN_ENTRY else RuleId.PLACE_EXIT
-                    found += Finding(s.assetId, s.circleId, rule, Tier.P1, listOf(it), at)
+                    // The profile decides how urgent this is, or that it does not run for this asset at all.
+                    profile.tierOf(rule)?.let { tier -> found += Finding(s.assetId, s.circleId, rule, tier, listOf(it), at) }
                 }
             }
         }

@@ -145,6 +145,7 @@ fun Application.module(deps: Deps) {
             meRoutes(deps)
             circleRoutes(circles)
             assetRoutes(assets)
+            dz.hirz.server.assets.profileRoutes(dz.hirz.server.assets.ProfileService(deps.db, circles))
             placeRoutes(places)
             incidentRoutes(incidents)
             codeWordRoutes(codeWords)

@@ -44,13 +44,14 @@ class SheetService(
                 .executeQuery().use { if (it.next()) it.getObject(1, UUID::class.java) to it.getObject(2, UUID::class.java) else notFound() }
             circles.requireRole(c, circleId, memberId)
             val incident = incidents.load(c, incidentId)
-            data class Asset(val name: String, val type: String, val descriptors: String, val clothes: String?, val clothesAt: java.time.Instant?, val photo: Boolean)
+            data class Asset(val name: String, val type: String, val descriptors: String, val clothes: String?, val clothesAt: java.time.Instant?, val photo: Boolean, val condition: String?)
             val asset = c.prepareStatement(
                 """SELECT a.name, a.type, a.descriptors::text, a.today_clothes, a.today_clothes_at,
-                          EXISTS (SELECT 1 FROM asset_photos p WHERE p.asset_id = a.id)
+                          EXISTS (SELECT 1 FROM asset_photos p WHERE p.asset_id = a.id),
+                          CASE WHEN a.condition_on_sheet AND a.condition <> 'none' THEN a.condition END
                    FROM assets a WHERE a.id = ?""",
             ).apply { setObject(1, assetId) }.executeQuery().use {
-                it.next(); Asset(it.getString(1), it.getString(2), it.getString(3), it.getString(4), it.getTimestamp(5)?.toInstant(), it.getBoolean(6))
+                it.next(); Asset(it.getString(1), it.getString(2), it.getString(3), it.getString(4), it.getTimestamp(5)?.toInstant(), it.getBoolean(6), it.getString(7))
             }
             val track = c.prepareStatement(
                 """SELECT $POSITION_COLUMNS FROM positions p WHERE p.asset_id = ? AND p.quality = 'ok' AND p.geog IS NOT NULL
@@ -75,6 +76,8 @@ class SheetService(
                 descriptors = apiJson.parseToJsonElement(asset.descriptors).jsonObject,
                 todayClothes = asset.clothes.takeIf { sameDay },
                 hasPhoto = asset.photo,
+                // Only when the owner ticked it: it helps searchers (an autistic child may not answer their name).
+                condition = asset.condition?.let { dz.hirz.shared.asset.Condition.valueOf(it.uppercase()) },
                 lastFix = last,
                 lastFixAgeS = last?.let { (now.toEpochMilli() - it.fixTimeMs) / 1000 },
                 track = track,
