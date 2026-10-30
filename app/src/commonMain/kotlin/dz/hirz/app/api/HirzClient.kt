@@ -190,6 +190,9 @@ class HirzClient(
         val r = http.post("$base/v1/sources/me/consent") { auth(sourceToken) }
         if (!r.status.isSuccess()) throw HirzApiException(r.status.value, "consent_failed")
     }
+    suspend fun relayTags(sourceToken: String): List<String> = http.get("$base/v1/relay/tags") { auth(sourceToken) }.ok()
+    suspend fun relaySightings(sourceToken: String, batch: dz.hirz.shared.api.RelayBatch): dz.hirz.shared.api.RelayResult =
+        http.post("$base/v1/relay/sightings") { auth(sourceToken); json(batch) }.ok()
     suspend fun vehicle(assetId: String): VehicleStateDto = member { t -> http.get("$base/v1/assets/$assetId/vehicle") { auth(t) } }.ok()
     suspend fun setMode(assetId: String, mode: VehicleMode): VehicleStateDto =
         member { t -> http.post("$base/v1/assets/$assetId/mode") { auth(t); json(ModeRequest(mode)) } }.ok()

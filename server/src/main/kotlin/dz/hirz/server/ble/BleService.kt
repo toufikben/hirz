@@ -86,6 +86,14 @@ class BleService(
         audit(c, circle, memberId, "ble_tag_removed", """{"asset":"$assetId"}""")
     }
 
+    /** The tags a relay phone may upload: those registered in its own circle, so strangers' tags never leave a phone. */
+    fun tagsFor(relay: SourcePrincipal): List<String> = db.tx { c ->
+        c.prepareStatement(
+            """SELECT t.tag_id FROM ble_tags t JOIN assets a ON a.id = t.asset_id JOIN sources s ON s.id = t.source_id
+               WHERE a.circle_id = ? AND s.revoked_at IS NULL ORDER BY t.tag_id""",
+        ).apply { setObject(1, relay.circleId) }.executeQuery().use { rs -> buildList { while (rs.next()) add(rs.getString(1)) } }
+    }
+
     fun relay(relay: SourcePrincipal, batch: RelayBatch): RelayResult {
         if (batch.sightings.size > 200) unprocessable("batch_too_large")
         val now = clock.instant()
@@ -139,4 +147,5 @@ fun Route.bleMemberRoutes(service: BleService) {
 
 fun Route.bleRelayRoutes(service: BleService) {
     post("/v1/relay/sightings") { call.respond(service.relay(call.source(), call.receive<RelayBatch>())) }
+    io.ktor.server.routing.get("/v1/relay/tags") { call.respond(service.tagsFor(call.source())) }
 }

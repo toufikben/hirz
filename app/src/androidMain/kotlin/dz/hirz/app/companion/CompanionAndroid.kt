@@ -236,6 +236,7 @@ class CompanionActionReceiver : BroadcastReceiver() {
 class LocationService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var loop: Job? = null
+    private var relayLoop: Job? = null
     private var fused: LocationCallback? = null
     private var platformListener: android.location.LocationListener? = null
 
@@ -247,6 +248,7 @@ class LocationService : Service() {
         val started = runCatching { ServiceCompat.startForeground(this, 7_001, CompanionNotifications.sharing(this), type) }
         if (started.isFailure) { stopSelf(); return START_NOT_STICKY }
         if (loop == null) loop = scope.launch { run() }
+        if (relayLoop == null) relayLoop = scope.launch { relay() }
         return START_STICKY
     }
 
@@ -259,6 +261,15 @@ class LocationService : Service() {
             val (battery, charging) = CompanionEngine.battery(this)
             CompanionEngine.sendNow(this, CompanionSignals.heartbeat(battery, charging, now))
             delay(interval)
+        }
+    }
+
+    /** The shepherd relay, every 5 s: scans in its duty windows, uploads what it heard with the last fix. */
+    private suspend fun relay() {
+        val client = dz.hirz.app.push.backgroundClient(this)
+        while (scope.isActive) {
+            CompanionVault(this).credentials()?.let { creds -> runCatching { BleRelay.tick(this, client, creds.sourceToken, System.currentTimeMillis()) } }
+            delay(5_000)
         }
     }
 
@@ -292,6 +303,7 @@ class LocationService : Service() {
     }
 
     private fun onFix(l: Location) {
+        BleRelay.onFix(LatLon(l.latitude, l.longitude), l.accuracy.toDouble().takeIf { l.hasAccuracy() }, l.time)
         val (battery, charging) = CompanionEngine.battery(this)
         val source = if (l.provider == LocationManager.GPS_PROVIDER || l.provider == "fused") FixSource.GNSS else FixSource.WIFI
         val signal = CompanionSignals.fix(
@@ -303,6 +315,7 @@ class LocationService : Service() {
 
     override fun onDestroy() {
         unsubscribe()
+        BleRelay.stop(this)
         scope.cancel()
         super.onDestroy()
     }

@@ -146,6 +146,23 @@ private fun CompanionHome(env: AppEnvironment, client: dz.hirz.app.api.HirzClien
         }
         Text(stringResource(Res.string.last_heartbeat, Captions.age(lastBeat?.let { now - it }, null, currentLang())))
         OutlinedButton({ env.companion.openBatterySettings() }) { Text(stringResource(Res.string.battery_settings)) }
+        RelaySwitch(env)
+    }
+}
+
+/** The shepherd's relay for BLE collars (design §12.4): off by default, Bluetooth scanning asked only when turned on. */
+@Composable
+private fun RelaySwitch(env: AppEnvironment) {
+    val scope = rememberCoroutineScope()
+    val lang = currentLang()
+    var on by remember { mutableStateOf(env.companion.relayEnabled()) }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        androidx.compose.material3.Switch(on, { want -> scope.launch { if (env.companion.setRelay(want)) on = want } })
+        Text(when (lang) {
+            "fr" -> "Relayer les colliers du troupeau (berger)"
+            "en" -> "Relay the herd's collars (shepherd)"
+            else -> "نقل إشارات أطواق القطيع (للراعي)"
+        })
     }
 }
 
