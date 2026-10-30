@@ -102,6 +102,14 @@ class HerdService(private val db: DataSource, private val circles: CircleService
         load(c, herdId)!!
     }
 
+    fun setMarket(herdId: UUID, memberId: UUID, window: List<ActiveWindow>): HerdDto = db.tx { c ->
+        val h = herd(c, herdId, memberId, EDITORS)
+        c.prepareStatement("UPDATE asset_groups SET market_window = ?::jsonb WHERE id = ?")
+            .apply { setString(1, apiJson.encodeToString(windowsSer, window)); setObject(2, herdId) }.executeUpdate()
+        audit(c, UUID.fromString(h.circleId), memberId, "herd_market_set", """{"herd":"$herdId","windows":${window.size}}""")
+        load(c, herdId)!!
+    }
+
     fun setLeader(herdId: UUID, memberId: UUID, assetId: UUID): HerdDto = db.tx { c ->
         val h = herd(c, herdId, memberId, EDITORS)
         if (assetId.toString() !in h.members) unprocessable("leader_not_in_herd")
@@ -122,6 +130,9 @@ fun Route.herdRoutes(service: HerdService) {
     }
     delete("/v1/herds/{id}/members/{assetId}") {
         call.respond(service.removeMember(uuidOrNotFound(call.parameters["id"]), call.member().memberId, uuidOrNotFound(call.parameters["assetId"])))
+    }
+    put("/v1/herds/{id}/market") {
+        call.respond(service.setMarket(uuidOrNotFound(call.parameters["id"]), call.member().memberId, call.receive<dz.hirz.shared.api.MarketRequest>().window))
     }
     put("/v1/herds/{id}/leader") {
         call.respond(service.setLeader(uuidOrNotFound(call.parameters["id"]), call.member().memberId, uuidOrNotFound(call.receive<LeaderRequest>().assetId)))

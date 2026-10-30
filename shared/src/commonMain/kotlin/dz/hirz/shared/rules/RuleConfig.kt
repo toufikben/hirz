@@ -54,6 +54,21 @@ data class RuleConfig(
     val curfewGraceMin: Int = 15,
     /** How far back a store-and-forward device's fixes are still judged (P6): three days in a pasture without coverage. */
     val lateMaxAgeMs: Long = 72 * 3_600_000L,
+    /** Livestock (P6): the share of a herd outside the barn at night that is a night move. */
+    val herdNightShare: Double = 0.3,
+    /** A herd member's fix older than this does not count toward the herd's state. */
+    val herdFixMaxAgeMs: Long = 30 * 60_000L,
+    val herdMinMembers: Int = 3,
+    val herdDispersionM: Double = 300.0,
+    val herdDispersionFactor: Double = 3.0,
+    val herdDispersionWindowMs: Long = 15 * 60_000L,
+    val herdDispersionQuietMs: Long = 6 * 3_600_000L,
+    val stillMs: Long = 6 * 3_600_000L,
+    val stillRadiusM: Double = 20.0,
+    val stillMinFixes: Int = 6,
+    /** A head moving this fast this long is in a vehicle. */
+    val truckKmh: Double = 25.0,
+    val truckMs: Long = 60_000L,
     /** A fix older than this says nothing about where the teen is now. */
     val curfewFixMaxAgeMs: Long = 30 * 60_000,
 ) {

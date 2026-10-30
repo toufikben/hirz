@@ -24,3 +24,7 @@ data class HerdDto(
     /** The owner's Eid al-Adha date for this herd (ISO), overriding the built-in estimate. */
     val eidDate: String? = null,
 )
+
+/** Weekly market hours for a herd; empty clears them. */
+@Serializable
+data class MarketRequest(val window: List<ActiveWindow>)

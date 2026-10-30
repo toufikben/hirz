@@ -19,6 +19,8 @@ data class Profile(
     val nightExceptions: List<dz.hirz.shared.api.NightException> = emptyList(),
     /** Store-and-forward devices: fixes are judged at their own time even when they arrive hours late (P6). */
     val lateTolerant: Boolean = false,
+    /** The place a night exit watches: home for people, the barn for livestock. */
+    val nightHome: dz.hirz.shared.api.PlaceKind = dz.hirz.shared.api.PlaceKind.HOME,
     /** Silence threshold for this profile; null keeps the global one. */
     val silenceAfterMs: Long? = null,
     /** Overrides naming a rule this profile does not have; validate() refuses them. */
@@ -78,6 +80,7 @@ object Profiles {
         return Profile(condition, rules, nightWindow?.takeIf { it.isNotEmpty() } ?: DEFAULT_NIGHT,
             hazardEntryReadings = if (condition == Condition.AUTISM) 1 else 2, nightExceptions = nightExceptions,
             lateTolerant = type == AssetType.LIVESTOCK,
+            nightHome = if (type == AssetType.LIVESTOCK) dz.hirz.shared.api.PlaceKind.BARN else dz.hirz.shared.api.PlaceKind.HOME,
             silenceAfterMs = if (type == AssetType.LIVESTOCK) 6 * 3_600_000L else null,
             unknownOverrides = byRule.keys.filter { it !in rules }.toSet())
     }
