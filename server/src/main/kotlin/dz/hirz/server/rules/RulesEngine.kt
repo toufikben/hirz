@@ -111,6 +111,17 @@ class RulesEngine(
                     profile.tierOf(rule)?.let { tier -> found += Finding(s.assetId, s.circleId, rule, tier, listOf(it), at) }
                 }
             }
+            // Running away from home at speed (autism): measured from home, never from a guardian's phone.
+            profile.tierOf(RuleId.RUN_AWAY_SPEED)?.let { tier ->
+                val home = places.firstOrNull { it.kind == PlaceKind.HOME } ?: return@let
+                val homeM = Geometry.distanceOutsideM(c, home.shape, point)
+                val st = PersonState.load(c, s.assetId, RUN_AWAY, RunAwayState.serializer()) ?: RunAwayState()
+                val (next, fire) = PersonRules.runAway(st, PersonFix(fixMs, homeM, s.signal.speedKmh, accuracy), cfg)
+                PersonState.save(c, s.assetId, RUN_AWAY, RunAwayState.serializer(), next)
+                if (fire) found += Finding(s.assetId, s.circleId, RuleId.RUN_AWAY_SPEED, tier, listOf(dz.hirz.shared.api.Reason("running_away", mapOf(
+                    "distanceM" to homeM.toInt().toString(), "speedKmh" to (s.signal.speedKmh ?: 0.0).toInt().toString(),
+                ))), at)
+            }
             // An excepted night outing (Fajr at the mosque) still raises once it goes well past where it was headed.
             PersonState.load(c, s.assetId, NIGHT_OUT, NightOut.serializer())?.takeIf { !it.raised }?.let { out ->
                 val home = places.firstOrNull { it.id == out.homeId } ?: return@let
@@ -170,6 +181,7 @@ class RulesEngine(
 }
 
 private const val NIGHT_OUT = "NIGHT_OUT"
+private const val RUN_AWAY = "RUN_AWAY_SPEED"
 
 /** An excepted night outing in progress: raise if it goes farther from home than [limitM]. */
 @kotlinx.serialization.Serializable

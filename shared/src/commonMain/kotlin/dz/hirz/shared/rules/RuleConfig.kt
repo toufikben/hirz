@@ -40,6 +40,11 @@ data class RuleConfig(
     val nightExitReadings: Int = 2,
     /** How far past an excepted night destination (e.g. the mosque) still counts as on the way. */
     val nightExceptionSlackM: Double = 300.0,
+    /** Running away (autism, P5): a run is faster than a brisk walk, on fixes good enough to tell. */
+    val runAwayKmh: Double = 9.0,
+    val runAwayFixes: Int = 2,
+    val runAwayAccuracyMaxM: Double = 25.0,
+    val runAwayMinStepM: Double = 15.0,
 ) {
     companion object {
         val DEFAULT = RuleConfig()
