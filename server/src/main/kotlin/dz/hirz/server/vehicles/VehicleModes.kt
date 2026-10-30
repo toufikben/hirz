@@ -175,7 +175,10 @@ class VehicleModes(private val db: DataSource, private val clock: Clock, private
         }
         val schedule = c.prepareStatement("SELECT schedule::text FROM asset_modes WHERE asset_id = ? AND mode = 'armed'")
             .apply { setObject(1, assetId) }.executeQuery().use { if (it.next()) apiJson.decodeFromString(windows, it.getString(1)) else emptyList() }
-        return VehicleStateDto(s.mode, s.reason, s.since?.toEpochMilli(), auth, s.armedPosition, s.ignition, schedule)
+        val engineCut = c.prepareStatement("SELECT model FROM sources WHERE asset_id = ? AND revoked_at IS NULL AND model IS NOT NULL")
+            .apply { setObject(1, assetId) }.executeQuery().toList { it.getString(1) }
+            .any { dz.hirz.shared.devices.DeviceCatalog.byId(it)?.capabilities?.contains("engine_cut") == true }
+        return VehicleStateDto(s.mode, s.reason, s.since?.toEpochMilli(), auth, s.armedPosition, s.ignition, schedule, engineCut)
     }
 }
 

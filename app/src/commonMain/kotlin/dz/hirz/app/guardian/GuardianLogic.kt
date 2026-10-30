@@ -61,6 +61,27 @@ object ReasonText {
             "silent_dead" -> t("لا إشارة من الجهاز منذ ${a["minutes"]} د", "Aucun signal de l'appareil depuis ${a["minutes"]} min", "No signal from the device for ${a["minutes"]} min")
             "silent_alive" -> t("الجهاز يعمل لكن بلا موقع منذ ${a["minutes"]} د", "Appareil actif mais sans position depuis ${a["minutes"]} min", "Device alive but no position for ${a["minutes"]} min")
             "silence_during_incident" -> t("انقطاع الإشارة أثناء الحادث (${a["minutes"]} د)", "Signal perdu pendant l'incident (${a["minutes"]} min)", "Signal lost during the incident (${a["minutes"]} min)")
+            "armed_moved" -> t(
+                "المركبة المسلّحة تحرّكت ${a["distanceM"]} م (${a["speedKmh"]} كم/سا)",
+                "Véhicule armé déplacé de ${a["distanceM"]} m (${a["speedKmh"]} km/h)",
+                "Armed vehicle moved ${a["distanceM"]} m (${a["speedKmh"]} km/h)",
+            )
+            "armed_ignition_on" -> t("تشغيل المحرّك والمركبة مسلّحة", "Contact mis alors que le véhicule est armé", "Ignition on while armed")
+            "towed" -> t(
+                "المركبة تتحرّك والمحرّك مطفأ (سحب؟) ${a["distanceM"]} م",
+                "Véhicule déplacé moteur coupé (remorquage ?) ${a["distanceM"]} m",
+                "Vehicle moving with the engine off (towed?) ${a["distanceM"]} m",
+            )
+            "power_cut" -> t("قُطعت تغذية جهاز التتبع", "Alimentation du traceur coupée", "Tracker power was cut")
+            "jamming" -> t(
+                "انقطاع الإشارة والمحرّك يعمل منذ ${a["silentS"]} ث (تشويش محتمل)",
+                "Plus de signal moteur en marche depuis ${a["silentS"]} s (brouillage possible)",
+                "No signal with the engine running for ${a["silentS"]} s (possible jamming)",
+            )
+            "jamming_alarm" -> t("جهاز التتبع أبلغ عن تشويش", "Le traceur signale un brouillage", "Tracker reported jamming")
+            "parked_tilt" -> t("اهتزاز أو إمالة والمركبة مركونة ومسلّحة", "Vibration ou inclinaison du véhicule armé à l'arrêt", "Vibration or tilt while parked and armed")
+            "door_open_armed" -> t("فُتح باب والمركبة مسلّحة", "Portière ouverte alors que le véhicule est armé", "Door opened while armed")
+            "antenna_cut" -> t("قُطع هوائي GPS", "Antenne GPS coupée", "GPS antenna cut")
             else -> t("حدث", "Événement", "Event")
         }
     }

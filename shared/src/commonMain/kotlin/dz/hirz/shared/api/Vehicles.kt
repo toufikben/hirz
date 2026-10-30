@@ -36,6 +36,8 @@ data class VehicleStateDto(
     val armedPosition: LatLon? = null,
     val ignition: Boolean? = null,
     val schedule: List<ActiveWindow> = emptyList(),
+    /** An active tracker of a model with a relay output (catalogue capability engine_cut). */
+    val engineCut: Boolean = false,
 )
 
 /** [action]: stop or resume. */
