@@ -153,6 +153,21 @@ class RulesEngine(
             // Livestock: the herd out of the barn at night, and a head carried at vehicle speed.
             found += herdNightMove(c, s, profile, places, fixAt, at, night)
             truckSpeed(c, s, profile, point, accuracy, fixAt, at)?.let { found += it }
+            // Walking in circles outside home (elders): once per outing, re-armed at home.
+            profile.tierOf(RuleId.PACING_LOOP)?.let { tier ->
+                val atHome = places.filter { it.kind == PlaceKind.HOME }.any { Geometry.distanceOutsideM(c, it.shape, point) <= 0.0 }
+                if (atHome) { PersonState.clear(c, s.assetId, PACING); return@let }
+                if (PersonState.load(c, s.assetId, PACING, NightKey.serializer()) != null) return@let
+                val track = c.prepareStatement(
+                    """SELECT ST_Y(geog::geometry), ST_X(geog::geometry) FROM positions WHERE asset_id = ? AND quality = 'ok' AND geog IS NOT NULL
+                       AND fix_time >= ? AND COALESCE(accuracy_m, 9999) <= ? ORDER BY fix_time""",
+                ).apply { setObject(1, s.assetId); setTimestamp(2, java.sql.Timestamp.from(fixAt.minusMillis(cfg.pacingWindowMs))); setDouble(3, cfg.boundaryAccuracyFloorM) }
+                    .executeQuery().use { rs -> buildList { while (rs.next()) add(LatLon(rs.getDouble(1), rs.getDouble(2))) } }
+                if (PersonRules.pacing(track, cfg)) {
+                    PersonState.save(c, s.assetId, PACING, NightKey.serializer(), NightKey(nightKey(fixAt)))
+                    found += Finding(s.assetId, s.circleId, RuleId.PACING_LOOP, tier, listOf(dz.hirz.shared.api.Reason("pacing_loop")), at)
+                }
+            }
             // Running away from home at speed (autism): measured from the nearest home, never from a guardian's phone.
             profile.tierOf(RuleId.RUN_AWAY_SPEED)?.let { tier ->
                 val homeM = places.filter { it.kind == PlaceKind.HOME }.minOfOrNull { Geometry.distanceOutsideM(c, it.shape, point) } ?: return@let
@@ -346,6 +361,7 @@ private const val RUN_AWAY = "RUN_AWAY_SPEED"
 private const val PAST_ADDRESS = "PAST_ADDRESS_HEADING"
 private const val TRUCK = "TRUCK_SPEED"
 private const val KEYLESS = "KEYLESS"
+private const val PACING = "PACING_LOOP"
 
 /** The ignition start a keyless alarm was raised for. */
 @kotlinx.serialization.Serializable

@@ -13,6 +13,24 @@ data class RunAwayState(val lastFixMs: Long? = null, val lastHomeDistanceM: Doub
 /** P5 people rules (design §12.2), pure functions over persisted per-asset state. */
 object PersonRules {
     /**
+     * `PACING_LOOP` (elders, design §12.2): in the track (good fixes, oldest first), at least [RuleConfig.pacingPathM]
+     * walked, all within [RuleConfig.pacingRadiusM] of its centre, and some [RuleConfig.pacingCellM] cell entered
+     * [RuleConfig.pacingRevisits] times or more: walking in circles, a known sign of being lost.
+     */
+    fun pacing(track: List<dz.hirz.shared.api.LatLon>, cfg: RuleConfig): Boolean {
+        if (track.size < 6) return false
+        val path = track.zipWithNext { a, b -> dz.hirz.server.escalation.OwnerOrder.metres(a, b) }.sum()
+        if (path < cfg.pacingPathM) return false
+        val centre = dz.hirz.shared.api.LatLon(track.map { it.lat }.average(), track.map { it.lon }.average())
+        if (track.any { dz.hirz.server.escalation.OwnerOrder.metres(centre, it) > cfg.pacingRadiusM }) return false
+        val cosLat = kotlin.math.cos(Math.toRadians(centre.lat))
+        val cells = track.map { (it.lat * 111_320.0 / cfg.pacingCellM).toLong() to (it.lon * 111_320.0 * cosLat / cfg.pacingCellM).toLong() }
+        // Entries into a cell, not fixes in it: standing still in one cell is not pacing.
+        val entries = cells.filterIndexed { i, c -> i == 0 || cells[i - 1] != c }.groupingBy { it }.eachCount()
+        return (entries.values.maxOrNull() ?: 0) >= cfg.pacingRevisits
+    }
+
+    /**
      * `RUN_AWAY_SPEED`: [RuleConfig.runAwayFixes] good fixes in a row, outside home, each at least
      * [RuleConfig.runAwayMinStepM] farther from home than the last at [RuleConfig.runAwayKmh] or more. A coarse fix
      * neither counts nor resets the streak. Returns the next state and whether the rule fires now (once per outing).

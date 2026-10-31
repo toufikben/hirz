@@ -84,6 +84,12 @@ data class RuleConfig(
     val dismissalStillMs: Long = 15 * 60_000L,
     val unusualStopMs: Long = 10 * 60_000L,
     val routineStillRadiusM: Double = 40.0,
+    /** Pacing (elders, P7): this much walking in this window, inside this radius, the same cell revisited this often. */
+    val pacingWindowMs: Long = 30 * 60_000L,
+    val pacingPathM: Double = 1_000.0,
+    val pacingRadiusM: Double = 250.0,
+    val pacingCellM: Double = 50.0,
+    val pacingRevisits: Int = 3,
     val leashPingMaxAgeMs: Long = 120_000L,
     /** A fix older than this says nothing about where the teen is now. */
     val curfewFixMaxAgeMs: Long = 30 * 60_000,
