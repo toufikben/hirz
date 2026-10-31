@@ -52,12 +52,13 @@ private suspend fun HttpClient.family(): Family {
 private fun history(env: TestEnv, f: Family, rule: String, tier: String, n: Int, daysAgo: Int = 3) = env.db.connection.use { c ->
     val mom = c.createStatement().executeQuery("SELECT member_id FROM circle_members WHERE circle_id = '${f.circleId}' AND role = 'owner'")
         .use { it.next(); it.getString(1) }
+    val when_ = env.clock.instant().minusSeconds(daysAgo * 86_400L)
     repeat(n) {
         c.createStatement().executeUpdate(
             """WITH i AS (INSERT INTO incidents (asset_id, circle_id, rule, tier, state, opened_at, closed_at)
-                 VALUES ('${f.assetId}', '${f.circleId}', '$rule', '$tier', 'closed', now() - interval '$daysAgo days', now() - interval '$daysAgo days') RETURNING id)
+                 VALUES ('${f.assetId}', '${f.circleId}', '$rule', '$tier', 'closed', '$when_'::timestamptz, '$when_'::timestamptz) RETURNING id)
                INSERT INTO incident_reviews (incident_id, member_id, false_alarm, note, at)
-               SELECT id, '$mom', true, null, now() - interval '$daysAgo days' FROM i""",
+               SELECT id, '$mom', true, null, '$when_'::timestamptz FROM i""",
         )
     }
 }
