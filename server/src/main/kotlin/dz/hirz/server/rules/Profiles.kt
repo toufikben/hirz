@@ -39,6 +39,9 @@ data class Profile(
 object Profiles {
     private val PEOPLE = setOf(AssetType.CHILD, AssetType.TEEN, AssetType.ELDER, AssetType.SPECIAL_NEEDS, AssetType.LONE_WORKER)
 
+    /** Herds leave for the pasture at dawn: their night ends at 04:30. */
+    val LIVESTOCK_NIGHT = listOf(ActiveWindow((1..7).toSet(), 22 * 60, 1440), ActiveWindow((1..7).toSet(), 0, 4 * 60 + 30))
+
     /** 22:00–06:00 every day, Africa/Algiers. */
     val DEFAULT_NIGHT = listOf(ActiveWindow((1..7).toSet(), 22 * 60, 1440), ActiveWindow((1..7).toSet(), 0, 6 * 60))
 
@@ -81,7 +84,8 @@ object Profiles {
             val o = byRule[rule]
             RuleSetting(enabled = o?.enabled ?: true, tier = o?.tier ?: def, defaultTier = def)
         }
-        return Profile(condition, rules, nightWindow?.takeIf { it.isNotEmpty() } ?: DEFAULT_NIGHT,
+        val night = nightWindow?.takeIf { it.isNotEmpty() } ?: if (type == AssetType.LIVESTOCK) LIVESTOCK_NIGHT else DEFAULT_NIGHT
+        return Profile(condition, rules, night,
             hazardEntryReadings = if (condition == Condition.AUTISM) 1 else 2, nightExceptions = nightExceptions,
             lateTolerant = type == AssetType.LIVESTOCK,
             nightHome = if (type == AssetType.LIVESTOCK) dz.hirz.shared.api.PlaceKind.BARN else dz.hirz.shared.api.PlaceKind.HOME,

@@ -123,7 +123,8 @@ class HerdScanner(private val db: DataSource, private val clock: Clock, private 
             if (!HerdRules.still(track, cfg)) return@tx null
             // Only where an animal belongs: a still head on a road is a different story (and its own rules).
             val here = track.last().second
-            val inPlace = PlaceService.placesOf(c, circle).filter { it.kind == PlaceKind.PASTURE || it.kind == PlaceKind.BARN }
+            // Pasture only: animals kept in the barn (fattening before Eid) stand still by design.
+            val inPlace = PlaceService.placesOf(c, circle).filter { it.kind == PlaceKind.PASTURE }
                 .any { Geometry.distanceOutsideM(c, it.shape, here) <= 0.0 }
             if (!inPlace) return@tx null
             PersonState.save(c, asset, STILL, StillState.serializer(), StillState(now.toEpochMilli()))

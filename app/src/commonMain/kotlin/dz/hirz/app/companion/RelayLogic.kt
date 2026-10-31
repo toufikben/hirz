@@ -16,12 +16,12 @@ class RelayBuffer(private var known: Set<String>, private val throttleMs: Long =
     fun setKnown(tags: Set<String>) { known = tags }
 
     /** True when the sighting was kept for upload. */
-    fun offer(tagId: String, rssi: Int, seenAtMs: Long): Boolean {
+    fun offer(tagId: String, rssi: Int, seenAtMs: Long, at: dz.hirz.shared.api.RelayFix? = null): Boolean {
         if (tagId !in known) return false
         val last = lastSeen[tagId]
         if (last != null && seenAtMs - last < throttleMs) return false
         lastSeen[tagId] = seenAtMs
-        items.addLast(Sighting(tagId, rssi, seenAtMs))
+        items.addLast(Sighting(tagId, rssi, seenAtMs, at))
         while (items.size > capacity) items.removeFirst()
         return true
     }

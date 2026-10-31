@@ -16,3 +16,4 @@ CREATE TABLE ble_sightings (
     rssi             int NOT NULL
 );
 CREATE INDEX ble_sightings_tag_relay ON ble_sightings (tag_id, relay_source_id, seen_at DESC);
+CREATE INDEX ble_sightings_tag_seen ON ble_sightings (tag_id, seen_at DESC);

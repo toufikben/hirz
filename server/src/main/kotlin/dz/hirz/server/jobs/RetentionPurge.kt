@@ -41,6 +41,8 @@ class RetentionPurge(private val db: DataSource, private val clock: Clock) {
             .apply { setTimestamp(1, now) }.executeUpdate()
         // SMS hold phone numbers and replies: 30 days, like positions (review #5).
         c.prepareStatement("DELETE FROM inbound_sms WHERE received_at < ?::timestamptz - interval '30 days'").apply { setTimestamp(1, now) }.executeUpdate()
+        // Who relayed which tag is kept a week, for presence, and no longer.
+        c.prepareStatement("DELETE FROM ble_sightings WHERE seen_at < ?::timestamptz - interval '7 days'").apply { setTimestamp(1, now) }.executeUpdate()
         c.prepareStatement("DELETE FROM outbound_sms WHERE created_at < ?::timestamptz - interval '30 days'").apply { setTimestamp(1, now) }.executeUpdate()
         log.info("retention purge removed {} positions", positions)
         positions

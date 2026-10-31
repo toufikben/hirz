@@ -46,7 +46,11 @@ object BleRelay {
             val record = result.scanRecord ?: return
             val id = record.getServiceData(EDDYSTONE)?.let(BleFrames::eddystone)
                 ?: record.getManufacturerSpecificData(APPLE)?.let(BleFrames::iBeacon) ?: return
-            synchronized(buffer) { buffer.offer(id, result.rssi, System.currentTimeMillis()) }
+            val now = System.currentTimeMillis()
+            // Each sighting keeps the fix the phone had when it heard the tag: a batch uploaded hours later in the
+            // village must not place the herd in the village. No fresh fix, no sighting.
+            val fix = lastFix?.takeIf { kotlin.math.abs(now - it.fixTimeMs) <= 60_000 } ?: return
+            synchronized(buffer) { buffer.offer(id, result.rssi, now, fix) }
         }
     }
 
@@ -59,7 +63,12 @@ object BleRelay {
         }
         val scanner = context.getSystemService(BluetoothManager::class.java)?.adapter?.bluetoothLeScanner ?: return
         if (RelayDuty.scanning(nowMs) && !scanning) {
-            scanner.startScan(null, ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_POWER).build(), callback); scanning = true
+            // Filtered scans: Android delivers no unfiltered results with the screen off.
+            val filters = listOf(
+                android.bluetooth.le.ScanFilter.Builder().setServiceUuid(EDDYSTONE).build(),
+                android.bluetooth.le.ScanFilter.Builder().setManufacturerData(APPLE, byteArrayOf(0x02, 0x15), byteArrayOf(-1, -1)).build(),
+            )
+            scanner.startScan(filters, ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_POWER).build(), callback); scanning = true
         } else if (!RelayDuty.scanning(nowMs) && scanning) {
             scanner.stopScan(callback); scanning = false
         }

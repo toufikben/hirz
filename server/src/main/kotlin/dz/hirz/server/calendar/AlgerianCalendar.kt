@@ -25,7 +25,10 @@ object AlgerianCalendar {
 
     /** True from [SEASON_DAYS] days before Eid al-Adha through the day itself; [override] is the owner's announced date. */
     fun inEidSeason(day: LocalDate, override: LocalDate?): Boolean {
-        val eid = override ?: eidAlAdha(day.year) ?: return false
+        val estimate = eidAlAdha(day.year)
+        // The owner's announced date is for one Eid: a date from another year (more than 3 days off) is ignored.
+        val eid = override?.takeIf { estimate == null || kotlin.math.abs(java.time.temporal.ChronoUnit.DAYS.between(estimate, it)) <= 3 }
+            ?: estimate ?: return false
         return !day.isBefore(eid.minusDays(SEASON_DAYS)) && !day.isAfter(eid)
     }
 }

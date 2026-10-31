@@ -53,7 +53,10 @@ object ModeResolver {
 
         val l = i.latched
         if (l != null && (o == null || o.at.isBefore(l.since)) && (lastAuthEnd == null || lastAuthEnd.isBefore(l.since))) {
-            if (l.reason == "auto_arm" || l.reason == "owner_away") return Resolved(VehicleMode.ARMED, l.reason, l.since)
+            if (l.reason == "auto_arm") return Resolved(VehicleMode.ARMED, l.reason, l.since)
+            // The owner's phone heard the car again after it armed: they came back, the latch lets go.
+            val returned = i.ownerSeenAt != null && i.ownerSeenAt.isAfter(l.since)
+            if (l.reason == "owner_away" && !returned) return Resolved(VehicleMode.ARMED, l.reason, l.since)
             if (l.reason == "schedule" && (i.ignitionOn == true || Geometry.isActive(i.schedule, at))) return Resolved(VehicleMode.ARMED, "schedule", l.since)
         }
 

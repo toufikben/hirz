@@ -55,12 +55,14 @@ class LeashScanner(private val db: DataSource, private val clock: Clock, private
             val finding = db.tx { c ->
                 c.prepareStatement("SELECT pg_advisory_xact_lock(hashtext(?))").apply { setString(1, r.asset.toString()) }.executeQuery().close()
                 data class O(val guardian: LatLon, val togetherAtMs: Long, val raised: Boolean)
-                val o = c.prepareStatement("SELECT last_lat, last_lon, together_at, raised_at IS NOT NULL FROM outings WHERE id = ? FOR UPDATE")
-                    .apply { setObject(1, r.id) }.executeQuery().use { it.next(); O(LatLon(it.getDouble(1), it.getDouble(2)), it.getTimestamp(3).time, it.getBoolean(4)) }
+                val o = c.prepareStatement(
+                    "SELECT last_lat, last_lon, together_at, raised_at IS NOT NULL FROM outings WHERE id = ? AND ended_at IS NULL FOR UPDATE",
+                ).apply { setObject(1, r.id) }.executeQuery().use { if (it.next()) O(LatLon(it.getDouble(1), it.getDouble(2)), it.getTimestamp(3).time, it.getBoolean(4)) else null }
+                    ?: return@tx null
                 val child = c.prepareStatement(
                     """SELECT ST_Y(geog::geometry), ST_X(geog::geometry) FROM positions WHERE asset_id = ? AND quality = 'ok' AND geog IS NOT NULL
-                       ORDER BY fix_time DESC NULLS LAST LIMIT 1""",
-                ).apply { setObject(1, r.asset) }.executeQuery().use { if (it.next()) LatLon(it.getDouble(1), it.getDouble(2)) else null } ?: return@tx null
+                       AND fix_time >= ? ORDER BY fix_time DESC LIMIT 1""",
+                ).apply { setObject(1, r.asset); setTimestamp(2, now.minusMillis(cfg.leashPingMaxAgeMs).ts()) }.executeQuery().use { if (it.next()) LatLon(it.getDouble(1), it.getDouble(2)) else null } ?: return@tx null
                 if (Outings.near(o.guardian, child)) {
                     c.prepareStatement("UPDATE outings SET together_at = ?, raised_at = NULL WHERE id = ?").apply { setTimestamp(1, now.ts()); setObject(2, r.id) }.executeUpdate()
                     return@tx null

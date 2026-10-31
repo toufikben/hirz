@@ -3,5 +3,7 @@
 ALTER TABLE asset_groups ADD COLUMN leader_asset uuid REFERENCES assets(id) ON DELETE SET NULL;
 ALTER TABLE asset_groups ADD COLUMN market_window jsonb NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE asset_groups ADD COLUMN eid_date date;
-ALTER TABLE asset_group_members ADD COLUMN kind text NOT NULL DEFAULT 'herd';
+ALTER TABLE asset_group_members ADD COLUMN kind text;
+UPDATE asset_group_members SET kind = 'herd';
+ALTER TABLE asset_group_members ALTER COLUMN kind SET NOT NULL;
 CREATE UNIQUE INDEX asset_group_members_one_herd ON asset_group_members (asset_id) WHERE kind = 'herd';

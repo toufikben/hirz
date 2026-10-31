@@ -37,6 +37,8 @@ private val windows = ListSerializer(ActiveWindow.serializer())
 data class ModeState(
     val mode: VehicleMode, val reason: String, val since: Instant?, val armedPosition: LatLon?, val ignition: Boolean?,
     val ownerNearby: Boolean? = null,
+    /** A family phone relayed the car's tag in the last day: presence is being watched at all. */
+    val relayActive: Boolean = false,
 )
 
 /**
@@ -118,7 +120,8 @@ class VehicleModes(private val db: DataSource, private val clock: Clock, private
             }
         }
         val nearby = if (!tagged) null else ownerSeenAt != null && !ownerSeenAt.isBefore(at.minusMillis(cfg.ownerAwayMs))
-        return ModeState(r.mode, r.reason, r.since, armed, saved.ignition, nearby)
+        val relayActive = ownerSeenAt != null && !ownerSeenAt.isBefore(at.minusSeconds(24 * 3600))
+        return ModeState(r.mode, r.reason, r.since, armed, saved.ignition, nearby, relayActive)
     }
 
     private fun lastFix(c: Connection, assetId: UUID, upTo: Instant? = null): LatLon? =

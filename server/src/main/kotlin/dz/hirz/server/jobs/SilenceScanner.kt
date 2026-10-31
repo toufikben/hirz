@@ -49,7 +49,7 @@ class SilenceScanner(
             c.createStatement().executeQuery(
                 """SELECT s.id, s.asset_id, a.circle_id, s.last_heartbeat_at, s.last_fix_at, s.created_at
                    FROM sources s JOIN assets a ON a.id = s.asset_id
-                   WHERE s.revoked_at IS NULL AND s.paused_reason IS NULL AND a.lifecycle NOT IN ('paused', 'archived')""",
+                   WHERE s.revoked_at IS NULL AND s.paused_reason IS NULL AND s.kind <> 'ble' AND a.lifecycle NOT IN ('paused', 'archived')""",
             ).use { rs ->
                 buildList {
                     while (rs.next()) add(Row(rs.getObject(1, UUID::class.java), rs.getObject(2, UUID::class.java),

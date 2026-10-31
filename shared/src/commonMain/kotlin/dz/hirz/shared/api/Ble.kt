@@ -13,8 +13,9 @@ data class TagRequest(val tagId: String, val format: String, val proofRssi: Int,
 @Serializable
 data class RelayFix(val position: LatLon, val accuracyM: Double, val fixTimeMs: Long)
 
+/** [at]: the phone's fix when it heard the tag; a sighting buffered offline must carry its own. */
 @Serializable
-data class Sighting(val tagId: String, val rssi: Int, val seenAtMs: Long)
+data class Sighting(val tagId: String, val rssi: Int, val seenAtMs: Long, val at: RelayFix? = null)
 
 /** A Hirz phone's report of the registered tags it heard (the shepherd's relay, design §2). */
 @Serializable

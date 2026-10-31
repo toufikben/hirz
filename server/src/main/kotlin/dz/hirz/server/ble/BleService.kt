@@ -47,6 +47,8 @@ data class BleLimits(
     val relayEvery: Duration = Duration.ofSeconds(30),
     /** Older sightings (a phone that was offline) are still stored-and-forwarded, up to this. */
     val maxSightingAge: Duration = Duration.ofHours(72),
+    /** A sighting is placed at a phone fix taken within this of hearing it. */
+    val fixToSightingMs: Long = 60_000,
 )
 
 /**
@@ -72,8 +74,9 @@ class BleService(
         val source = c.prepareStatement("INSERT INTO sources (asset_id, kind, device_info) VALUES (?, 'ble', ?::jsonb) RETURNING id")
             .apply { setObject(1, assetId); setString(2, """{"format":"${req.format.take(20)}"}""") }
             .executeQuery().use { it.next(); it.getObject(1, UUID::class.java) }
-        c.prepareStatement("INSERT INTO ble_tags (tag_id, asset_id, source_id, format) VALUES (?, ?, ?, ?)")
+        val inserted = c.prepareStatement("INSERT INTO ble_tags (tag_id, asset_id, source_id, format) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING")
             .apply { setString(1, id); setObject(2, assetId); setObject(3, source); setString(4, req.format.take(20)) }.executeUpdate()
+        if (inserted == 0) conflict("tag_taken")
         audit(c, circle, memberId, "ble_tag_registered", """{"asset":"$assetId"}""")
     }
 
@@ -101,11 +104,14 @@ class BleService(
         var accepted = 0
         var dropped = 0
         for (s in batch.sightings) {
+            // The fix the phone had when it heard this tag (a buffered sighting carries its own), never a later one.
+            val fix = s.at ?: batch.relay
+            if (!sane(fix) || abs(fix.fixTimeMs - s.seenAtMs) > limits.fixToSightingMs) { dropped++; continue }
             val target = db.tx { c ->
                 val tag = c.prepareStatement(
                     """SELECT t.source_id, t.asset_id, a.circle_id FROM ble_tags t JOIN assets a ON a.id = t.asset_id
-                       JOIN sources src ON src.id = t.source_id WHERE t.tag_id = ? AND src.revoked_at IS NULL""",
-                ).apply { setString(1, s.tagId.trim().lowercase()) }.executeQuery().use {
+                       JOIN sources src ON src.id = t.source_id WHERE t.tag_id = ? AND src.revoked_at IS NULL AND a.circle_id = ?""",
+                ).apply { setString(1, s.tagId.trim().lowercase()); setObject(2, relay.circleId) }.executeQuery().use {
                     if (it.next()) SourcePrincipal(it.getObject(1, UUID::class.java), it.getObject(2, UUID::class.java), it.getObject(3, UUID::class.java)) else null
                 } ?: return@tx null
                 val seen = Instant.ofEpochMilli(s.seenAtMs)
@@ -120,8 +126,8 @@ class BleService(
                 tag
             }
             if (target == null) { dropped++; continue }
-            val where = LatLon(coarse(batch.relay.position.lat), coarse(batch.relay.position.lon))
-            val accuracy = batch.relay.accuracyM + BleFrames.rangeM(s.rssi)
+            val where = LatLon(coarse(fix.position.lat), coarse(fix.position.lon))
+            val accuracy = fix.accuracyM + BleFrames.rangeM(s.rssi)
             val signal = IngestSignal(
                 clientId = "ble-${abs(s.tagId.hashCode())}-${s.seenAtMs}".take(64), fixTimeMs = s.seenAtMs, position = where,
                 accuracyM = accuracy, fixSource = FixSource.BLE_RELAY,
@@ -130,6 +136,9 @@ class BleService(
         }
         return RelayResult(accepted, dropped)
     }
+
+    private fun sane(f: dz.hirz.shared.api.RelayFix) =
+        f.position.lat in -90.0..90.0 && f.position.lon in -180.0..180.0 && f.accuracyM in 0.0..5_000.0
 
     /** About 10 m: the tag is near the relay, not at it, and the relay's exact spot is nobody else's business. */
     private fun coarse(v: Double) = round(v * 10_000) / 10_000
