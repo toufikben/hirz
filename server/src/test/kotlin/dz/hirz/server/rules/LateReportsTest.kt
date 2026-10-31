@@ -73,7 +73,7 @@ class LateReportsTest {
             val hit = client.open(a).single()
             assertEquals(RuleId.PLACE_EXIT, hit.rule)
             assertEquals(Tier.P1, hit.tier, "five hours later, a P0 cannot ring as if it were now")
-            val late = hit.reasons.single().args["lateMin"]?.toInt() ?: error("no lateMin in ${hit.reasons}")
+            val late = hit.reasons.first { it.code == "left_place" }.args["lateMin"]?.toInt() ?: error("no lateMin in ${hit.reasons}")
             assertTrue(late in 299..301, "reported $late min late")
         }
     }
