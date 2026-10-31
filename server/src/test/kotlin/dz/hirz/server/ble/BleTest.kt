@@ -166,7 +166,7 @@ class BleTest {
                 RelayBatch(RelayFix(north(5000.0), 10.0, env.clock.millis()), listOf(Sighting(TAG, -55, old)))).body()
             assertEquals(0, r.accepted, "heard three hours ago in the pasture, not here in the village")
             val withItsOwnFix: RelayResult = client.postJson("/v1/relay/sightings", s.relayToken,
-                RelayBatch(RelayFix(north(5000.0), 10.0, env.clock.millis()), listOf(Sighting(TAG, -55, old, RelayFix(north(100.0), 10.0, old))))).body()
+                RelayBatch(RelayFix(north(5000.0), 10.0, env.clock.millis()), listOf(Sighting(TAG, -55, old + 60_000, RelayFix(north(100.0), 10.0, old + 60_000))))).body()
             assertEquals(1, withItsOwnFix.accepted, "a buffered sighting carries the fix it was heard at")
         }
     }
