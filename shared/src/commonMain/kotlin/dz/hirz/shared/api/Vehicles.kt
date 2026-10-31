@@ -10,6 +10,8 @@ enum class VehicleMode {
     @SerialName("disarmed") DISARMED,
     @SerialName("authorized") AUTHORIZED,
     @SerialName("maintenance") MAINTENANCE,
+    /** A bus inside one of its runs (P9): moving is expected; the route rules watch it instead of the theft rules. */
+    @SerialName("route") ROUTE,
 }
 
 @Serializable

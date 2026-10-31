@@ -33,6 +33,7 @@ import dz.hirz.server.assets.profileRoutes
 import dz.hirz.server.herds.herdRoutes
 import dz.hirz.server.routines.routineRoutes
 import dz.hirz.server.trials.trialRoutes
+import dz.hirz.server.buses.busRoutes
 import dz.hirz.server.trials.trialReportRoutes
 import dz.hirz.server.digest.digestRoutes
 import dz.hirz.server.ble.bleMemberRoutes
@@ -167,6 +168,7 @@ fun Application.module(deps: Deps) {
             profileRoutes(dz.hirz.server.assets.ProfileService(deps.db, circles, deps.clock, deps.rules))
             herdRoutes(dz.hirz.server.herds.HerdService(deps.db, circles))
             routineRoutes(dz.hirz.server.routines.RoutineService(deps.db, circles))
+            busRoutes(dz.hirz.server.buses.BusService(deps.db, circles))
             val trialService = dz.hirz.server.trials.TrialService(deps.db, deps.clock, circles, deps.operators)
             trialRoutes(trialService)
             trialReportRoutes(dz.hirz.server.trials.TrialReport(deps.db, trialService))

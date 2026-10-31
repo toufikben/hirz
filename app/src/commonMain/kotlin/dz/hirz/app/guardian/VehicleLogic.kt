@@ -15,6 +15,7 @@ object VehicleLogic {
         VehicleMode.ARMED -> t(lang, "مسلّحة", "Armée", "Armed")
         VehicleMode.DISARMED -> t(lang, "غير مسلّحة", "Désarmée", "Disarmed")
         VehicleMode.AUTHORIZED -> t(lang, "قيادة مأذونة", "Conduite autorisée", "Authorized drive")
+        VehicleMode.ROUTE -> t(lang, "في الخدمة", "En service", "In service")
         VehicleMode.MAINTENANCE -> t(lang, "صيانة", "Entretien", "Maintenance")
     }
 

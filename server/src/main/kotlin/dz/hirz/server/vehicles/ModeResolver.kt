@@ -24,12 +24,14 @@ data class ModeInput(
     val latched: Latched? = null,
     /** When a family phone last heard the car's BLE tag; null when the car has no tag or none ever did (P6). */
     val ownerSeenAt: Instant? = null,
+    /** A bus inside one of its runs (P9). */
+    val inService: Boolean = false,
 )
 
 data class Resolved(val mode: VehicleMode, val reason: String, val since: Instant?)
 
 /**
- * The vehicle's mode now (design §12.1), a pure function. Order: maintenance, an active authorization, a manual
+ * The vehicle's mode now (design §12.1), a pure function. Order: maintenance, an active authorization, a bus's run (P9), a manual
  * switch, the armed schedule, auto-arm after the ignition has been off for [RuleConfig.autoArmAfterMs].
  * A schedule or auto-arm never arms a car whose engine is running; a manual disarm holds until the next parking.
  * Once they have armed it, the arming holds when the engine starts (a thief turning the key must not disarm the car):
@@ -42,6 +44,8 @@ object ModeResolver {
         if (o?.mode == VehicleMode.MAINTENANCE) return Resolved(VehicleMode.MAINTENANCE, "manual", o.at)
         i.authorizations.firstOrNull { !at.isBefore(it.startsAt) && at.isBefore(it.endsAt) }
             ?.let { return Resolved(VehicleMode.AUTHORIZED, "authorized", it.startsAt) }
+        // A bus on its run: after maintenance and a drive authorization, before any arming.
+        if (i.inService) return Resolved(VehicleMode.ROUTE, "service", null)
 
         val parkedSince = i.ignitionSince?.takeIf { i.ignitionOn == false }
         val autoArmAt = parkedSince?.plusMillis(cfg.autoArmAfterMs)

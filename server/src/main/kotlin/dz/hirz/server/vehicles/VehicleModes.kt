@@ -92,7 +92,8 @@ class VehicleModes(private val db: DataSource, private val clock: Clock, private
                JOIN assets car ON car.id = t.asset_id
                WHERE t.asset_id = ? AND ra.circle_id = car.circle_id AND r.relay_enabled AND s.seen_at <= ?""",
         ).apply { setObject(1, assetId); setTimestamp(2, at.ts()) }.executeQuery().use { it.next(); it.getTimestamp(1)?.toInstant() }
-        val r = ModeResolver.resolve(ModeInput(o, auths, schedule, saved.ignition, saved.ignitionSince, latched, ownerSeenAt), at, cfg)
+        val inService = dz.hirz.server.buses.BusService.running(c, assetId, at) != null
+        val r = ModeResolver.resolve(ModeInput(o, auths, schedule, saved.ignition, saved.ignitionSince, latched, ownerSeenAt, inService), at, cfg)
         val wire = r.mode.name.lowercase()
         var armed = if (saved.lat != null && saved.lon != null) LatLon(saved.lat, saved.lon) else null
         if (saved.mode != wire) {
@@ -145,6 +146,7 @@ class VehicleModes(private val db: DataSource, private val clock: Clock, private
         val circle = circleOfVehicle(c, assetId)
         circles.requireRole(c, circle, memberId, EDITORS)
         if (mode == VehicleMode.AUTHORIZED) unprocessable("use_authorizations")
+        if (mode == VehicleMode.ROUTE) unprocessable("use_bus_routes")
         // Maintenance switches every theft rule off until switched back: the owner's call alone.
         if (mode == VehicleMode.MAINTENANCE) circles.requireRole(c, circle, memberId, setOf(Role.OWNER))
         if (mode != VehicleMode.ARMED) refuseDuringIncident(c, assetId)
