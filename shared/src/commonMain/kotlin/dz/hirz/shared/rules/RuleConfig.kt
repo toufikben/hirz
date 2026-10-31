@@ -80,6 +80,10 @@ data class RuleConfig(
     /** Routines (P7): minutes after arrive-by before a missed arrival; a source silent longer than this says nothing. */
     val arrivalGraceMin: Int = 10,
     val routineSourceFreshMs: Long = 15 * 60_000L,
+    /** Standing still somewhere unknown: after dismissal (P1), or on the way to the routine's place (P2). */
+    val dismissalStillMs: Long = 15 * 60_000L,
+    val unusualStopMs: Long = 10 * 60_000L,
+    val routineStillRadiusM: Double = 40.0,
     val leashPingMaxAgeMs: Long = 120_000L,
     /** A fix older than this says nothing about where the teen is now. */
     val curfewFixMaxAgeMs: Long = 30 * 60_000,

@@ -53,7 +53,11 @@ class RoutineScanner(private val db: DataSource, private val clock: Clock, priva
         val now = clock.instant()
         val routines = db.connection.use { RoutineService.active(it) }
         for (r in routines) {
-            runCatching { missedArrival(r, now)?.let(recorder::record) }.onFailure { log.error("routine ${r.id}", it) }
+            runCatching {
+                missedArrival(r, now)?.let(recorder::record)
+                afterDismissal(r, now)?.let(recorder::record)
+                onTheWay(r, now)?.let(recorder::record)
+            }.onFailure { log.error("routine ${r.id}", it) }
         }
     }
 
@@ -107,5 +111,67 @@ class RoutineScanner(private val db: DataSource, private val clock: Clock, priva
         Finding(asset, circle, RuleId.MISSED_ARRIVAL, tier, listOf(Reason("missed_arrival", mapOf(
             "place" to place, "by" to "%02d:%02d".format(arriveBy / 60, arriveBy % 60),
         ))), now)
+    }
+
+    /**
+     * The asset has stood still for [spanMs] somewhere unknown: at least 3 good fixes spanning it, all within
+     * [RuleConfig.routineStillRadiusM] of their centre, and that centre outside every place of the circle. The centre, or null.
+     */
+    private fun stillUnknown(c: Connection, asset: UUID, circle: UUID, now: Instant, spanMs: Long): dz.hirz.shared.api.LatLon? {
+        val fixes = c.prepareStatement(
+            """SELECT fix_time, ST_Y(geog::geometry), ST_X(geog::geometry) FROM positions WHERE asset_id = ? AND quality = 'ok' AND geog IS NOT NULL
+               AND fix_time >= ? AND COALESCE(accuracy_m, 9999) <= ? ORDER BY fix_time""",
+        ).apply { setObject(1, asset); setTimestamp(2, now.minusMillis(spanMs + 5 * 60_000L).ts()); setDouble(3, cfg.boundaryAccuracyFloorM) }
+            .executeQuery().toList { it.getTimestamp(1).toInstant() to dz.hirz.shared.api.LatLon(it.getDouble(2), it.getDouble(3)) }
+        if (fixes.size < 3 || java.time.Duration.between(fixes.first().first, fixes.last().first).toMillis() < spanMs) return null
+        val centre = dz.hirz.shared.api.LatLon(fixes.map { it.second.lat }.average(), fixes.map { it.second.lon }.average())
+        if (fixes.any { dz.hirz.server.escalation.OwnerOrder.metres(centre, it.second) > cfg.routineStillRadiusM }) return null
+        val known = dz.hirz.server.places.PlaceService.placesOf(c, circle).any { dz.hirz.server.places.Geometry.distanceOutsideM(c, it.shape, centre) <= 0.0 }
+        return if (known) null else centre
+    }
+
+    private fun once(c: Connection, asset: UUID, key: String, day: LocalDate): Boolean {
+        if (PersonState.load(c, asset, key, RoutineDay.serializer())?.day == day.toString()) return false
+        PersonState.save(c, asset, key, RoutineDay.serializer(), RoutineDay(day.toString()))
+        return true
+    }
+
+    private fun circleIfLive(c: Connection, asset: UUID): UUID? =
+        c.prepareStatement("SELECT circle_id FROM assets WHERE id = ? AND lifecycle NOT IN ('paused', 'archived')")
+            .apply { setObject(1, asset) }.executeQuery().use { if (it.next()) it.getObject(1, UUID::class.java) else null }
+
+    /** `STATIONARY_AFTER_DISMISSAL` (v2 appendix C-1): from dismissal + 5 min, 15 min still somewhere unknown. Once a day. */
+    private fun afterDismissal(r: RoutineDto, now: Instant): Finding? = db.tx { c ->
+        val dismissal = r.dismissalMin ?: return@tx null
+        val asset = UUID.fromString(r.assetId)
+        val local = now.atZone(ALGIERS)
+        val minute = local.hour * 60 + local.minute
+        val from = dismissal + 5 + (cfg.dismissalStillMs / 60_000).toInt()
+        if (minute < from || minute > dismissal + 120) return@tx null
+        val circle = circleIfLive(c, asset) ?: return@tx null
+        if (!runsOn(c, r, circle, local.toLocalDate()) || Custody.muted(c, asset, now)) return@tx null
+        c.prepareStatement("SELECT pg_advisory_xact_lock(hashtext(?))").apply { setString(1, asset.toString()) }.executeQuery().close()
+        val tier = ProfileService.loadAt(c, asset, now)?.tierOf(RuleId.STATIONARY_AFTER_DISMISSAL) ?: return@tx null
+        stillUnknown(c, asset, circle, now, cfg.dismissalStillMs) ?: return@tx null
+        if (!once(c, asset, "ROUTINE_DISMISSAL:${r.id}", local.toLocalDate())) return@tx null
+        Finding(asset, circle, RuleId.STATIONARY_AFTER_DISMISSAL, tier, listOf(Reason("stationary_after_dismissal", mapOf(
+            "minutes" to (cfg.dismissalStillMs / 60_000).toString(),
+        ))), now)
+    }
+
+    /** `UNUSUAL_STOP` (P2): on the way to the routine's place (the 90 min before arrive-by, not yet arrived), 10 min still somewhere unknown. */
+    private fun onTheWay(r: RoutineDto, now: Instant): Finding? = db.tx { c ->
+        val arriveBy = r.arriveByMin ?: return@tx null
+        val asset = UUID.fromString(r.assetId)
+        val local = now.atZone(ALGIERS)
+        val minute = local.hour * 60 + local.minute
+        if (minute < arriveBy - 90 || minute > arriveBy) return@tx null
+        val circle = circleIfLive(c, asset) ?: return@tx null
+        if (!runsOn(c, r, circle, local.toLocalDate()) || Custody.muted(c, asset, now)) return@tx null
+        c.prepareStatement("SELECT pg_advisory_xact_lock(hashtext(?))").apply { setString(1, asset.toString()) }.executeQuery().close()
+        val tier = ProfileService.loadAt(c, asset, now)?.tierOf(RuleId.UNUSUAL_STOP) ?: return@tx null
+        stillUnknown(c, asset, circle, now, cfg.unusualStopMs) ?: return@tx null
+        if (!once(c, asset, "ROUTINE_STOP:${r.id}", local.toLocalDate())) return@tx null
+        Finding(asset, circle, RuleId.UNUSUAL_STOP, tier, listOf(Reason("unusual_stop", mapOf("minutes" to (cfg.unusualStopMs / 60_000).toString()))), now)
     }
 }
