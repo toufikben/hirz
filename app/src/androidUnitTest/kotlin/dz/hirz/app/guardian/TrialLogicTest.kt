@@ -19,6 +19,15 @@ class TrialLogicTest {
     }
 
     @Test
+    fun onlyRulesThatAlertAreOffered() {
+        val rules = listOf(
+            dz.hirz.shared.api.RuleSettingDto(dz.hirz.shared.api.RuleId.PLACE_EXIT, true, dz.hirz.shared.api.Tier.P1, dz.hirz.shared.api.Tier.P1),
+            dz.hirz.shared.api.RuleSettingDto(dz.hirz.shared.api.RuleId.HAZARD_PROXIMITY, false, dz.hirz.shared.api.Tier.P1, dz.hirz.shared.api.Tier.P1),
+        )
+        assertEquals(listOf(dz.hirz.shared.api.RuleId.SOS, dz.hirz.shared.api.RuleId.PLACE_EXIT), TrialLogic.testableRules(rules))
+    }
+
+    @Test
     fun leaveNeedsConfirmation() {
         assertEquals(TrialLogic.LeaveStep.CONFIRM, TrialLogic.leaveTap(confirming = false))
         assertEquals(TrialLogic.LeaveStep.LEAVE, TrialLogic.leaveTap(confirming = true))

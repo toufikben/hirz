@@ -80,7 +80,7 @@ class TrialService(private val db: DataSource, private val clock: Clock, private
         c.prepareStatement(
             """INSERT INTO trial_circles (trial_id, circle_id, consent_at, consent_version, consent_member, pseudonym) VALUES (?, ?, ?, ?, ?, ?)
                ON CONFLICT (trial_id, circle_id) DO UPDATE SET consent_at = EXCLUDED.consent_at, consent_version = EXCLUDED.consent_version,
-                 consent_member = EXCLUDED.consent_member, left_at = NULL""",
+                 consent_member = EXCLUDED.consent_member, left_at = NULL, pseudonym = EXCLUDED.pseudonym""",
         ).apply {
             setObject(1, trialId); setObject(2, circleId); setTimestamp(3, clock.instant().ts()); setInt(4, req.consentVersion); setObject(5, memberId)
             setString(6, pseudonym)
@@ -91,20 +91,33 @@ class TrialService(private val db: DataSource, private val clock: Clock, private
     /** Leaves every trial the circle is in and deletes its trial data. */
     fun leave(circleId: UUID, memberId: UUID) = db.tx { c ->
         circles.requireRole(c, circleId, memberId, setOf(Role.OWNER))
+        // Lock the enrolment first: the nightly job takes the same lock, so it cannot write the circle back meanwhile.
+        c.prepareStatement("SELECT 1 FROM trial_circles WHERE circle_id = ? FOR UPDATE").apply { setObject(1, circleId) }.executeQuery().close()
         c.prepareStatement(
             """DELETE FROM trial_daily d USING trial_circles t WHERE t.circle_id = ? AND d.trial_id = t.trial_id AND d.circle_pseudo = t.pseudonym""",
         ).apply { setObject(1, circleId) }.executeUpdate()
         c.prepareStatement("DELETE FROM guided_tests WHERE circle_id = ?").apply { setObject(1, circleId) }.executeUpdate()
-        c.prepareStatement("UPDATE trial_circles SET left_at = ? WHERE circle_id = ? AND left_at IS NULL")
-            .apply { setTimestamp(1, clock.instant().ts()); setObject(2, circleId) }.executeUpdate()
+        // Problem reports sent while in a trial are trial data too.
+        c.prepareStatement(
+            "DELETE FROM problem_reports p USING trial_circles t WHERE t.circle_id = ? AND p.circle_id = t.circle_id AND p.at >= t.consent_at",
+        ).apply { setObject(1, circleId) }.executeUpdate()
+        // The pseudonym is forgotten: a rejoin is a new participant to the operator.
+        c.prepareStatement("UPDATE trial_circles SET left_at = ?, pseudonym = ? WHERE circle_id = ? AND left_at IS NULL").apply {
+            setTimestamp(1, clock.instant().ts()); setString(2, "left-" + ByteArray(9).also(random::nextBytes).joinToString("") { "%02x".format(it) })
+            setObject(3, circleId)
+        }.executeUpdate()
         audit(c, circleId, memberId, "trial_left", "{}")
     }
 
+    /** The circle's trial: a running one, else one that ended and was never left (so the owner can still leave). */
     fun mine(circleId: UUID, memberId: UUID): CircleTrialDto? = db.connection.use { c ->
         circles.requireRole(c, circleId, memberId)
-        active(c, circleId)?.let { (trialId, joined) ->
-            val t = c.prepareStatement("SELECT * FROM trials WHERE id = ?").apply { setObject(1, trialId) }.executeQuery().use { it.next(); dto(it) }
-            CircleTrialDto(t, joined)
+        c.prepareStatement(
+            """SELECT t.*, tc.consent_at, tc.consent_version, t.ends_on < ? AS ended FROM trial_circles tc JOIN trials t ON t.id = tc.trial_id
+               WHERE tc.circle_id = ? AND tc.left_at IS NULL AND t.starts_on <= ? ORDER BY (t.ends_on < ?), t.ends_on DESC LIMIT 1""",
+        ).apply { setObject(1, today()); setObject(2, circleId); setObject(3, today()); setObject(4, today()) }.executeQuery().use {
+            if (!it.next()) null
+            else CircleTrialDto(dto(it), it.getTimestamp("consent_at").time, it.getBoolean("ended"), it.getInt("consent_version") != CONSENT_VERSION)
         }
     }
 
@@ -136,6 +149,19 @@ class TrialService(private val db: DataSource, private val clock: Clock, private
         if (!inCircle) notFound()
         val (trialId, _) = active(c, circleId) ?: conflict("trial_over")
         val now = clock.instant()
+        // Only a rule that alerts on this asset can be tested: SOS and duress always; others at P0/P1 in its profile.
+        val tier = if (req.rule == dz.hirz.shared.api.RuleId.SOS || req.rule == dz.hirz.shared.api.RuleId.DURESS) dz.hirz.shared.api.Tier.P0
+            else dz.hirz.server.assets.ProfileService.loadAt(c, assetId, now)?.tierOf(req.rule)
+        if (tier != dz.hirz.shared.api.Tier.P0 && tier != dz.hirz.shared.api.Tier.P1) unprocessable("rule_does_not_alert")
+        if (req.rule == dz.hirz.shared.api.RuleId.MISSED_ARRIVAL) {
+            val routine = c.prepareStatement("SELECT EXISTS (SELECT 1 FROM routines WHERE asset_id = ? AND active)").apply { setObject(1, assetId) }
+                .executeQuery().use { it.next() && it.getBoolean(1) }
+            if (!routine) unprocessable("no_routine")
+        }
+        // An open incident of the rule would swallow the test's alarm.
+        val open = c.prepareStatement("SELECT EXISTS (SELECT 1 FROM incidents WHERE asset_id = ? AND rule = ? AND state = 'open')")
+            .apply { setObject(1, assetId); setString(2, req.rule.name) }.executeQuery().use { it.next() && it.getBoolean(1) }
+        if (open) conflict("incident_open")
         val id = c.prepareStatement(
             "INSERT INTO guided_tests (trial_id, circle_id, asset_id, rule, started_at, member_id) VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
         ).apply { setObject(1, trialId); setObject(2, circleId); setObject(3, assetId); setString(4, req.rule.name); setTimestamp(5, now.ts()); setObject(6, memberId) }

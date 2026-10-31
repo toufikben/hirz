@@ -388,11 +388,10 @@ private fun IncidentsTab(client: HirzClient, circle: CircleDto, live: LiveState)
         runCatching { client.emergencyNumbers(circle.id) }.onSuccess { numbers = it }
     }
     val open = live.incidents.values.sortedWith(compareBy({ it.tier }, { -it.openedAtMs }))
-    // P8: recent closed alarms ask what they were, once each on this phone.
+    // P8: closed alarms I have not judged yet ask what they were (owners and guardians; the server keeps the list).
     var closed by remember(circle.id) { mutableStateOf<List<IncidentDto>>(emptyList()) }
     LaunchedEffect(circle.id) {
-        closed = runCatching { client.incidents(circle.id, openOnly = false) }.getOrDefault(emptyList())
-            .filter { it.state == "closed" && (it.tier == dz.hirz.shared.api.Tier.P0 || it.tier == dz.hirz.shared.api.Tier.P1) }.take(5)
+        if (circle.myRole == Role.OWNER || circle.myRole == Role.GUARDIAN) closed = runCatching { client.pendingReviews(circle.id) }.getOrDefault(emptyList())
     }
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (open.isEmpty()) item { Text(stringResource(Res.string.no_open_incidents)) }

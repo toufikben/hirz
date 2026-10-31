@@ -3,6 +3,9 @@ package dz.hirz.app.guardian
 import dz.hirz.shared.api.CONSENT_VERSION
 import dz.hirz.shared.api.Outcome
 import dz.hirz.shared.api.ProblemReportRequest
+import dz.hirz.shared.api.RuleId
+import dz.hirz.shared.api.RuleSettingDto
+import dz.hirz.shared.api.Tier
 
 private fun t(lang: String, ar: String, fr: String, en: String) = when (lang) { "ar" -> ar; "fr" -> fr; else -> en }
 
@@ -25,6 +28,12 @@ object TrialLogic {
             "trial's operator, who sees your circle only under a pseudonym. You can leave at any time from this screen; your " +
             "circle's trial data is then deleted. Hirz keeps working as usual.",
     )
+
+    /** Rules a family may test on one asset: SOS always; the others only where the profile alerts (P0/P1). */
+    private val TESTABLE = listOf(RuleId.PLACE_EXIT, RuleId.NIGHT_EXIT, RuleId.HAZARD_PROXIMITY, RuleId.MISSED_ARRIVAL)
+
+    fun testableRules(rules: List<RuleSettingDto>): List<RuleId> = listOf(RuleId.SOS) +
+        TESTABLE.filter { r -> rules.any { it.rule == r && it.enabled && (it.tier == Tier.P0 || it.tier == Tier.P1) } }
 
     enum class LeaveStep { CONFIRM, LEAVE }
 

@@ -17,7 +17,18 @@ neither way.
 | Digest usefulness | `digest_useful` | ≥ 50% of rated lines |
 | Outcome coverage | `outcome_coverage` | ≥ 80% of closed P0/P1 |
 
-Not enough data: fewer than 100 asset-days (for the rate lines), fewer than 5 P0 guided tests (for missed events),
-or nothing measured on a line. Such a line fails.
+Not enough data: fewer than 100 asset-days (for the rate lines and coverage), fewer than 5 P0 guided tests (for missed
+events), fewer than 5 P0 alarms (for the latency lines), fewer than 20 rated digest lines, or nothing measured on a line.
+Such a line fails.
+
+How the lines are counted:
+- A P0 that never reached a phone, or was never claimed, counts as infinitely slow in the p95 and the median.
+- Coverage is over every enrolled asset-day, silent ones included, in hourly buckets.
+- An outcome counts as decided only when it is real, a device problem or a wrong rule, or "test" where a guided test
+  was announced. "Unsure", and "test" with no guided test, are shown in the report but do not count.
+- Every day is recomputed each night until 14 days after the trial ends, so late reviews count.
+- A guided test rang only when an alerting P0/P1 (not a quiet verify-first one) opened within 15 min and a push was sent.
+- With fewer than 300 asset-days the false-P0 line passes only at zero. That is deliberate: one false P0 in a short
+  trial is already too many.
 
 The numbers live in `shared/.../rules/FalseAlarmBudget.kt`; `BudgetDocTest` fails CI if this table drifts from them.

@@ -24,6 +24,11 @@ data class TrialMetrics(
     val digestUseful: Int,
     val closedP0P1: Int,
     val reviewedP0P1: Int,
+    /** P0 alarms in the trial (the latency lines' sample); undelivered and unclaimed ones count as infinitely slow. */
+    val p0Alarms: Int = 0,
+    /** Shown, not judged: reviews that were "unsure", and "test" with no guided test announced. */
+    val unsureReviews: Int = 0,
+    val unmatchedTests: Int = 0,
 )
 
 @Serializable
@@ -50,6 +55,9 @@ object FalseAlarmBudget {
     /** Below these, a line is "not enough data", which never passes. */
     const val MIN_ASSET_DAYS = 100
     const val MIN_P0_GUIDED_TESTS = 5
+    /** The latency lines need this many P0 alarms; the digest line this many rated lines. */
+    const val MIN_P0_ALARMS = 5
+    const val MIN_DIGEST_RATED = 20
 
     /** The lines, in report order, with their published limits. */
     val LINES = listOf(
@@ -78,8 +86,8 @@ object BudgetGate {
             count.toLong() * per <= m.assetDays -> Verdict.PASS
             else -> Verdict.FAIL
         }
-        fun share(part: Int, whole: Int, min: Double): Pair<Verdict, String> =
-            if (whole <= 0) Verdict.NOT_ENOUGH_DATA to "no data"
+        fun share(part: Int, whole: Int, min: Double, minWhole: Int = 1): Pair<Verdict, String> =
+            if (whole < maxOf(1, minWhole)) Verdict.NOT_ENOUGH_DATA to "${if (whole <= 0) "no data" else "only $whole"}"
             else (if (part.toDouble() / whole >= min) Verdict.PASS else Verdict.FAIL) to "${pct(part.toDouble() / whole)} ($part/$whole)"
         return listOf(
             line("false_p0", rate(m.falseP0, b.FALSE_P0_PER_ASSET_DAYS), "${m.falseP0} in ${m.assetDays} asset-days"),
@@ -89,15 +97,26 @@ object BudgetGate {
                 m.guidedMissed == 0 -> Verdict.PASS
                 else -> Verdict.FAIL
             }, "${m.guidedMissed} of ${m.guidedTests} (P0 tests: ${m.p0GuidedTests})"),
-            line("p0_delivery", m.p0DeliveryP95Ms?.let { if (it <= b.P0_DELIVERY_P95_MS) Verdict.PASS else Verdict.FAIL } ?: Verdict.NOT_ENOUGH_DATA,
-                m.p0DeliveryP95Ms?.let { "${it / 1000.0} s" } ?: "no data"),
-            line("p0_ack", m.p0AckMedianMs?.let { if (it <= b.P0_ACK_MEDIAN_MS) Verdict.PASS else Verdict.FAIL } ?: Verdict.NOT_ENOUGH_DATA,
-                m.p0AckMedianMs?.let { "${it / 1000} s" } ?: "no data"),
-            line("coverage", m.coverage?.let { if (it >= b.COVERAGE_MIN) Verdict.PASS else Verdict.FAIL } ?: Verdict.NOT_ENOUGH_DATA,
+            line("p0_delivery", latency(m.p0DeliveryP95Ms, b.P0_DELIVERY_P95_MS, m.p0Alarms), latencyText(m.p0DeliveryP95Ms, m.p0Alarms)),
+            line("p0_ack", latency(m.p0AckMedianMs, b.P0_ACK_MEDIAN_MS, m.p0Alarms), latencyText(m.p0AckMedianMs, m.p0Alarms)),
+            line("coverage", m.coverage?.takeIf { enoughDays }?.let { if (it >= b.COVERAGE_MIN) Verdict.PASS else Verdict.FAIL } ?: Verdict.NOT_ENOUGH_DATA,
                 m.coverage?.let { pct(it) } ?: "no data"),
-            share(m.digestUseful, m.digestRated, b.DIGEST_USEFUL_MIN).let { (v, a) -> line("digest_useful", v, a) },
+            share(m.digestUseful, m.digestRated, b.DIGEST_USEFUL_MIN, b.MIN_DIGEST_RATED).let { (v, a) -> line("digest_useful", v, a) },
             share(m.reviewedP0P1, m.closedP0P1, b.OUTCOME_COVERAGE_MIN).let { (v, a) -> line("outcome_coverage", v, a) },
         )
+    }
+
+    /** A latency line: not enough P0s, or the percentile (Long.MAX_VALUE: an alarm never delivered or claimed). */
+    private fun latency(ms: Long?, limit: Long, alarms: Int): Verdict = when {
+        alarms < FalseAlarmBudget.MIN_P0_ALARMS || ms == null -> Verdict.NOT_ENOUGH_DATA
+        ms <= limit -> Verdict.PASS
+        else -> Verdict.FAIL
+    }
+
+    private fun latencyText(ms: Long?, alarms: Int): String = when {
+        ms == null -> "no data"
+        ms == Long.MAX_VALUE -> "never (of $alarms P0)"
+        else -> "${ms / 1000.0} s (of $alarms P0)"
     }
 
     /** Only every line passing passes; "not enough data" is a fail. */

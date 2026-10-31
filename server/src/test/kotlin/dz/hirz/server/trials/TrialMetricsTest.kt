@@ -36,6 +36,7 @@ private suspend fun HttpClient.pilot(env: TestEnv, enrol: Boolean = true, owner:
     val trial: TrialDto = postJson("/v1/operator/trials", "test.ops", CreateTrialRequest("pilot", "2026-11-01", "2026-11-28")).body()
     val circle = newCircle(owner)
     val kid = newAsset(owner, circle.id, name = "Yanis")
+    pair(pairingCode(owner, kid.id).code) // only assets with a source count
     if (enrol) postJson("/v1/circles/${circle.id}/trial", owner, JoinTrialRequest(trial.id, CONSENT_VERSION))
     val mom = env.db.connection.use { c ->
         c.createStatement().executeQuery("SELECT member_id FROM circle_members WHERE circle_id = '${circle.id}' AND role = 'owner'").use { it.next(); it.getString(1) }
@@ -79,6 +80,63 @@ private fun job(env: TestEnv) = TrialMetricsJob(env.db, env.clock, env.rules)
 
 class TrialMetricsTest {
     @Test
+    fun aReviewDaysLaterIsCounted() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val p = client.pilot(env)
+            val id = incident(env, p, "SOS", "P0", "2026-11-01T10:00:00Z")
+            env.clock.now = Instant.parse("2026-11-02T04:00:00Z")
+            job(env).runAll()
+            assertEquals("0", rows(env).single { it["day"] == "2026-11-01" }["reviewed_p0p1"])
+            env.db.connection.use { c ->
+                c.createStatement().executeUpdate("INSERT INTO incident_reviews (incident_id, member_id, false_alarm, outcome, at) VALUES ('$id', '${p.momId}', true, 'false_device', now())")
+            }
+            env.clock.now = Instant.parse("2026-11-05T04:00:00Z")
+            job(env).runAll()
+            val day1 = rows(env).single { it["day"] == "2026-11-01" }
+            assertEquals("1", day1["false_p0"], "a false P0 judged three days later still counts")
+        }
+    }
+
+    @Test
+    fun testOrUnsureWithoutAGuidedTestIsNotADecidedOutcome() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val p = client.pilot(env)
+            incident(env, p, "PLACE_EXIT", "P1", "2026-11-01T10:00:00Z", "test")
+            incident(env, p, "PLACE_EXIT", "P1", "2026-11-01T12:00:00Z", "unsure")
+            job(env).runFor(DAY)
+            val r = rows(env).single()
+            assertEquals("2", r["closed_p0p1"]); assertEquals("0", r["reviewed_p0p1"], "neither answer counts toward outcome coverage")
+            assertEquals("1", r["unmatched_tests"]); assertEquals("1", r["unsure_reviews"])
+        }
+    }
+
+    @Test
+    fun nothingBeforeConsent() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            env.clock.now = Instant.parse("2026-11-03T09:00:00Z") // the circle joins on the 3rd
+            val p = client.pilot(env)
+            incident(env, p, "PLACE_EXIT", "P1", "2026-11-01T10:00:00Z", "false_rule")
+            job(env).runFor(DAY)
+            assertTrue(rows(env).isEmpty(), "the 1st was before the family agreed")
+        }
+    }
+
+    @Test
+    fun undeliveredAndUnclaimedP0sAreCounted() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val p = client.pilot(env)
+            incident(env, p, "SOS", "P0", "2026-11-01T10:00:00Z", "real")
+            job(env).runFor(DAY)
+            val r = rows(env).single()
+            assertEquals("1", r["p0_alarms"]); assertEquals("1", r["p0_undelivered"]); assertEquals("1", r["p0_unclaimed"])
+        }
+    }
+
+    @Test
     fun countsFalseAlarmsPerRuleAndTier() {
         val env = TestEnv()
         withApp(env) { client, _ ->
@@ -105,7 +163,7 @@ class TrialMetricsTest {
             val p = client.pilot(env)
             env.clock.now = Instant.parse("2026-11-01T10:00:00Z")
             client.postJson("/v1/circles/${p.circleId}/trial/tests", "test.mom", GuidedTestRequest(p.assetId, RuleId.SOS))
-            incident(env, p, "SOS", "P0", "2026-11-01T10:00:20Z", "false_rule") // rang; a test is never a false alarm
+            incident(env, p, "SOS", "P0", "2026-11-01T10:00:20Z", "false_rule", deliveredS = 3) // rang; a test is never a false alarm
             env.clock.now = Instant.parse("2026-11-01T13:00:00Z")
             client.postJson("/v1/circles/${p.circleId}/trial/tests", "test.mom", GuidedTestRequest(p.assetId, RuleId.SOS)) // never rang
             env.clock.now = Instant.parse("2026-11-02T04:00:00Z")

@@ -11,7 +11,7 @@ class BudgetGateTest {
     private val good = TrialMetrics(
         assetDays = 300, falseP0 = 0, falseP1 = 5, guidedTests = 40, guidedMissed = 0, p0GuidedTests = 10,
         p0DeliveryP95Ms = 12_000, p0AckMedianMs = 90_000, coverage = 0.95, digestRated = 60, digestUseful = 40,
-        closedP0P1 = 50, reviewedP0P1 = 45,
+        closedP0P1 = 50, reviewedP0P1 = 45, p0Alarms = 10,
     )
 
     private fun verdict(m: TrialMetrics, id: String) = BudgetGate.judge(m).single { it.id == id }.verdict
@@ -43,12 +43,16 @@ class BudgetGateTest {
         assertEquals(Verdict.NOT_ENOUGH_DATA, verdict(good.copy(p0GuidedTests = 4), "missed_real"))
         assertEquals(Verdict.NOT_ENOUGH_DATA, verdict(good.copy(p0DeliveryP95Ms = null), "p0_delivery"))
         assertEquals(Verdict.NOT_ENOUGH_DATA, verdict(good.copy(closedP0P1 = 0, reviewedP0P1 = 0), "outcome_coverage"))
+        assertEquals(Verdict.NOT_ENOUGH_DATA, verdict(good.copy(p0Alarms = 1), "p0_delivery"), "one P0 says nothing about p95")
+        assertEquals(Verdict.NOT_ENOUGH_DATA, verdict(good.copy(digestRated = 3, digestUseful = 3), "digest_useful"))
+        assertEquals(Verdict.NOT_ENOUGH_DATA, verdict(thin, "coverage"))
         assertFalse(BudgetGate.passed(BudgetGate.judge(thin)), "not enough data never passes")
     }
 
     @Test
     fun otherLinesJudged() {
         assertEquals(Verdict.FAIL, verdict(good.copy(p0DeliveryP95Ms = 31_000), "p0_delivery"))
+        assertEquals(Verdict.FAIL, verdict(good.copy(p0DeliveryP95Ms = Long.MAX_VALUE), "p0_delivery"), "a P0 that never arrived")
         assertEquals(Verdict.FAIL, verdict(good.copy(p0AckMedianMs = 181_000), "p0_ack"))
         assertEquals(Verdict.FAIL, verdict(good.copy(coverage = 0.89), "coverage"))
         assertEquals(Verdict.FAIL, verdict(good.copy(digestUseful = 29), "digest_useful"))

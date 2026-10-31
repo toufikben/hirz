@@ -21,6 +21,9 @@ fun Route.incidentRoutes(service: IncidentService) {
         val openOnly = call.request.queryParameters["state"] == "open"
         call.respond(service.list(uuidOrNotFound(call.parameters["id"]), call.member().memberId, openOnly))
     }
+    get("/v1/circles/{id}/reviews/pending") {
+        call.respond(service.pendingReviews(uuidOrNotFound(call.parameters["id"]), call.member().memberId))
+    }
     get("/v1/incidents/{id}") {
         call.respond(service.get(uuidOrNotFound(call.parameters["id"]), call.member().memberId))
     }

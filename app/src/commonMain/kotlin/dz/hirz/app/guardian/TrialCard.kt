@@ -30,9 +30,6 @@ import dz.hirz.shared.api.Tier
 import dz.hirz.shared.api.TrialDto
 import kotlinx.coroutines.launch
 
-/** Rules a family can test for real in a trial (P8); each guided test must ring within 15 min. */
-private val GUIDED_RULES = listOf(RuleId.SOS, RuleId.PLACE_EXIT, RuleId.NIGHT_EXIT, RuleId.HAZARD_PROXIMITY, RuleId.MISSED_ARRIVAL)
-
 /**
  * The field trial (P8): the owner joins an open trial after reading the consent text, or leaves it (two taps); while in
  * it, owners and guardians announce guided tests so a test that does not ring is counted.
@@ -48,11 +45,21 @@ fun TrialCard(client: HirzClient, circleId: String, assets: List<AssetDto>, isOw
     var reading by remember { mutableStateOf<TrialDto?>(null) }
     var confirming by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf<String?>(null) }
+    var testable by remember(circleId) { mutableStateOf<Map<String, List<RuleId>>>(emptyMap()) }
     suspend fun reload() {
         mine = runCatching { client.circleTrial(circleId) }.getOrNull()
         if (mine == null) open = runCatching { client.openTrials() }.getOrDefault(emptyList())
+        if (mine != null && canTest) testable = assets.associate { a ->
+            a.id to TrialLogic.testableRules(runCatching { client.profile(a.id).rules }.getOrDefault(emptyList()))
+        }
     }
     LaunchedEffect(circleId) { reload() }
+    fun join(trialId: String) = scope.launch {
+        note = runCatching { client.joinTrial(circleId, trialId, CONSENT_VERSION) }.fold({ null }, {
+            t("تعذّر الانضمام. حدّث التطبيق ثم أعد المحاولة.", "Impossible de rejoindre. Mettez l'app à jour et réessayez.", "Could not join. Update the app and try again.")
+        })
+        reading = null; reload()
+    }
 
     val joined = mine
     if (joined == null) {
@@ -62,22 +69,27 @@ fun TrialCard(client: HirzClient, circleId: String, assets: List<AssetDto>, isOw
             open.forEach { tr -> OutlinedButton({ reading = tr }) { Text("${tr.name} (${tr.startsOn} → ${tr.endsOn})") } }
             reading?.let { tr ->
                 Text(TrialLogic.consentText(lang), style = MaterialTheme.typography.bodySmall)
-                Button({ scope.launch { runCatching { client.joinTrial(circleId, tr.id, CONSENT_VERSION) }; reading = null; reload() } }) {
-                    Text(t("أوافق وأنضم", "J'accepte et je rejoins", "I agree, join"))
-                }
+                Button({ join(tr.id) }) { Text(t("أوافق وأنضم", "J'accepte et je rejoins", "I agree, join")) }
             }
+            note?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         }
         return
     }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(t("في التجربة: ", "Dans l'essai : ", "In the trial: ") + joined.trial.name, style = MaterialTheme.typography.titleMedium)
-        if (canTest) {
+        Text(t("في التجربة: ", "Dans l'essai : ", "In the trial: ") + joined.trial.name +
+            if (joined.ended) t(" (انتهت)", " (terminé)", " (ended)") else "", style = MaterialTheme.typography.titleMedium)
+        // A new consent text: the owner reads and agrees again, or the circle stops counting.
+        if (joined.consentOutdated && isOwner && !joined.ended) {
+            Text(TrialLogic.consentText(lang), style = MaterialTheme.typography.bodySmall)
+            Button({ join(joined.trial.id) }) { Text(t("أوافق على النص الجديد", "J'accepte le nouveau texte", "I agree to the new text")) }
+        }
+        if (canTest && !joined.ended) {
             Text(t("اختبار موجّه: يجب أن يرنّ خلال 15 دقيقة", "Test guidé : doit sonner sous 15 min", "Guided test: must ring within 15 min"),
                 style = MaterialTheme.typography.bodySmall)
             assets.forEach { a ->
                 Text(a.name, style = MaterialTheme.typography.labelMedium)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    GUIDED_RULES.forEach { r ->
+                    testable[a.id].orEmpty().forEach { r ->
                         OutlinedButton({ scope.launch {
                             note = runCatching { client.guidedTest(circleId, a.id, r) }.fold(
                                 { t("بدأ الاختبار", "Test lancé", "Test started") + ": " + ProfileLogic.ruleName(r, lang) },

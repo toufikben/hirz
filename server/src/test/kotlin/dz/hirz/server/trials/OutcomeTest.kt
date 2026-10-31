@@ -11,6 +11,9 @@ import dz.hirz.shared.api.Outcome
 import dz.hirz.shared.api.ReviewRequest
 import dz.hirz.shared.rules.RuleConfig
 import io.ktor.client.HttpClient
+import io.ktor.client.call.body
+import io.ktor.client.request.bearerAuth
+import io.ktor.client.request.get
 import io.ktor.http.HttpStatusCode
 import java.util.UUID
 import kotlin.test.Test
@@ -90,6 +93,20 @@ class OutcomeTest {
             }
             assertEquals(listOf(0 to false, 1 to true), rows, "the last answer per line counts")
             assertEquals(HttpStatusCode.UnprocessableEntity, client.postJson("/v1/digests/$d/feedback", "test.mom", DigestFeedbackRequest(2, true)).status)
+        }
+    }
+
+    @Test
+    fun pendingReviewsAreThoseIHaveNotAnswered() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val h = client.household()
+            val a = closedIncident(env, h)
+            val b = closedIncident(env, h)
+            client.postJson("/v1/incidents/$a/review", "test.mom", ReviewRequest(outcome = Outcome.REAL))
+            val pending: List<dz.hirz.shared.api.IncidentDto> =
+                client.get("/v1/circles/${h.circleId}/reviews/pending") { bearerAuth("test.mom") }.body()
+            assertEquals(listOf(b), pending.map { it.id })
         }
     }
 

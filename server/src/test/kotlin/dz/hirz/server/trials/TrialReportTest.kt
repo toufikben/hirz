@@ -34,11 +34,11 @@ private fun seed(env: TestEnv, trialId: String, days: Int, falseP0: Int = 0, fal
         val p0 = i % 10 == 0
         c.createStatement().executeUpdate(
             """INSERT INTO trial_daily (trial_id, circle_pseudo, asset_pseudo, day, live_hours, fresh_hours, findings, false_p0, false_p1,
-                 closed_p0p1, reviewed_p0p1, guided_tests, guided_missed, p0_guided, p0_delivery_ms, p0_ack_ms, digest_rated, digest_useful)
+                 closed_p0p1, reviewed_p0p1, guided_tests, guided_missed, p0_guided, p0_delivery_ms, p0_ack_ms, digest_rated, digest_useful, p0_alarms)
                VALUES ('$trialId', 'c${i % 2}', '$prefix${i % 4}', DATE '${LocalDate.parse("2026-11-01").plusDays((i / 4).toLong())}', 24, 23,
                  '{"UNUSUAL_STOP/P2": 1}'::jsonb, ${if (i < falseP0) 1 else 0}, ${if (i < falseP1) 1 else 0},
                  ${if (p0) 2 else 0}, ${if (p0) 2 else 0}, ${if (p0) 1 else 0}, 0, ${if (p0) 1 else 0},
-                 ${if (p0) "'{6000}'" else "'{}'"}::bigint[], ${if (p0) "'{70000}'" else "'{}'"}::bigint[], 2, 2)""",
+                 ${if (p0) "'{6000}'" else "'{}'"}::bigint[], ${if (p0) "'{70000}'" else "'{}'"}::bigint[], 2, 2, ${if (p0) 1 else 0})""",
         )
     }
 }
@@ -96,6 +96,22 @@ class TrialReportTest {
             val r: TrialReportDto = client.get("/v1/operator/trials/${t.id}/report") { bearerAuth("test.ops") }.body()
             assertEquals(Verdict.NOT_ENOUGH_DATA, r.lines.single { it.id == "false_p0" }.verdict)
             assertFalse(r.passed)
+        }
+    }
+
+    @Test
+    fun aP0ThatNeverArrivedFailsDelivery() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val t = client.trial()
+            seed(env, t.id, 120)
+            env.db.connection.use { c ->
+                c.createStatement().executeUpdate(
+                    "UPDATE trial_daily SET p0_undelivered = 1, p0_alarms = p0_alarms + 1 WHERE trial_id = '${t.id}' AND asset_pseudo = 'a0' AND day <= DATE '2026-11-01'",
+                )
+            }
+            val r: TrialReportDto = client.get("/v1/operator/trials/${t.id}/report") { bearerAuth("test.ops") }.body()
+            assertEquals(Verdict.FAIL, r.lines.single { it.id == "p0_delivery" }.verdict, "1 of 13 P0s never arrived: p95 is 'never'")
         }
     }
 

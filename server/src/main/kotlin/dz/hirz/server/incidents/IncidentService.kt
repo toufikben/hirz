@@ -201,6 +201,17 @@ class IncidentService(
         ).apply { setObject(1, circleId); setArray(2, c.createArrayOf("uuid", arrayOf(circleId))) }.executeQuery().toList { it.getObject(1, UUID::class.java) }.map { load(c, it) }
     }
 
+    /** Closed P0/P1 alarms of the last 30 days this owner or guardian has not said anything about yet (P8). */
+    fun pendingReviews(circleId: UUID, memberId: UUID): List<IncidentDto> = db.connection.use { c ->
+        circles.requireRole(c, circleId, memberId, EDITORS)
+        c.prepareStatement(
+            """SELECT i.id FROM incidents i WHERE i.circle_id = ? AND i.state = 'closed' AND i.tier IN ('P0', 'P1') AND i.closed_at >= ?
+               AND NOT EXISTS (SELECT 1 FROM incident_reviews r WHERE r.incident_id = i.id AND r.member_id = ?)
+               ORDER BY i.closed_at DESC LIMIT 20""",
+        ).apply { setObject(1, circleId); setTimestamp(2, clock.instant().minus(java.time.Duration.ofDays(30)).ts()); setObject(3, memberId) }
+            .executeQuery().toList { it.getObject(1, UUID::class.java) }.map { load(c, it) }
+    }
+
     fun get(incidentId: UUID, memberId: UUID): IncidentDto = db.connection.use { c ->
         requireSeeing(c, incidentId, memberId, Role.entries.toSet())
         load(c, incidentId)

@@ -165,6 +165,7 @@ class HirzClient(
         member { t -> http.post("$base/v1/incidents/$id/review") { auth(t); json(ReviewRequest(outcome = outcome)) } }.done()
     suspend fun digestFeedback(digestId: String, index: Int, useful: Boolean) =
         member { t -> http.post("$base/v1/digests/$digestId/feedback") { auth(t); json(dz.hirz.shared.api.DigestFeedbackRequest(index, useful)) } }.done()
+    suspend fun pendingReviews(circleId: String): List<IncidentDto> = member { t -> http.get("$base/v1/circles/$circleId/reviews/pending") { auth(t) } }.ok()
     suspend fun openTrials(): List<dz.hirz.shared.api.TrialDto> = member { t -> http.get("$base/v1/trials/open") { auth(t) } }.ok()
     /** The circle's trial, or null when it is in none (204). */
     suspend fun circleTrial(circleId: String): dz.hirz.shared.api.CircleTrialDto? {

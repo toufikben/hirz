@@ -92,6 +92,56 @@ class TrialTest {
     }
 
     @Test
+    fun onlyRulesThatAlertCanBeTested() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val trial = client.openTrial()
+            val circle = client.newCircle("test.mom")
+            val kid = client.newAsset("test.mom", circle.id)
+            client.postJson("/v1/circles/${circle.id}/trial", "test.mom", JoinTrialRequest(trial.id, CONSENT_VERSION))
+            assertEquals(HttpStatusCode.UnprocessableEntity,
+                client.postJson("/v1/circles/${circle.id}/trial/tests", "test.mom", GuidedTestRequest(kid.id, RuleId.NIGHT_EXIT)).status, "a child has no night exit rule")
+            assertEquals(HttpStatusCode.UnprocessableEntity,
+                client.postJson("/v1/circles/${circle.id}/trial/tests", "test.mom", GuidedTestRequest(kid.id, RuleId.MISSED_ARRIVAL)).status, "no routine")
+        }
+    }
+
+    @Test
+    fun leavingForgetsTheCircle() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val trial = client.openTrial()
+            val circle = client.newCircle("test.mom")
+            client.postJson("/v1/circles/${circle.id}/trial", "test.mom", JoinTrialRequest(trial.id, CONSENT_VERSION))
+            fun pseudonym() = env.db.connection.use { c ->
+                c.createStatement().executeQuery("SELECT pseudonym FROM trial_circles WHERE circle_id = '${circle.id}'").use { it.next(); it.getString(1) }
+            }
+            val first = pseudonym()
+            client.postJson("/v1/feedback", "test.mom", dz.hirz.shared.api.ProblemReportRequest(circle.id, "late push", "1.4.0", "x"))
+            client.delete("/v1/circles/${circle.id}/trial") { bearerAuth("test.mom") }
+            val reports = env.db.connection.use { c -> c.createStatement().executeQuery("SELECT count(*) FROM problem_reports").use { it.next(); it.getInt(1) } }
+            assertEquals(0, reports, "reports sent during the trial go with it")
+            client.postJson("/v1/circles/${circle.id}/trial", "test.mom", JoinTrialRequest(trial.id, CONSENT_VERSION))
+            assertTrue(pseudonym() != first, "a rejoin is a new participant to the operator")
+        }
+    }
+
+    @Test
+    fun anEndedTrialCanStillBeLeft() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val trial = client.openTrial()
+            val circle = client.newCircle("test.mom")
+            client.postJson("/v1/circles/${circle.id}/trial", "test.mom", JoinTrialRequest(trial.id, CONSENT_VERSION))
+            env.clock.now = Instant.parse("2026-12-05T10:00:00Z")
+            val mine: dz.hirz.shared.api.CircleTrialDto = client.get("/v1/circles/${circle.id}/trial") { bearerAuth("test.mom") }.body()
+            assertTrue(mine.ended)
+            assertEquals(HttpStatusCode.NoContent, client.delete("/v1/circles/${circle.id}/trial") { bearerAuth("test.mom") }.status)
+            assertEquals(HttpStatusCode.NoContent, client.get("/v1/circles/${circle.id}/trial") { bearerAuth("test.mom") }.status)
+        }
+    }
+
+    @Test
     fun trialEndsByItself() {
         val env = TestEnv()
         withApp(env) { client, _ ->

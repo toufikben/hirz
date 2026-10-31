@@ -31,7 +31,8 @@ data class JoinTrialRequest(val trialId: String, val consentVersion: Int)
 
 /** The circle's trial, if it is in one. */
 @Serializable
-data class CircleTrialDto(val trial: TrialDto, val joinedAtMs: Long)
+data class CircleTrialDto(val trial: TrialDto, val joinedAtMs: Long, /** Past its end: only leaving remains. */ val ended: Boolean = false,
+    /** The circle consented to an older text: it must consent again to keep counting. */ val consentOutdated: Boolean = false)
 
 /** The family is about to test [rule] on [assetId] for real: it must ring. */
 @Serializable
