@@ -147,6 +147,9 @@ class RulesEngine(
                         place.kind.alarmsOnEntry() -> RuleId.FORBIDDEN_ENTRY
                         else -> RuleId.PLACE_EXIT
                     }
+                    // A trip the asset's routine expects (to school, home after dismissal) is the routine rules' to watch.
+                    if (rule == RuleId.PLACE_EXIT && dz.hirz.server.jobs.RoutineScanner.expectedExit(
+                            c, s.assetId, s.circleId, placeId, place.kind == PlaceKind.HOME || place.kind == PlaceKind.BARN, fixAt)) return@let
                     // The profile decides how urgent this is, or that it does not run for this asset at all.
                     profile.tierOf(rule)?.let { tier -> found += Finding(s.assetId, s.circleId, rule, tier, listOf(it), at) }
                 }

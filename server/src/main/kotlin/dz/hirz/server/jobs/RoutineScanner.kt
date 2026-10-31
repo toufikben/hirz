@@ -61,27 +61,12 @@ class RoutineScanner(private val db: DataSource, private val clock: Clock, priva
         }
     }
 
-    /** Whether the routine runs on [day]: its weekdays and, for a school, the school calendar (with the circle's corrections). */
-    private fun runsOn(c: Connection, r: RoutineDto, circle: UUID, day: LocalDate): Boolean {
-        if (day.dayOfWeek.value !in r.days) return false
-        val kind = c.prepareStatement("SELECT kind FROM places WHERE id = ?").apply { setObject(1, UUID.fromString(r.placeId)) }
-            .executeQuery().use { if (it.next()) it.getString(1) else return false }
-        if (kind != "school") return !AlgerianCalendar.isNationalHoliday(day)
-        val overrides = c.prepareStatement("SELECT kind, day FROM calendar_overrides WHERE circle_id = ?").apply { setObject(1, circle) }
-            .executeQuery().toList { it.getString(1) to it.getDate(2).toLocalDate() }
-        return AlgerianCalendar.isSchoolDay(day, overrides)
-    }
 
     /**
      * `MISSED_ARRIVAL`: [RuleConfig.arrivalGraceMin] after the arrive-by time, no good fix inside the place since the
      * arrival window opened. Not when the asset's sources are silent (that is the silence rule's to say), and not during
      * a handover that mutes place exits (a day with the other parent).
      */
-    /** The routine as it runs today: shifted by its Ramadan offset during Ramadan. */
-    private fun shifted(r: RoutineDto, now: Instant): RoutineDto {
-        if (r.ramadanOffsetMin == 0 || !AlgerianCalendar.inRamadan(now.atZone(ALGIERS).toLocalDate())) return r
-        return r.copy(arriveByMin = r.arriveByMin?.plus(r.ramadanOffsetMin), dismissalMin = r.dismissalMin?.plus(r.ramadanOffsetMin))
-    }
 
     private fun missedArrival(raw: RoutineDto, now: Instant): Finding? = db.tx { c ->
         val r = shifted(raw, now)
@@ -182,5 +167,47 @@ class RoutineScanner(private val db: DataSource, private val clock: Clock, priva
         stillUnknown(c, asset, circle, now, cfg.unusualStopMs) ?: return@tx null
         if (!once(c, asset, "ROUTINE_STOP:${r.id}", local.toLocalDate())) return@tx null
         Finding(asset, circle, RuleId.UNUSUAL_STOP, tier, listOf(Reason("unusual_stop", mapOf("minutes" to (cfg.unusualStopMs / 60_000).toString()))), now)
+    }
+
+    companion object {
+        /** Whether the routine runs on [day]: its weekdays and, for a school, the school calendar (with the circle's corrections). */
+        internal fun runsOn(c: Connection, r: RoutineDto, circle: UUID, day: LocalDate): Boolean {
+            if (day.dayOfWeek.value !in r.days) return false
+            val kind = c.prepareStatement("SELECT kind FROM places WHERE id = ?").apply { setObject(1, UUID.fromString(r.placeId)) }
+                .executeQuery().use { if (it.next()) it.getString(1) else return false }
+            if (kind != "school") return !AlgerianCalendar.isNationalHoliday(day)
+            val overrides = c.prepareStatement("SELECT kind, day FROM calendar_overrides WHERE circle_id = ?").apply { setObject(1, circle) }
+                .executeQuery().toList { it.getString(1) to it.getDate(2).toLocalDate() }
+            return AlgerianCalendar.isSchoolDay(day, overrides)
+        }
+
+        /** The routine as it runs today: shifted by its Ramadan offset during Ramadan. */
+        internal fun shifted(r: RoutineDto, now: Instant): RoutineDto {
+            if (r.ramadanOffsetMin == 0 || !AlgerianCalendar.inRamadan(now.atZone(ALGIERS).toLocalDate())) return r
+            return r.copy(arriveByMin = r.arriveByMin?.plus(r.ramadanOffsetMin), dismissalMin = r.dismissalMin?.plus(r.ramadanOffsetMin))
+        }
+
+        /**
+         * A place exit the routine expects (P7 false-alarm budget): leaving home in the hours before the arrive-by time
+         * (on the way to school, the pasture), or leaving the routine's own place from just before dismissal on. The
+         * routine rules (missed arrival, stops on the way, still after dismissal) watch these trips instead.
+         */
+        fun expectedExit(c: Connection, assetId: UUID, circleId: UUID, placeId: UUID, homeLike: Boolean, at: Instant): Boolean {
+            val local = at.atZone(ALGIERS)
+            val minute = local.hour * 60 + local.minute
+            val routines = c.prepareStatement("SELECT * FROM routines WHERE asset_id = ? AND active").apply { setObject(1, assetId) }
+                .executeQuery().toList { RoutineService.dto(it) }
+            return routines.any { raw ->
+                if (!runsOn(c, raw, circleId, local.toLocalDate())) return@any false
+                val r = shifted(raw, at)
+                val fromHome = homeLike && r.arriveByMin?.let { minute in (it - LEAVE_HOME_BEFORE_MIN)..(it + LEAVE_HOME_AFTER_MIN) } == true
+                val fromPlace = r.placeId == placeId.toString() && r.dismissalMin?.let { minute >= it - LEAVE_EARLY_MIN } == true
+                fromHome || fromPlace
+            }
+        }
+
+        private const val LEAVE_HOME_BEFORE_MIN = 120
+        private const val LEAVE_HOME_AFTER_MIN = 60
+        private const val LEAVE_EARLY_MIN = 15
     }
 }
