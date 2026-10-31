@@ -20,6 +20,7 @@ import dz.hirz.shared.api.CreatePlaceRequest
 import dz.hirz.shared.api.IngestBatch
 import dz.hirz.shared.api.IngestSignal
 import dz.hirz.shared.api.LatLon
+import dz.hirz.shared.api.OutingRequest
 import dz.hirz.shared.api.PairResponse
 import dz.hirz.shared.api.PlaceDto
 import dz.hirz.shared.api.PlaceKind
@@ -58,8 +59,8 @@ private val MOSQUE = 300.0 to 0.0      // tarawih in Ramadan, not a named place
 private enum class Kind { CHILD, TEEN, ELDER }
 private class Member(val kind: Kind, val deadPhoneAtNight: Boolean = false, val drifts: Boolean = false, val visitsGrandma: Boolean = false)
 
-/** One fix of one member at a local time of one day. */
-private data class Fix(val at: Instant, val member: Int, val north: Double, val east: Double, val acc: Double = 10.0)
+/** One fix of one member at a local time of one day; [outing]: mum starts an outing with them first. */
+private data class Fix(val at: Instant, val member: Int, val north: Double, val east: Double, val acc: Double = 10.0, val outing: Boolean = false)
 
 // 2027-02-09 … 2027-03-10: school days, weekends, all of Ramadan (estimated 8 Feb – 9 Mar) and Eid al-Fitr (a holiday).
 private val FIRST = LocalDate.of(2027, 2, 9)
@@ -92,6 +93,8 @@ private fun month(): List<Fix> = buildList {
                 } else {
                     add("09:00", HOME); add("13:00", HOME)
                     if (m.visitsGrandma && day.dayOfWeek == DayOfWeek.SATURDAY) {
+                        // With mum: she starts an outing in the app before they leave.
+                        add(Fix(local(day, "14:55"), i, HOME.first, HOME.second, outing = true))
                         listOf("15:00", "15:20", "15:40", "16:00", "16:20", "16:40", "17:00").forEach { add(it, GRANDMA) }
                         add("17:30", HOME)
                     }
@@ -122,9 +125,11 @@ class NormalMonthTest {
             val school: PlaceDto = client.postJson("/v1/circles/${circle.id}/places", "test.mom",
                 CreatePlaceRequest("Ecole", PlaceKind.SCHOOL, ShapeDto.Circle(at(SCHOOL.first, SCHOOL.second), 80.0))).body()
             client.postJson("/v1/circles/${circle.id}/places", "test.mom", CreatePlaceRequest("Dar", PlaceKind.HOME, ShapeDto.Circle(at(0.0, 0.0), 50.0)))
+            val assetIds = mutableListOf<String>()
             val tokens = FAMILY.mapIndexed { i, m ->
                 val type = when (m.kind) { Kind.CHILD -> AssetType.CHILD; Kind.TEEN -> AssetType.TEEN; Kind.ELDER -> AssetType.ELDER }
                 val a = client.newAsset("test.mom", circle.id, type, "M$i")
+                assetIds += a.id
                 if (m.kind != Kind.ELDER) client.postJson("/v1/assets/${a.id}/routines", "test.mom", RoutineRequest(school.id, template = RoutineTemplate.SCHOOL))
                 if (m.kind == Kind.TEEN) client.put("/v1/assets/${a.id}/profile") {
                     bearerAuth("test.mom"); contentType(ContentType.Application.Json); setBody(ProfileUpdate(curfewMinute = 22 * 60))
@@ -148,6 +153,7 @@ class NormalMonthTest {
                 }
                 env.clock.now = instant
                 batch.forEach { f ->
+                    if (f.outing) client.postJson("/v1/assets/${assetIds[f.member]}/outings", "test.mom", OutingRequest(hours = 3))
                     client.postJson("/v1/ingest", tokens[f.member], IngestBatch(listOf(
                         IngestSignal("m${f.member}-${instant.toEpochMilli()}", instant.toEpochMilli(), at(f.north, f.east), f.acc))))
                 }

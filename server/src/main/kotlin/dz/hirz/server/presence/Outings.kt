@@ -78,6 +78,11 @@ class Outings(private val db: DataSource, private val clock: Clock, private val 
 
     companion object {
         fun near(a: LatLon, b: LatLon): Boolean = OwnerOrder.metres(a, b) <= TOGETHER_M
+
+        /** Whether a guardian has the asset out on an outing at [at]: its place exits are the guardian's doing (P7). */
+        fun accompanied(c: Connection, assetId: UUID, at: java.time.Instant): Boolean =
+            c.prepareStatement("SELECT EXISTS (SELECT 1 FROM outings WHERE asset_id = ? AND ended_at IS NULL AND starts_at <= ? AND ends_at > ?)")
+                .apply { setObject(1, assetId); setTimestamp(2, at.ts()); setTimestamp(3, at.ts()) }.executeQuery().use { it.next() && it.getBoolean(1) }
     }
 }
 

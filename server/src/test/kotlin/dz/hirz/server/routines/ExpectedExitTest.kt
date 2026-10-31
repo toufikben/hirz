@@ -12,6 +12,7 @@ import dz.hirz.shared.api.IncidentDto
 import dz.hirz.shared.api.IngestBatch
 import dz.hirz.shared.api.IngestSignal
 import dz.hirz.shared.api.LatLon
+import dz.hirz.shared.api.OutingRequest
 import dz.hirz.shared.api.PairResponse
 import dz.hirz.shared.api.PlaceDto
 import dz.hirz.shared.api.PlaceKind
@@ -31,7 +32,7 @@ private val DAR = LatLon(36.7538, 3.0588)
 private val ECOLE = LatLon(36.7638, 3.0588)
 private fun northOf(p: LatLon, m: Double) = LatLon(p.lat + m / 111_320.0, p.lon)
 
-private class Scholar(val circleId: String, val token: String)
+private class Scholar(val circleId: String, val assetId: String, val token: String)
 
 /** A pupil with the school routine (Sun–Thu, 08:00 to 16:30) and, if [routine], nothing else configured. */
 private suspend fun HttpClient.scholar(env: TestEnv, start: Instant, routine: Boolean = true): Scholar {
@@ -42,7 +43,7 @@ private suspend fun HttpClient.scholar(env: TestEnv, start: Instant, routine: Bo
     val kid = newAsset("test.mom", circle.id)
     if (routine) postJson("/v1/assets/${kid.id}/routines", "test.mom", RoutineRequest(school.id, template = RoutineTemplate.SCHOOL))
     val p: PairResponse = pair(pairingCode("test.mom", kid.id).code).body()
-    return Scholar(circle.id, p.sourceToken)
+    return Scholar(circle.id, kid.id, p.sourceToken)
 }
 
 /** Fixes a minute apart: inside [from], then walking away north 200, 260, 320 m. */
@@ -55,6 +56,32 @@ private suspend fun HttpClient.exits(s: Scholar): List<IncidentDto> =
     get("/v1/circles/${s.circleId}/incidents?state=open") { bearerAuth("test.mom") }.body<List<IncidentDto>>().filter { it.rule == RuleId.PLACE_EXIT }
 
 class ExpectedExitTest {
+    @Test
+    fun anExitConfirmedLateIsJudgedWhenTheTripBegan() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val s = client.scholar(env, Instant.parse("2026-11-08T15:35:00Z")) // 16:35
+            listOf("15:35" to 0.0, "15:36" to 0.0, "15:50" to 200.0, "16:05" to 260.0).forEach { (hm, m) ->
+                env.clock.now = Instant.parse("2026-11-08T$hm:00Z")
+                client.postJson("/v1/ingest", s.token, IngestBatch(listOf(IngestSignal("d$hm", env.clock.millis(), northOf(ECOLE, m), 10.0))))
+            }
+            env.clock.now = Instant.parse("2026-11-09T06:15:00Z") // the phone is back the next morning
+            client.postJson("/v1/ingest", s.token, IngestBatch(listOf(IngestSignal("next", env.clock.millis(), northOf(ECOLE, 320.0), 10.0))))
+            assertTrue(client.exits(s).isEmpty(), "the walk home began after dismissal")
+        }
+    }
+
+    @Test
+    fun anOutingMutesPlaceExits() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val s = client.scholar(env, Instant.parse("2026-11-13T13:00:00Z"), routine = false) // Friday 14:00
+            client.postJson("/v1/assets/${s.assetId}/outings", "test.mom", OutingRequest(hours = 3))
+            client.leave(env, s, DAR)
+            assertTrue(client.exits(s).isEmpty(), "the child is out with mum")
+        }
+    }
+
     @Test
     fun leavingSchoolAfterDismissalIsExpected() {
         val env = TestEnv()

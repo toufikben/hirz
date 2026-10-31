@@ -147,9 +147,15 @@ class RulesEngine(
                         place.kind.alarmsOnEntry() -> RuleId.FORBIDDEN_ENTRY
                         else -> RuleId.PLACE_EXIT
                     }
-                    // A trip the asset's routine expects (to school, home after dismissal) is the routine rules' to watch.
-                    if (rule == RuleId.PLACE_EXIT && dz.hirz.server.jobs.RoutineScanner.expectedExit(
-                            c, s.assetId, s.circleId, placeId, place.kind == PlaceKind.HOME || place.kind == PlaceKind.BARN, fixAt)) return@let
+                    // A trip the asset's routine expects (to school, home after dismissal) is the routine rules' to watch; it is
+                    // judged when the trip began too, since a sparse track confirms the exit only at a later fix. An outing a
+                    // guardian started is theirs to answer for (the leash watches it).
+                    if (rule == RuleId.PLACE_EXIT) {
+                        val homeLike = place.kind == PlaceKind.HOME || place.kind == PlaceKind.BARN
+                        fun expected(t: Instant) = dz.hirz.server.jobs.RoutineScanner.expectedExit(c, s.assetId, s.circleId, placeId, homeLike, t)
+                        if (dz.hirz.server.presence.Outings.accompanied(c, s.assetId, fixAt) || expected(fixAt) ||
+                            state.lastFixMs?.let { expected(Instant.ofEpochMilli(it)) } == true) return@let
+                    }
                     // The profile decides how urgent this is, or that it does not run for this asset at all.
                     profile.tierOf(rule)?.let { tier -> found += Finding(s.assetId, s.circleId, rule, tier, listOf(it), at) }
                 }
