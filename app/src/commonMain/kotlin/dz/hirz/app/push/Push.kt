@@ -2,7 +2,8 @@ package dz.hirz.app.push
 
 /** A decoded FCM data message. The server never puts coordinates or reasons in it (design §12.3). */
 sealed interface Push {
-    data class Incident(val incidentId: String, val tier: String, val assetName: String, val rule: String?) : Push
+    /** [quiet]: repeated false alarms of this rule (verify first, P7): the first push does not ring; it escalates as usual. */
+    data class Incident(val incidentId: String, val tier: String, val assetName: String, val rule: String?, val quiet: Boolean = false) : Push
     data class CheckIn(val assetName: String) : Push
     /** Companion: sound the alarm for 30 s even when silenced (design §6.2). */
     data class Ring(val assetName: String) : Push
@@ -18,9 +19,9 @@ sealed interface Push {
 
 object PushPayload {
     fun parse(data: Map<String, String>): Push? = when (data["t"]) {
-        "incident" -> {
+        "incident", "incident_quiet" -> {
             val id = data["id"]; val tier = data["tier"]; val asset = data["asset"]
-            if (id == null || tier == null || asset == null) null else Push.Incident(id, tier, asset, data["rule"])
+            if (id == null || tier == null || asset == null) null else Push.Incident(id, tier, asset, data["rule"], quiet = data["t"] == "incident_quiet")
         }
         "checkin" -> data["asset"]?.let { Push.CheckIn(it) }
         "ring" -> Push.Ring(data["asset"].orEmpty())
@@ -28,14 +29,14 @@ object PushPayload {
         "normal_rate" -> Push.Rate(high = false)
         "sms_pending" -> Push.SmsPending
         "close_confirm" -> data["id"]?.let { Push.CloseConfirm(it, data["asset"].orEmpty()) }
-        "custody_changed", "gateway_silent" -> Push.Notice(data["t"]!!, data["asset"].orEmpty())
+        "custody_changed", "gateway_silent", "digest" -> Push.Notice(data["t"]!!, data["asset"].orEmpty())
         else -> null
     }
 }
 
 /** Only P0 and P1 ring; P2 is in-app only (design §5). */
 object AlarmPolicy {
-    fun isAlarm(p: Push): Boolean = p is Push.Incident && (p.tier == "P0" || p.tier == "P1")
+    fun isAlarm(p: Push): Boolean = p is Push.Incident && !p.quiet && (p.tier == "P0" || p.tier == "P1")
 }
 
 /** Lock-screen text: the asset's name and the urgency, nothing else (no place, no coordinates, no alarming words). */

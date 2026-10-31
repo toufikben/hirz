@@ -308,12 +308,14 @@ private fun CircleTab(env: AppEnvironment, client: HirzClient, circle: CircleDto
             }
             invite?.let { Text(stringResource(Res.string.invite_code, it), style = MaterialTheme.typography.titleLarge) }
         }
+        item { DigestCard(client, circle.id) }
         item { HorizontalDivider(); Text(stringResource(Res.string.people_and_things), style = MaterialTheme.typography.titleMedium) }
         items(assets, key = { it.id }) { a ->
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(a.name, style = MaterialTheme.typography.titleMedium)
                     if (a.type !in VEHICLE_TYPES) ProfileCard(client, a, isOwner = circle.myRole == Role.OWNER)
+                    if (a.type !in VEHICLE_TYPES) RoutineCard(client, circle.id, a, canEdit = circle.myRole == Role.OWNER || circle.myRole == Role.GUARDIAN)
                     if (a.type !in VEHICLE_TYPES && a.type != AssetType.LIVESTOCK && (circle.myRole == Role.OWNER || circle.myRole == Role.GUARDIAN)) OutingButton(client, a.id)
                     // A family phone relays the circle's BLE tags only once an owner or guardian allows it.
                     if (circle.myRole == Role.OWNER || circle.myRole == Role.GUARDIAN) a.sources.filter { it.kind == "companion" && !it.revoked }.forEach { src ->

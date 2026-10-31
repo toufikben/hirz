@@ -82,6 +82,9 @@ fun IncidentCard(client: HirzClient, inc: IncidentDto, view: CircleView, numbers
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("${inc.tier} — ${inc.assetName}", style = MaterialTheme.typography.titleLarge)
             inc.reasons.forEach { Text("• " + ReasonText.render(it, lang)) }
+            if (inc.verifyFirst) Text(t(lang, "تحقّق أولًا: إنذارات كاذبة متكررة لهذه القاعدة. يتصاعد إن لم يؤكّده أحد.",
+                "À vérifier d'abord : fausses alertes répétées. Escalade si personne ne confirme.",
+                "Check first: repeated false alarms for this rule. Escalates if nobody confirms."), style = MaterialTheme.typography.bodySmall)
             LadderText.render(inc.escalation, view.names, lang, ::formatClock)?.let { Text(it, style = MaterialTheme.typography.titleSmall) }
             Text(inc.ownerMemberId?.let { t(lang, "يتولاها: ", "Pris en charge par : ", "Handled by: ") + (view.names[it] ?: it.take(8)) }
                 ?: t(lang, "لم يتولّها أحد بعد", "Personne ne s'en occupe encore", "Nobody is handling it yet"))
