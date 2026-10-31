@@ -24,6 +24,21 @@
 - **Scenarios:** 3 new livestock replay scenarios (barn at 2 am, truck, grazing). The confusion matrix now includes a livestock row and the truck-speed rule.
 - **LoRaWAN:** research only (`docs/research/res-lorawan.md`). It is deferred to a bench trial.
 
+## Whole-branch review
+A fresh review found four critical defects, all fixed with tests (CI 41199985433):
+- Late findings were capped at P1 for every profile, so an autistic child's run-away P0 uploaded three minutes late
+  rang as P1. Only store-and-forward profiles get the late treatment now.
+- A shepherd's offline buffer was uploaded with the phone's current position, placing the whole herd in the village
+  hours later. Each sighting now carries the fix it was heard at, within 60 s, or is dropped.
+- Any Hirz phone could post sightings of another circle's tag and move that animal. A relay now carries only its own
+  circle's tags, with sane fixes.
+- KEYLESS_NO_OWNER rang on every start of a tagged car whose family never relayed, and owner-away arming never let go.
+  Keyless now needs an armed car whose family relayed in the last day; a later family sighting releases the latch;
+  scans are filtered so Android delivers them with the screen off.
+Also fixed: tags are never silent sources; the leash needs a fresh fix; one herd alarm per night; livestock night ends
+at 04:30; stillness only in a pasture; an old Eid date does not erase next year's season; sightings purged after a week.
+Accepted risk: proof of possession at tag registration is the phone's own report (no trusted hardware).
+
 ## Breeder trial
 **Not run yet.** It needs one breeder for two weeks:
 - a GSM leader collar;
