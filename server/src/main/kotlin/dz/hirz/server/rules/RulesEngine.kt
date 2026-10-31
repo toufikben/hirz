@@ -16,8 +16,11 @@ import java.util.UUID
 import javax.sql.DataSource
 
 /** Runs the v0 rules on every accepted signal; boundary state is persisted per (asset, place). */
-/** A sparse track confirms an exit late: the reading before counts as the trip's start only if this recent. */
-private const val TRIP_BEGAN_MS = 30 * 60_000L
+/**
+ * A sparse track confirms an exit late (a phone back the next morning): the trip's first reading outside counts as its
+ * start within a day. The routine rules (missed arrival, still after dismissal) watch those windows meanwhile.
+ */
+private const val TRIP_BEGAN_MS = 24 * 3_600_000L
 
 class RulesEngine(
     private val db: DataSource,
@@ -159,9 +162,10 @@ class RulesEngine(
                     if (rule == RuleId.PLACE_EXIT && tier != Tier.P0) {
                         val homeLike = place.kind == PlaceKind.HOME || place.kind == PlaceKind.BARN
                         fun expected(t: Instant) = dz.hirz.server.jobs.RoutineScanner.expectedExit(c, s.assetId, s.circleId, placeId, homeLike, t)
-                        val recentPrevious = state.lastFixMs?.takeIf { fixAt.toEpochMilli() - it <= TRIP_BEGAN_MS }
+                        // When the trip began: the first reading beyond the margin of this run, within a day.
+                        val began = state.firstOutMs?.takeIf { fixAt.toEpochMilli() - it <= TRIP_BEGAN_MS }
                         if (dz.hirz.server.presence.Outings.accompanied(c, s.assetId, at, point, accuracy.coerceAtMost(cfg.boundaryAccuracyFloorM), cfg) || expected(fixAt) ||
-                            recentPrevious?.let { expected(Instant.ofEpochMilli(it)) } == true) return@let
+                            began?.let { expected(Instant.ofEpochMilli(it)) } == true) return@let
                     }
                     found += Finding(s.assetId, s.circleId, rule, tier, listOf(it), at)
                 }
@@ -361,23 +365,24 @@ class RulesEngine(
     }
 
     private fun load(c: Connection, assetId: UUID, placeId: UUID): PlaceState =
-        c.prepareStatement("SELECT status, outside_count, inside_count, last_fix_ms FROM asset_rule_state WHERE asset_id = ? AND place_id = ?")
+        c.prepareStatement("SELECT status, outside_count, inside_count, last_fix_ms, first_out_ms FROM asset_rule_state WHERE asset_id = ? AND place_id = ?")
             .apply { setObject(1, assetId); setObject(2, placeId) }.executeQuery().use { rs ->
                 if (!rs.next()) PlaceState()
                 else PlaceState(
                     BoundaryStatus.valueOf(rs.getString(1).uppercase()), rs.getInt(2), rs.getInt(3),
                     rs.getLong(4).takeUnless { rs.wasNull() },
+                    rs.getLong(5).takeUnless { rs.wasNull() },
                 )
             }
 
     private fun save(c: Connection, assetId: UUID, placeId: UUID, st: PlaceState) {
         c.prepareStatement(
-            """INSERT INTO asset_rule_state (asset_id, place_id, status, outside_count, inside_count, last_fix_ms) VALUES (?, ?, ?, ?, ?, ?)
+            """INSERT INTO asset_rule_state (asset_id, place_id, status, outside_count, inside_count, last_fix_ms, first_out_ms) VALUES (?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT (asset_id, place_id) DO UPDATE SET status = EXCLUDED.status, outside_count = EXCLUDED.outside_count,
-                 inside_count = EXCLUDED.inside_count, last_fix_ms = EXCLUDED.last_fix_ms""",
+                 inside_count = EXCLUDED.inside_count, last_fix_ms = EXCLUDED.last_fix_ms, first_out_ms = EXCLUDED.first_out_ms""",
         ).apply {
             setObject(1, assetId); setObject(2, placeId); setString(3, st.status.name.lowercase())
-            setInt(4, st.outsideCount); setInt(5, st.insideCount); setObject(6, st.lastFixMs)
+            setInt(4, st.outsideCount); setInt(5, st.insideCount); setObject(6, st.lastFixMs); setObject(7, st.firstOutMs)
         }.executeUpdate()
     }
 }

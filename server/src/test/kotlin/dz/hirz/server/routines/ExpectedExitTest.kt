@@ -158,7 +158,7 @@ class ExpectedExitTest {
             val school: PlaceDto = client.postJson("/v1/circles/${circle.id}/places", "test.mom", CreatePlaceRequest("Ecole", PlaceKind.SCHOOL, ShapeDto.Circle(ECOLE, 80.0))).body()
             val kid = client.newAsset("test.mom", circle.id)
             val res = client.postJson("/v1/assets/${kid.id}/routines", "test.dad", RoutineRequest(school.id, template = RoutineTemplate.SCHOOL))
-            assertEquals(HttpStatusCode.Forbidden, res.status, "a routine mutes exits: the owner's call")
+            assertEquals(HttpStatusCode.NotFound, res.status, "a routine mutes exits: the owner's call (a wrong role is a 404)")
         }
     }
 
