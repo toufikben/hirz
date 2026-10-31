@@ -28,6 +28,7 @@ import io.ktor.server.routing.Route
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
+import io.ktor.server.routing.put
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -175,7 +176,7 @@ fun Route.bleMemberRoutes(service: BleService) {
 }
 
 fun Route.bleGrantRoutes(service: BleService) {
-    io.ktor.server.routing.put("/v1/assets/{id}/sources/{sourceId}/relay") {
+    put("/v1/assets/{id}/sources/{sourceId}/relay") {
         service.grant(uuidOrNotFound(call.parameters["id"]), uuidOrNotFound(call.parameters["sourceId"]), call.member().memberId,
             call.receive<dz.hirz.shared.api.RelayGrant>().enabled)
         call.respond(HttpStatusCode.NoContent)
