@@ -89,7 +89,9 @@ class PresenceArmTest {
         withApp(env) { client, _ ->
             val c = client.car(env)
             client.ignition(env, c, false)
-            env.clock.advance(1.minutes)
+            client.seen(env, c)
+            env.clock.advance(5.minutes)
+            assertEquals(VehicleMode.ARMED, client.state(c).mode)
             client.ignition(env, c, true)
             assertEquals(Tier.P1, client.open(c).single { it.rule == RuleId.KEYLESS_NO_OWNER }.tier, "started with no family phone near: a relay attack")
         }
@@ -104,6 +106,36 @@ class PresenceArmTest {
             env.clock.advance(1.minutes)
             client.ignition(env, c, true)
             assertTrue(client.open(c).none { it.rule == RuleId.KEYLESS_NO_OWNER }, "without a tag the car cannot know who is near")
+        }
+    }
+
+    @Test
+    fun relayNeverEnabledMeansNoKeylessAlarm() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val c = client.car(env)
+            client.ignition(env, c, false)
+            env.clock.advance(1.minutes)
+            client.ignition(env, c, true)
+            assertTrue(client.open(c).isEmpty(), "a tag nobody in the family relays says nothing about who is near")
+        }
+    }
+
+    @Test
+    fun ownerReturningReleasesTheLatch() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val c = client.car(env)
+            client.ignition(env, c, false)
+            client.seen(env, c)
+            env.clock.advance(3.minutes)
+            assertEquals(VehicleMode.ARMED, client.state(c).mode)
+            env.clock.advance(1.minutes)
+            client.seen(env, c)
+            env.clock.advance(20.seconds)
+            assertEquals(VehicleMode.DISARMED, client.state(c).mode, "mom came back from the bakery")
+            client.ignition(env, c, true)
+            assertTrue(client.open(c).isEmpty(), "and drives off without an alarm")
         }
     }
 }

@@ -42,6 +42,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Duration.Companion.minutes
 
 private val SOUK = LatLon(36.77, 3.06)
 private fun north(m: Double) = LatLon(SOUK.lat + m / 111_320.0, SOUK.lon)
@@ -136,6 +137,22 @@ class LeashTest {
             env.clock.advance(2.hours)
             client.ping(env, outing.id, SOUK); client.childAt(env, f, north(800.0)); scanner(env).scanOnce()
             assertTrue(client.open(f).isEmpty(), "the outing ended on its own an hour ago")
+        }
+    }
+
+    @Test
+    fun staleFixOfTheChildDoesNotRaise() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val f = client.family(Condition.AUTISM)
+            client.childAt(env, f, SOUK)
+            env.clock.advance(10.seconds)
+            val outing: OutingDto = client.postJson("/v1/assets/${f.assetId}/outings", "test.dad", OutingRequest(hours = 3)).body()
+            env.clock.advance(5.minutes)
+            client.ping(env, outing.id, north(800.0)); scanner(env).scanOnce()
+            env.clock.advance(70.seconds)
+            client.ping(env, outing.id, north(900.0)); scanner(env).scanOnce()
+            assertTrue(client.open(f).isEmpty(), "a five-minute-old fix says nothing about where the child is now")
         }
     }
 }

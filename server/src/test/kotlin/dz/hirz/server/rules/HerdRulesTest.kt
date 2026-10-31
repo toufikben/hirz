@@ -50,7 +50,7 @@ private fun at(north: Double, east: Double = 0.0) = LatLon(BARN.lat + north / 11
 private class Herd(val circleId: String, val herdId: String, val tokens: List<String>)
 
 /** A barn (40 m) and pasture (1 km) and a herd of [size] on phone collars, the first one leading; the clock at [start]. */
-private suspend fun HttpClient.herd(env: TestEnv, start: Instant, size: Int = 3): Herd {
+private suspend fun HttpClient.herd(env: TestEnv, start: Instant, size: Int = 3, leader: Boolean = true): Herd {
     env.clock.now = start
     val circle = newCircle("test.mom")
     postJson("/v1/circles/${circle.id}/places", "test.mom", CreatePlaceRequest("Zriba", PlaceKind.BARN, ShapeDto.Circle(BARN, 40.0), marginM = 50))
@@ -59,7 +59,7 @@ private suspend fun HttpClient.herd(env: TestEnv, start: Instant, size: Int = 3)
     val tokens = (1..size).map { i ->
         val a = newAsset("test.mom", circle.id, AssetType.LIVESTOCK, "Head $i")
         postJson("/v1/herds/${herd.id}/members", "test.mom", HerdMemberRequest(a.id))
-        if (i == 1) put("/v1/herds/${herd.id}/leader") { bearerAuth("test.mom"); contentType(ContentType.Application.Json); setBody(LeaderRequest(a.id)) }
+        if (i == 1 && leader) put("/v1/herds/${herd.id}/leader") { bearerAuth("test.mom"); contentType(ContentType.Application.Json); setBody(LeaderRequest(a.id)) }
         pair(pairingCode("test.mom", a.id).code).body<PairResponse>().sourceToken
     }
     return Herd(circle.id, herd.id, tokens)
@@ -176,6 +176,29 @@ class HerdRulesTest {
             client.fix(env, h.tokens[0], at(3000.0))
             scanner(env).scanOnce()
             assertTrue(client.open(h).none { it.rule == RuleId.ANIMAL_STILL }, "two fixes say nothing about six hours")
+        }
+    }
+
+    @Test
+    fun oneHerdAlarmPerNightWithoutALeader() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val h = client.herd(env, Instant.parse("2026-11-02T01:00:00Z"), size = 3, leader = false)
+            repeat(2) { h.tokens.forEach { t -> client.fix(env, t, BARN) }; env.clock.advance(10.seconds) }
+            listOf(200.0, 260.0, 300.0).forEach { m -> h.tokens.forEach { t -> client.fix(env, t, at(m)) }; env.clock.advance(10.seconds) }
+            val open = client.open(h)
+            assertEquals(1, open.count { it.rule == RuleId.HERD_NIGHT_MOVE }, "the herd left, once: $open")
+        }
+    }
+
+    @Test
+    fun barnFedAnimalIsNotStill() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val h = client.herd(env, Instant.parse("2026-11-02T08:00:00Z"), size = 1)
+            repeat(14) { i -> client.fix(env, h.tokens[0], at(1.0 * (i % 3))); env.clock.advance(30.minutes) }
+            scanner(env).scanOnce()
+            assertTrue(client.open(h).none { it.rule == RuleId.ANIMAL_STILL }, "fattening in the barn before Eid is not sickness")
         }
     }
 }

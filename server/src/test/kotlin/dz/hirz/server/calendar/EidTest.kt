@@ -73,4 +73,11 @@ class EidTest {
             assertEquals(market, got.marketWindow)
         }
     }
+
+    @Test
+    fun lastYearsAnnouncedDateIsIgnored() {
+        assertTrue(AlgerianCalendar.inEidSeason(LocalDate.parse("2027-05-10"), LocalDate.parse("2026-05-27")),
+            "the 2026 date set by the owner must not switch off the 2027 season")
+        assertTrue(AlgerianCalendar.inEidSeason(LocalDate.parse("2027-05-05"), LocalDate.parse("2027-05-17")), "a date a day off is the announced one")
+    }
 }

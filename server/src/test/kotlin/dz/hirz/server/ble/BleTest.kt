@@ -44,9 +44,9 @@ private suspend fun HttpClient.setup(env: TestEnv, register: Boolean = true): Se
     postJson("/v1/circles/${circle.id}/places", "test.mom", CreatePlaceRequest("Zriba", PlaceKind.BARN, ShapeDto.Circle(BARN, 40.0), marginM = 50))
     val ewe = newAsset("test.mom", circle.id, AssetType.LIVESTOCK, "Naaja")
     if (register) postJson("/v1/assets/${ewe.id}/tags", "test.mom", TagRequest(TAG, "eddystone", proofRssi = -48, proofAtMs = env.clock.millis()))
-    val shepherdCircle = newCircle("test.shepherd")
-    val phone = newAsset("test.shepherd", shepherdCircle.id, AssetType.LONE_WORKER, "Raai")
-    val p: PairResponse = pair(pairingCode("test.shepherd", phone.id).code, adult = true, consent = true).body()
+    // The shepherd's phone belongs to the herd owner's circle: a relay only carries its own circle's tags.
+    val phone = newAsset("test.mom", circle.id, AssetType.LONE_WORKER, "Raai")
+    val p: PairResponse = pair(pairingCode("test.mom", phone.id).code, adult = true, consent = true).body()
     return Setup(circle.id, ewe.id, p.sourceToken, p.sourceId)
 }
 
@@ -72,9 +72,8 @@ class BleTest {
         withApp(env) { client, _ ->
             val s = client.setup(env)
             client.relay(env, s, north(100.0), rssi = -55)
-            val text = client.get("/v1/assets/${s.ewe}/positions?sinceMs=0") { bearerAuth("test.mom") }.bodyAsText() +
-                client.get("/v1/circles/${s.ownerCircle}/assets") { bearerAuth("test.mom") }.bodyAsText()
-            assertTrue(s.relaySourceId !in text && "Raai" !in text && "test.shepherd" !in text, "the relay stays anonymous: $text")
+            val text = client.get("/v1/assets/${s.ewe}/positions?sinceMs=0") { bearerAuth("test.mom") }.bodyAsText()
+            assertTrue(s.relaySourceId !in text, "positions never name the relay: $text")
         }
     }
 
@@ -133,6 +132,60 @@ class BleTest {
             val second = client.relay(env, s, north(100.0), rssi = -55)
             assertEquals(0, second.accepted)
             assertEquals(1, second.dropped)
+        }
+    }
+
+    @Test
+    fun anotherCirclesPhoneCannotMoveTheTag() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val s = client.setup(env)
+            val stranger = client.newCircle("test.stranger")
+            val phone = client.newAsset("test.stranger", stranger.id, AssetType.LONE_WORKER, "X")
+            val token = client.pair(client.pairingCode("test.stranger", phone.id).code, adult = true, consent = true).body<PairResponse>().sourceToken
+            val r: RelayResult = client.postJson("/v1/relay/sightings", token,
+                RelayBatch(RelayFix(BARN, 5.0, env.clock.millis()), listOf(Sighting(TAG, -40, env.clock.millis())))).body()
+            assertEquals(0, r.accepted, "a stranger who heard the tag cannot place the ewe back in her barn")
+        }
+    }
+
+    @Test
+    fun aSightingFarFromTheRelaysFixIsDropped() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val s = client.setup(env)
+            val old = env.clock.millis() - 3 * 3_600_000L
+            val r: RelayResult = client.postJson("/v1/relay/sightings", s.relayToken,
+                RelayBatch(RelayFix(north(5000.0), 10.0, env.clock.millis()), listOf(Sighting(TAG, -55, old)))).body()
+            assertEquals(0, r.accepted, "heard three hours ago in the pasture, not here in the village")
+            val withItsOwnFix: RelayResult = client.postJson("/v1/relay/sightings", s.relayToken,
+                RelayBatch(RelayFix(north(5000.0), 10.0, env.clock.millis()), listOf(Sighting(TAG, -55, old, RelayFix(north(100.0), 10.0, old))))).body()
+            assertEquals(1, withItsOwnFix.accepted, "a buffered sighting carries the fix it was heard at")
+        }
+    }
+
+    @Test
+    fun badRelayFixIsRefused() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val s = client.setup(env)
+            val r: RelayResult = client.postJson("/v1/relay/sightings", s.relayToken,
+                RelayBatch(RelayFix(north(100.0), -5.0, env.clock.millis()), listOf(Sighting(TAG, -55, env.clock.millis())))).body()
+            assertEquals(0, r.accepted, "a negative accuracy would claim certainty that does not exist")
+        }
+    }
+
+    @Test
+    fun aTagIsNeverASilentSource() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val s = client.setup(env)
+            env.clock.advance(kotlin.time.Duration.parse("8h"))
+            val circles = dz.hirz.server.circles.CircleService(env.db, env.clock, dz.hirz.server.circles.CircleEvents.NONE)
+            dz.hirz.server.jobs.SilenceScanner(env.db, env.clock, env.rules, dz.hirz.server.rules.FindingRecorder(env.db, env.clock,
+                dz.hirz.server.incidents.IncidentService(env.db, env.clock, env.notifier, circles))).scanOnce()
+            val open = client.get("/v1/circles/${s.ownerCircle}/incidents?state=open") { bearerAuth("test.mom") }.body<List<IncidentDto>>()
+            assertTrue(open.none { it.rule == dz.hirz.shared.api.RuleId.SILENT_SOURCE && it.assetId == s.ewe }, "a tag nobody hears is not a device gone dark")
         }
     }
 }
