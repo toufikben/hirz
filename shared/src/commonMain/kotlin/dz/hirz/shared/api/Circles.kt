@@ -12,7 +12,6 @@ enum class Role {
     @SerialName("temporary") TEMPORARY,
 }
 
-@Serializable
 /** A family, or an institution (school, transport company, elders' home) that families share children with (P9). */
 @Serializable
 enum class CircleKind { @SerialName("family") FAMILY, @SerialName("institution") INSTITUTION }
