@@ -68,8 +68,18 @@ object AlgerianCalendar {
 
     fun inRamadan(day: LocalDate): Boolean = RAMADAN.any { (from, to) -> !day.isBefore(from) && !day.isAfter(to) }
 
+    /** Awal Muharram, Ashura and the Mawlid, estimated like the Eids; one day each. */
+    private val ONE_DAY = setOf(
+        LocalDate.of(2026, 6, 16), LocalDate.of(2026, 6, 25), LocalDate.of(2026, 8, 25),
+        LocalDate.of(2027, 6, 6), LocalDate.of(2027, 6, 15), LocalDate.of(2027, 8, 14),
+        LocalDate.of(2028, 5, 25), LocalDate.of(2028, 6, 3), LocalDate.of(2028, 8, 3),
+        LocalDate.of(2029, 5, 14), LocalDate.of(2029, 5, 23), LocalDate.of(2029, 7, 24),
+        LocalDate.of(2030, 5, 3), LocalDate.of(2030, 5, 12), LocalDate.of(2030, 7, 13),
+    )
+
     fun isNationalHoliday(day: LocalDate): Boolean {
         if (FIXED.any { (m, d) -> day.monthValue == m && day.dayOfMonth == d }) return true
+        if (day in ONE_DAY) return true
         val eids = listOfNotNull(EID_AL_FITR[day.year], eidAlAdha(day.year))
         return eids.any { !day.isBefore(it) && !day.isAfter(it.plusDays(1)) }
     }

@@ -98,7 +98,8 @@ class ProfileService(
         val owner = role == Role.OWNER
         // Windows, exceptions and the curfew can silence NIGHT_EXIT or CURFEW as surely as a switch: the owner's call.
         val ownerOnly = req.condition != null || req.birthDate != null || req.conditionOnSheet != null ||
-            req.nightWindow != null || req.nightExceptions != null || req.curfewMinute != null || req.nightBySun != null || req.ramadanNightOff != null
+            req.nightWindow != null || req.nightExceptions != null || req.curfewMinute != null || req.nightBySun != null || req.ramadanNightOff != null ||
+            req.verifyFirstOff == false
         if (!owner && ownerOnly) throw ApiException(HttpStatusCode.Forbidden, "owner_only")
         val birth = req.birthDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() ?: unprocessable("bad_birth_date") }
         val condition = req.condition ?: row.condition

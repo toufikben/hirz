@@ -8,7 +8,7 @@ import java.util.UUID
 
 /**
  * False-alarm history (design §12.2): rules whose incidents on this asset were reviewed as false alarms at least
- * [RuleConfig.verifyFirstReviews] times (different incidents) within [RuleConfig.verifyFirstWindowMs]. Their P1 starts
+ * [RuleConfig.verifyFirstReviews] times by an owner (different incidents) within [RuleConfig.verifyFirstWindowMs]. Their P1 starts
  * quietly; a P0 is never affected; the owner can switch it off for the asset.
  */
 object VerifyFirst {
@@ -18,6 +18,7 @@ object VerifyFirst {
         if (off) return emptySet()
         return c.prepareStatement(
             """SELECT i.rule FROM incident_reviews r JOIN incidents i ON i.id = r.incident_id
+               JOIN circle_members cm ON cm.circle_id = i.circle_id AND cm.member_id = r.member_id AND cm.role = 'owner'
                WHERE i.asset_id = ? AND r.false_alarm AND r.at >= ? AND i.tier = 'P1'
                GROUP BY i.rule HAVING count(DISTINCT r.incident_id) >= ?""",
         ).apply { setObject(1, assetId); setTimestamp(2, now.minusMillis(cfg.verifyFirstWindowMs).ts()); setInt(3, cfg.verifyFirstReviews) }

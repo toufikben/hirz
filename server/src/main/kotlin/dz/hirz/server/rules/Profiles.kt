@@ -138,7 +138,9 @@ object Profiles {
         val day = at.atZone(java.time.ZoneId.of("Africa/Algiers")).toLocalDate()
         if (type in PEOPLE) {
             // Ramadan evenings: after iftar the family goes out for the tarawih; that is not a night exit (design §12).
-            return if (!ramadanNightOff && dz.hirz.server.calendar.AlgerianCalendar.inRamadan(day)) p.copy(ramadanEvening = true) else p
+            // Not for dementia or autism, and never when the owner raised NIGHT_EXIT to P0: their night stays night.
+            val eligible = p.condition == Condition.NONE && p.tierOf(RuleId.NIGHT_EXIT) != Tier.P0
+            return if (eligible && !ramadanNightOff && dz.hirz.server.calendar.AlgerianCalendar.inRamadan(day)) p.copy(ramadanEvening = true) else p
         }
         if (type != AssetType.LIVESTOCK) return p
         if (!dz.hirz.server.calendar.AlgerianCalendar.inEidSeason(day, eidOverride)) return p

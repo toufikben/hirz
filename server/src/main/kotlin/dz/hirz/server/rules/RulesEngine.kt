@@ -16,6 +16,9 @@ import java.util.UUID
 import javax.sql.DataSource
 
 /** Runs the v0 rules on every accepted signal; boundary state is persisted per (asset, place). */
+/** A sparse track confirms an exit late: the reading before counts as the trip's start only if this recent. */
+private const val TRIP_BEGAN_MS = 30 * 60_000L
+
 class RulesEngine(
     private val db: DataSource,
     private val cfg: RuleConfig,
@@ -150,14 +153,17 @@ class RulesEngine(
                     // A trip the asset's routine expects (to school, home after dismissal) is the routine rules' to watch; it is
                     // judged when the trip began too, since a sparse track confirms the exit only at a later fix. An outing a
                     // guardian started is theirs to answer for (the leash watches it).
-                    if (rule == RuleId.PLACE_EXIT) {
+                    // The profile decides how urgent this is, or that it does not run for this asset at all.
+                    val tier = profile.tierOf(rule) ?: return@let
+                    // A P0 is never muted, by a routine or by anyone.
+                    if (rule == RuleId.PLACE_EXIT && tier != Tier.P0) {
                         val homeLike = place.kind == PlaceKind.HOME || place.kind == PlaceKind.BARN
                         fun expected(t: Instant) = dz.hirz.server.jobs.RoutineScanner.expectedExit(c, s.assetId, s.circleId, placeId, homeLike, t)
-                        if (dz.hirz.server.presence.Outings.accompanied(c, s.assetId, fixAt) || expected(fixAt) ||
-                            state.lastFixMs?.let { expected(Instant.ofEpochMilli(it)) } == true) return@let
+                        val recentPrevious = state.lastFixMs?.takeIf { fixAt.toEpochMilli() - it <= TRIP_BEGAN_MS }
+                        if (dz.hirz.server.presence.Outings.accompanied(c, s.assetId, at, point, accuracy.coerceAtMost(cfg.boundaryAccuracyFloorM), cfg) || expected(fixAt) ||
+                            recentPrevious?.let { expected(Instant.ofEpochMilli(it)) } == true) return@let
                     }
-                    // The profile decides how urgent this is, or that it does not run for this asset at all.
-                    profile.tierOf(rule)?.let { tier -> found += Finding(s.assetId, s.circleId, rule, tier, listOf(it), at) }
+                    found += Finding(s.assetId, s.circleId, rule, tier, listOf(it), at)
                 }
             }
             // Livestock: the herd out of the barn at night, and a head carried at vehicle speed.
@@ -165,7 +171,7 @@ class RulesEngine(
             truckSpeed(c, s, profile, point, accuracy, fixAt, at)?.let { found += it }
             // Walking in circles outside home (elders): once per outing, re-armed at home.
             profile.tierOf(RuleId.PACING_LOOP)?.let { tier ->
-                val atHome = places.filter { it.kind == PlaceKind.HOME }.any { Geometry.distanceOutsideM(c, it.shape, point) <= 0.0 }
+                val atHome = places.filter { it.kind == PlaceKind.HOME }.any { Geometry.distanceOutsideM(c, it.shape, point) <= it.marginM.toDouble() }
                 if (atHome) { PersonState.clear(c, s.assetId, PACING); return@let }
                 if (PersonState.load(c, s.assetId, PACING, NightKey.serializer()) != null) return@let
                 val track = c.prepareStatement(

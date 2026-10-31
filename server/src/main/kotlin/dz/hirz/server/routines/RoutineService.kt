@@ -25,7 +25,9 @@ import java.sql.ResultSet
 import java.util.UUID
 import javax.sql.DataSource
 
-private val EDITORS = setOf(Role.OWNER, Role.GUARDIAN)
+/** A routine mutes the place exits it expects: lowering an alert is the owner's call (P7 review). */
+private val EDITORS = setOf(Role.OWNER)
+private val READERS = setOf(Role.OWNER, Role.GUARDIAN, Role.VIEWER)
 private val SCHOOL_WEEK = setOf(7, 1, 2, 3, 4)
 private val EVERY_DAY = (1..7).toSet()
 
@@ -73,7 +75,7 @@ class RoutineService(private val db: DataSource, private val circles: CircleServ
     }
 
     fun list(assetId: UUID, memberId: UUID): List<RoutineDto> = db.tx { c ->
-        circles.requireRole(c, circleOfAsset(c, assetId), memberId)
+        circles.requireRole(c, circleOfAsset(c, assetId), memberId, READERS)
         c.prepareStatement("SELECT * FROM routines WHERE asset_id = ? ORDER BY created_at").apply { setObject(1, assetId) }.executeQuery().toList(::dto)
     }
 

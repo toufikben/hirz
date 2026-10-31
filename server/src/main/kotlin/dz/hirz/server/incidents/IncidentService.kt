@@ -101,7 +101,7 @@ class IncidentService(
                 ?: throw IllegalStateException("incident closed concurrently; the finding is retried by the next evaluation")
             c.prepareStatement("UPDATE findings SET incident_id = ? WHERE id = ?").apply { setObject(1, id); setLong(2, findingId) }.executeUpdate()
             // Repeated false alarms of this rule on this asset: its P1 starts quietly (never a P0).
-            if (inserted != null && finding.tier == Tier.P1 && finding.rule.name in VerifyFirst.rules(c, finding.assetId, now, dz.hirz.shared.rules.RuleConfig.DEFAULT)) {
+            if (inserted != null && finding.tier == Tier.P1 && finding.rule.name in VerifyFirst.rules(c, finding.assetId, now, rules)) {
                 c.prepareStatement("UPDATE incidents SET verify_first = true WHERE id = ?").apply { setObject(1, id) }.executeUpdate()
                 quiet = true
             }

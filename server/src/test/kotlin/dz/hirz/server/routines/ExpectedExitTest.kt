@@ -13,6 +13,28 @@ import dz.hirz.shared.api.IngestBatch
 import dz.hirz.shared.api.IngestSignal
 import dz.hirz.shared.api.LatLon
 import dz.hirz.shared.api.OutingRequest
+import dz.hirz.shared.api.OutingDto
+import dz.hirz.shared.api.OutingPing
+import dz.hirz.shared.api.ProfileUpdate
+import dz.hirz.shared.api.RuleOverride
+import dz.hirz.shared.api.Tier
+import dz.hirz.shared.asset.AssetType
+import dz.hirz.shared.asset.Condition
+import dz.hirz.shared.api.Role
+import dz.hirz.server.circles.CircleEvents
+import dz.hirz.server.circles.CircleService
+import dz.hirz.server.incidents.IncidentService
+import dz.hirz.server.jobs.RoutineScanner
+import dz.hirz.server.rules.FindingRecorder
+import dz.hirz.server.rules.Profiles
+import dz.hirz.server.support.join
+import io.ktor.client.request.put
+import io.ktor.client.request.setBody
+import io.ktor.http.ContentType
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.contentType
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import dz.hirz.shared.api.PairResponse
 import dz.hirz.shared.api.PlaceDto
 import dz.hirz.shared.api.PlaceKind
@@ -46,8 +68,9 @@ private suspend fun HttpClient.scholar(env: TestEnv, start: Instant, routine: Bo
     return Scholar(circle.id, kid.id, p.sourceToken)
 }
 
-/** Fixes a minute apart: inside [from], then walking away north 200, 260, 320 m. */
-private suspend fun HttpClient.leave(env: TestEnv, s: Scholar, from: LatLon) = listOf(0.0, 0.0, 200.0, 260.0, 320.0).forEach { m ->
+/** Fixes a minute apart: inside [from], then walking away north 200, 260, 320 m; [beside] runs before each fix. */
+private suspend fun HttpClient.leave(env: TestEnv, s: Scholar, from: LatLon, beside: suspend (LatLon) -> Unit = {}) = listOf(0.0, 0.0, 200.0, 260.0, 320.0).forEach { m ->
+    beside(northOf(from, m))
     postJson("/v1/ingest", s.token, IngestBatch(listOf(IngestSignal("x${env.clock.millis()}", env.clock.millis(), northOf(from, m), 10.0))))
     env.clock.now = env.clock.instant().plusSeconds(60)
 }
@@ -72,14 +95,78 @@ class ExpectedExitTest {
     }
 
     @Test
-    fun anOutingMutesPlaceExits() {
+    fun anOutingWithMumBesideMutesPlaceExits() {
         val env = TestEnv()
         withApp(env) { client, _ ->
             val s = client.scholar(env, Instant.parse("2026-11-13T13:00:00Z"), routine = false) // Friday 14:00
-            client.postJson("/v1/assets/${s.assetId}/outings", "test.mom", OutingRequest(hours = 3))
-            client.leave(env, s, DAR)
+            val outing: OutingDto = client.postJson("/v1/assets/${s.assetId}/outings", "test.mom", OutingRequest(hours = 3)).body()
+            client.leave(env, s, DAR) { p -> client.postJson("/v1/outings/${outing.id}/ping", "test.mom", OutingPing(p, 8.0, env.clock.millis())) }
             assertTrue(client.exits(s).isEmpty(), "the child is out with mum")
         }
+    }
+
+    @Test
+    fun anOutingWhoseGuardianIsSilentOrAwayMutesNothing() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val s = client.scholar(env, Instant.parse("2026-11-13T13:00:00Z"), routine = false)
+            val outing: OutingDto = client.postJson("/v1/assets/${s.assetId}/outings", "test.mom", OutingRequest(hours = 3)).body()
+            // Mum's phone pings from work, 2 km away; then the app is killed.
+            client.postJson("/v1/outings/${outing.id}/ping", "test.mom", OutingPing(northOf(DAR, 2000.0), 8.0, env.clock.millis()))
+            client.leave(env, s, DAR)
+            assertTrue(client.exits(s).isNotEmpty(), "an outing on paper is not a guardian beside the child")
+        }
+    }
+
+    @Test
+    fun aP0ExitIsNeverMutedByTheRoutine() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val s = client.scholar(env, Instant.parse("2026-11-08T06:20:00Z")) // 07:20, the school run
+            client.put("/v1/assets/${s.assetId}/profile") {
+                bearerAuth("test.mom"); contentType(ContentType.Application.Json)
+                setBody(ProfileUpdate(overrides = listOf(RuleOverride(RuleId.PLACE_EXIT, true, Tier.P0))))
+            }
+            client.leave(env, s, DAR)
+            assertTrue(client.exits(s).any { it.tier == Tier.P0 }, "the owner said every exit is urgent")
+        }
+    }
+
+    @Test
+    fun arrivingAndLeavingBeforeTheBellIsAMissedArrival() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val s = client.scholar(env, Instant.parse("2026-11-08T06:45:00Z")) // 07:45 at school
+            client.postJson("/v1/ingest", s.token, IngestBatch(listOf(IngestSignal("in", env.clock.millis(), ECOLE, 10.0))))
+            env.clock.now = Instant.parse("2026-11-08T06:55:00Z") // 07:55, off toward the shops
+            client.postJson("/v1/ingest", s.token, IngestBatch(listOf(IngestSignal("out", env.clock.millis(), northOf(ECOLE, 600.0), 10.0))))
+            env.clock.now = Instant.parse("2026-11-08T07:11:00Z")
+            client.postJson("/v1/ingest", s.token, IngestBatch(listOf(IngestSignal("still-out", env.clock.millis(), northOf(ECOLE, 650.0), 10.0))))
+            val circles = CircleService(env.db, env.clock, CircleEvents.NONE)
+            RoutineScanner(env.db, env.clock, env.rules, FindingRecorder(env.db, env.clock, IncidentService(env.db, env.clock, env.notifier, circles))).scanOnce()
+            val open = client.get("/v1/circles/${s.circleId}/incidents?state=open") { bearerAuth("test.mom") }.body<List<IncidentDto>>()
+            assertTrue(open.any { it.rule == RuleId.MISSED_ARRIVAL }, "${open.map { it.rule }}")
+        }
+    }
+
+    @Test
+    fun aGuardianCannotSetARoutine() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val circle = client.newCircle("test.mom")
+            client.join("test.mom", circle.id, "test.dad", Role.GUARDIAN)
+            val school: PlaceDto = client.postJson("/v1/circles/${circle.id}/places", "test.mom", CreatePlaceRequest("Ecole", PlaceKind.SCHOOL, ShapeDto.Circle(ECOLE, 80.0))).body()
+            val kid = client.newAsset("test.mom", circle.id)
+            val res = client.postJson("/v1/assets/${kid.id}/routines", "test.dad", RoutineRequest(school.id, template = RoutineTemplate.SCHOOL))
+            assertEquals(HttpStatusCode.Forbidden, res.status, "a routine mutes exits: the owner's call")
+        }
+    }
+
+    @Test
+    fun ramadanEveningsStayNightForDementia() {
+        val ramadan = Instant.parse("2027-02-20T21:00:00Z") // 22:00 in Ramadan
+        assertFalse(Profiles.seasonal(Profiles.of(AssetType.ELDER, Condition.DEMENTIA), AssetType.ELDER, ramadan, null).ramadanEvening)
+        assertTrue(Profiles.seasonal(Profiles.of(AssetType.ELDER, Condition.NONE), AssetType.ELDER, ramadan, null).ramadanEvening)
     }
 
     @Test

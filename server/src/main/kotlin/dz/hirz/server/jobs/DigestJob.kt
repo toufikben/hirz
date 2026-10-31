@@ -25,7 +25,7 @@ import java.util.UUID
 import javax.sql.DataSource
 
 /**
- * The evening digest (design §7.4): at 20:00 Africa/Algiers, each circle's P2 findings of the day are gathered into one
+ * The evening digest (design §7.4): at 20:00 Africa/Algiers, each circle's P2 findings since the last digest are gathered into one
  * row and one quiet push that names neither a place nor a rule. A day with nothing to tell writes and sends nothing.
  * Once per circle a day: the (circle, day) row is the latch, so a restart or a second run never sends twice.
  */
@@ -43,8 +43,9 @@ class DigestJob(private val db: DataSource, private val clock: Clock, private va
         val local = clock.instant().atZone(ALGIERS)
         if (local.toLocalTime() < EVENING) return
         val day = local.toLocalDate()
-        val from = day.atStartOfDay(ALGIERS).toInstant()
-        val to = day.plusDays(1).atStartOfDay(ALGIERS).toInstant()
+        // From yesterday's digest to this one: findings after 20:00 go into tomorrow's.
+        val from = day.minusDays(1).atTime(EVENING).atZone(ALGIERS).toInstant()
+        val to = day.atTime(EVENING).atZone(ALGIERS).toInstant()
         val circles = db.connection.use { c ->
             c.prepareStatement(
                 """SELECT DISTINCT a.circle_id FROM findings f JOIN assets a ON a.id = f.asset_id
@@ -78,8 +79,9 @@ class DigestJob(private val db: DataSource, private val clock: Clock, private va
         val targets = db.connection.use { c ->
             c.prepareStatement(
                 """SELECT DISTINCT cm.member_id, pt.token FROM circle_members cm JOIN push_tokens pt ON pt.member_id = cm.member_id
-                   WHERE cm.circle_id = ?""",
-            ).apply { setObject(1, circle) }.executeQuery().toList { PushTarget(it.getObject(1, UUID::class.java), it.getString(2)) }
+                   WHERE cm.circle_id = ? AND cm.role IN ('owner', 'guardian', 'viewer', 'temporary')
+                   AND (cm.expires_at IS NULL OR cm.expires_at > ?)""",
+            ).apply { setObject(1, circle); setTimestamp(2, clock.instant().ts()) }.executeQuery().toList { PushTarget(it.getObject(1, UUID::class.java), it.getString(2)) }
         }
         // Quiet: no tier, no rule, no place. The app opens the digest screen.
         runBlocking { targets.forEach { t -> runCatching { notifier.send(t, AlertMessage("digest", null, null, name, null)) } } }

@@ -85,18 +85,25 @@ class RoutineScanner(private val db: DataSource, private val clock: Clock, priva
         val fresh = c.prepareStatement(
             "SELECT max(GREATEST(COALESCE(last_heartbeat_at, last_fix_at), COALESCE(last_fix_at, last_heartbeat_at))) >= ? FROM sources WHERE asset_id = ? AND revoked_at IS NULL",
         ).apply { setTimestamp(1, now.minusMillis(cfg.routineSourceFreshMs).ts()); setObject(2, asset) }.executeQuery().use { it.next() && it.getBoolean(1) }
-        if (!fresh) return@tx null
         if (Custody.muted(c, asset, now)) return@tx null
         val windowStart = local.toLocalDate().atStartOfDay(ALGIERS).plusMinutes((arriveBy - 180L).coerceAtLeast(0)).toInstant()
-        val arrived = c.prepareStatement(
-            """SELECT EXISTS (SELECT 1 FROM positions p, places pl WHERE pl.id = ? AND p.asset_id = ? AND p.quality = 'ok' AND p.geog IS NOT NULL
-                 AND p.fix_time >= ? AND COALESCE(p.accuracy_m, 0) <= ? AND
+        // The latest good fix since the window opened, and whether it is inside the place: arriving and leaving again
+        // before the bell is not an arrival.
+        val last = c.prepareStatement(
+            """SELECT ST_Y(p.geog::geometry), ST_X(p.geog::geometry),
                  CASE WHEN GeometryType(pl.geom::geometry) = 'POINT' THEN ST_DWithin(p.geog, pl.geom, (pl.shape->>'radiusM')::float8 + COALESCE(p.accuracy_m, 0))
-                      ELSE ST_DWithin(pl.geom, p.geog, COALESCE(p.accuracy_m, 0)) END)""",
+                      ELSE ST_DWithin(pl.geom, p.geog, COALESCE(p.accuracy_m, 0)) END
+               FROM positions p, places pl WHERE pl.id = ? AND p.asset_id = ? AND p.quality = 'ok' AND p.geog IS NOT NULL
+                 AND p.fix_time >= ? AND COALESCE(p.accuracy_m, 9999) <= ? ORDER BY p.fix_time DESC LIMIT 1""",
         ).apply {
             setObject(1, UUID.fromString(r.placeId)); setObject(2, asset); setTimestamp(3, windowStart.ts()); setDouble(4, cfg.boundaryAccuracyFloorM)
-        }.executeQuery().use { it.next() && it.getBoolean(1) }
-        if (arrived) return@tx null
+        }.executeQuery().use { if (it.next()) Triple(it.getDouble(1), it.getDouble(2), it.getBoolean(3)) else null }
+        if (last?.third == true) return@tx null
+        if (!fresh) {
+            // A silent phone is the silence rule's to report, unless it was last seen this morning somewhere unknown.
+            val seen = last?.let { dz.hirz.shared.api.LatLon(it.first, it.second) } ?: return@tx null
+            if (dz.hirz.server.places.PlaceService.placesOf(c, circle).any { dz.hirz.server.places.Geometry.distanceOutsideM(c, it.shape, seen) <= 0.0 }) return@tx null
+        }
         PersonState.save(c, asset, key, RoutineDay.serializer(), RoutineDay(local.toLocalDate().toString()))
         val place = c.prepareStatement("SELECT name FROM places WHERE id = ?").apply { setObject(1, UUID.fromString(r.placeId)) }
             .executeQuery().use { it.next(); it.getString(1) }
@@ -184,7 +191,8 @@ class RoutineScanner(private val db: DataSource, private val clock: Clock, priva
         /** The routine as it runs today: shifted by its Ramadan offset during Ramadan. */
         internal fun shifted(r: RoutineDto, now: Instant): RoutineDto {
             if (r.ramadanOffsetMin == 0 || !AlgerianCalendar.inRamadan(now.atZone(ALGIERS).toLocalDate())) return r
-            return r.copy(arriveByMin = r.arriveByMin?.plus(r.ramadanOffsetMin), dismissalMin = r.dismissalMin?.plus(r.ramadanOffsetMin))
+            return r.copy(arriveByMin = r.arriveByMin?.plus(r.ramadanOffsetMin)?.coerceIn(0, 1439),
+                dismissalMin = r.dismissalMin?.plus(r.ramadanOffsetMin)?.coerceIn(0, 1439))
         }
 
         /**
@@ -200,8 +208,10 @@ class RoutineScanner(private val db: DataSource, private val clock: Clock, priva
             return routines.any { raw ->
                 if (!runsOn(c, raw, circleId, local.toLocalDate())) return@any false
                 val r = shifted(raw, at)
-                val fromHome = homeLike && r.arriveByMin?.let { minute in (it - LEAVE_HOME_BEFORE_MIN)..(it + LEAVE_HOME_AFTER_MIN) } == true
-                val fromPlace = r.placeId == placeId.toString() && r.dismissalMin?.let { minute >= it - LEAVE_EARLY_MIN } == true
+                val own = r.placeId == placeId.toString()
+                // Leaving home toward the routine's place; never the routine's own place (a barn at night is the destination).
+                val fromHome = homeLike && !own && r.arriveByMin?.let { minute in (it - LEAVE_HOME_BEFORE_MIN)..(it + LEAVE_HOME_AFTER_MIN) } == true
+                val fromPlace = own && r.dismissalMin?.let { minute in (it - LEAVE_EARLY_MIN)..(it + LEAVE_LATE_MIN) } == true
                 fromHome || fromPlace
             }
         }
@@ -209,5 +219,6 @@ class RoutineScanner(private val db: DataSource, private val clock: Clock, priva
         private const val LEAVE_HOME_BEFORE_MIN = 120
         private const val LEAVE_HOME_AFTER_MIN = 60
         private const val LEAVE_EARLY_MIN = 15
+        private const val LEAVE_LATE_MIN = 120
     }
 }

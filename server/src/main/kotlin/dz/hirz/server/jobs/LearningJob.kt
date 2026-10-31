@@ -46,6 +46,11 @@ class LearningJob(private val db: DataSource, private val clock: Clock, private 
             c.prepareStatement("SELECT DISTINCT asset_id FROM positions WHERE fix_time >= ?").apply { setTimestamp(1, since.ts()) }
                 .executeQuery().toList { it.getObject(1, UUID::class.java) }
         }
+        // An asset with no positions left in the window keeps no learned places either.
+        db.tx { c ->
+            c.prepareStatement("DELETE FROM learned_places WHERE asset_id NOT IN (SELECT DISTINCT asset_id FROM positions WHERE fix_time >= ?)")
+                .apply { setTimestamp(1, since.ts()) }.executeUpdate()
+        }
         for (asset in assets) runCatching { learn(asset, since) }.onFailure { log.error("learning $asset", it) }
     }
 

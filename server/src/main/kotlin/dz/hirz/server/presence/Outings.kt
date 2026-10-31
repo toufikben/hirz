@@ -79,10 +79,19 @@ class Outings(private val db: DataSource, private val clock: Clock, private val 
     companion object {
         fun near(a: LatLon, b: LatLon): Boolean = OwnerOrder.metres(a, b) <= TOGETHER_M
 
-        /** Whether a guardian has the asset out on an outing at [at]: its place exits are the guardian's doing (P7). */
-        fun accompanied(c: Connection, assetId: UUID, at: java.time.Instant): Boolean =
-            c.prepareStatement("SELECT EXISTS (SELECT 1 FROM outings WHERE asset_id = ? AND ended_at IS NULL AND starts_at <= ? AND ends_at > ?)")
-                .apply { setObject(1, assetId); setTimestamp(2, at.ts()); setTimestamp(3, at.ts()) }.executeQuery().use { it.next() && it.getBoolean(1) }
+        /**
+         * Whether a guardian is with the asset on an outing right now (P7): the outing is live and not raised, the guardian's
+         * phone pinged within [RuleConfig.leashPingMaxAgeMs] and stands within [TOGETHER_M] (plus the fix's accuracy) of
+         * [point]. Only then are the asset's place exits the guardian's doing; a silent or distant guardian mutes nothing.
+         */
+        fun accompanied(c: Connection, assetId: UUID, now: java.time.Instant, point: LatLon, accuracyM: Double, cfg: dz.hirz.shared.rules.RuleConfig): Boolean {
+            val guardian = c.prepareStatement(
+                """SELECT last_lat, last_lon FROM outings WHERE asset_id = ? AND ended_at IS NULL AND raised_at IS NULL
+                   AND starts_at <= ? AND ends_at > ? AND last_ping_at >= ? AND last_lat IS NOT NULL""",
+            ).apply { setObject(1, assetId); setTimestamp(2, now.ts()); setTimestamp(3, now.ts()); setTimestamp(4, now.minusMillis(cfg.leashPingMaxAgeMs).ts()) }
+                .executeQuery().use { if (it.next()) LatLon(it.getDouble(1), it.getDouble(2)) else null } ?: return false
+            return OwnerOrder.metres(guardian, point) <= TOGETHER_M + accuracyM
+        }
     }
 }
 

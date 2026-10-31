@@ -21,6 +21,8 @@ import dz.hirz.shared.api.IngestBatch
 import dz.hirz.shared.api.IngestSignal
 import dz.hirz.shared.api.LatLon
 import dz.hirz.shared.api.OutingRequest
+import dz.hirz.shared.api.OutingDto
+import dz.hirz.shared.api.OutingPing
 import dz.hirz.shared.api.PairResponse
 import dz.hirz.shared.api.PlaceDto
 import dz.hirz.shared.api.PlaceKind
@@ -59,8 +61,8 @@ private val MOSQUE = 300.0 to 0.0      // tarawih in Ramadan, not a named place
 private enum class Kind { CHILD, TEEN, ELDER }
 private class Member(val kind: Kind, val deadPhoneAtNight: Boolean = false, val drifts: Boolean = false, val visitsGrandma: Boolean = false)
 
-/** One fix of one member at a local time of one day; [outing]: mum starts an outing with them first. */
-private data class Fix(val at: Instant, val member: Int, val north: Double, val east: Double, val acc: Double = 10.0, val outing: Boolean = false)
+/** One fix of one member at a local time of one day; [outing]: mum starts an outing first; [withMum]: her phone pings beside them. */
+private data class Fix(val at: Instant, val member: Int, val north: Double, val east: Double, val acc: Double = 10.0, val outing: Boolean = false, val withMum: Boolean = false)
 
 // 2027-02-09 … 2027-03-10: school days, weekends, all of Ramadan (estimated 8 Feb – 9 Mar) and Eid al-Fitr (a holiday).
 private val FIRST = LocalDate.of(2027, 2, 9)
@@ -95,7 +97,9 @@ private fun month(): List<Fix> = buildList {
                     if (m.visitsGrandma && day.dayOfWeek == DayOfWeek.SATURDAY) {
                         // With mum: she starts an outing in the app before they leave.
                         add(Fix(local(day, "14:55"), i, HOME.first, HOME.second, outing = true))
-                        listOf("15:00", "15:20", "15:40", "16:00", "16:20", "16:40", "17:00").forEach { add(it, GRANDMA) }
+                        listOf("15:00", "15:20", "15:40", "16:00", "16:20", "16:40", "17:00").forEach { hm ->
+                            add(Fix(local(day, hm), i, GRANDMA.first, GRANDMA.second, withMum = true))
+                        }
                         add("17:30", HOME)
                     }
                     if (!m.deadPhoneAtNight) add("21:00", HOME)
@@ -126,6 +130,7 @@ class NormalMonthTest {
                 CreatePlaceRequest("Ecole", PlaceKind.SCHOOL, ShapeDto.Circle(at(SCHOOL.first, SCHOOL.second), 80.0))).body()
             client.postJson("/v1/circles/${circle.id}/places", "test.mom", CreatePlaceRequest("Dar", PlaceKind.HOME, ShapeDto.Circle(at(0.0, 0.0), 50.0)))
             val assetIds = mutableListOf<String>()
+            val outings = mutableMapOf<Int, String>()
             val tokens = FAMILY.mapIndexed { i, m ->
                 val type = when (m.kind) { Kind.CHILD -> AssetType.CHILD; Kind.TEEN -> AssetType.TEEN; Kind.ELDER -> AssetType.ELDER }
                 val a = client.newAsset("test.mom", circle.id, type, "M$i")
@@ -153,7 +158,10 @@ class NormalMonthTest {
                 }
                 env.clock.now = instant
                 batch.forEach { f ->
-                    if (f.outing) client.postJson("/v1/assets/${assetIds[f.member]}/outings", "test.mom", OutingRequest(hours = 3))
+                    if (f.outing) outings[f.member] = client.postJson("/v1/assets/${assetIds[f.member]}/outings", "test.mom", OutingRequest(hours = 3)).body<OutingDto>().id
+                    if (f.withMum) outings[f.member]?.let { id ->
+                        client.postJson("/v1/outings/$id/ping", "test.mom", OutingPing(at(f.north, f.east), 8.0, instant.toEpochMilli()))
+                    }
                     client.postJson("/v1/ingest", tokens[f.member], IngestBatch(listOf(
                         IngestSignal("m${f.member}-${instant.toEpochMilli()}", instant.toEpochMilli(), at(f.north, f.east), f.acc))))
                 }
