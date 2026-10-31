@@ -90,6 +90,22 @@ fun ProfileCard(client: HirzClient, asset: AssetDto, isOwner: Boolean) {
                 Text(t("أظهر الحالة في ورقة الشرطة فقط", "Montrer la condition sur la fiche police seulement", "Show the condition on the police sheet only"))
             }
         }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Switch(p.nightBySun, { save(ProfileUpdate(nightBySun = it)) }, enabled = isOwner)
+            Text(t("الليل من الغروب إلى الشروق", "Nuit du coucher au lever du soleil", "Night from sunset to sunrise"))
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(p.ramadanNightOff, { save(ProfileUpdate(ramadanNightOff = it)) }, enabled = isOwner)
+            Text(t("سهرات رمضان تُعدّ خروجًا ليليًا", "Les soirées du Ramadan comptent comme sortie de nuit", "Ramadan evenings count as night exits"))
+        }
+        if (p.verifyFirst.isNotEmpty() || p.verifyFirstOff) {
+            Text(t("تحقّق أولًا (إنذارات كاذبة متكررة): ", "À vérifier d'abord (fausses alertes répétées) : ", "Check first (repeated false alarms): ") +
+                p.verifyFirst.joinToString(", ") { ProfileLogic.ruleName(it, lang) }, style = MaterialTheme.typography.bodySmall)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Switch(!p.verifyFirstOff, { save(ProfileUpdate(verifyFirstOff = !it)) }, enabled = isOwner)
+                Text(t("إنذار هادئ أولًا", "Alerte discrète d'abord", "Quiet alert first"))
+            }
+        }
         Button({
             val overrides = rows.map { RuleOverride(it.rule, it.enabled, it.tier.takeIf { t -> t != it.defaultTier }) }
             save(ProfileUpdate(overrides = overrides, curfewMinute = ProfileLogic.parseClock(curfew),

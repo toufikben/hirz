@@ -130,6 +130,15 @@ object ReasonText {
                 "Séparé de l'accompagnant : ${a["distanceM"]} m depuis ${a["seconds"]} s",
                 "Separated from the guardian: ${a["distanceM"]} m for ${a["seconds"]} s",
             )
+            "missed_arrival" -> t("لم يصل إلى «${a["place"]}» قبل ${a["by"]}", "Pas arrivé à « ${a["place"]} » avant ${a["by"]}", "Not at \"${a["place"]}\" by ${a["by"]}")
+            "stationary_after_dismissal" -> t(
+                "بعد الخروج: ساكن ${a["minutes"]} د في مكان غير معروف",
+                "Après la sortie : immobile ${a["minutes"]} min dans un lieu inconnu",
+                "After dismissal: still for ${a["minutes"]} min at an unknown place",
+            )
+            "unusual_stop" -> t("توقّف ${a["minutes"]} د في الطريق في مكان غير معروف", "Arrêt de ${a["minutes"]} min en route, lieu inconnu", "Stopped ${a["minutes"]} min on the way at an unknown place")
+            "pacing_loop" -> t("يدور في حلقة في المكان نفسه", "Tourne en rond au même endroit", "Walking in loops in one area")
+            "new_place" -> t("نحو مكان لم يزره من قبل", "Vers un lieu jamais visité", "Toward a place never visited")
             "keyless_no_owner" -> t("شُغّل المحرّك ولا هاتف من العائلة قربه", "Moteur démarré sans téléphone de la famille à proximité", "Engine started with no family phone near")
             else -> t("حدث", "Événement", "Event")
         }

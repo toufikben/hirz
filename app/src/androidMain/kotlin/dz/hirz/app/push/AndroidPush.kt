@@ -127,6 +127,7 @@ class HirzMessagingService : FirebaseMessagingService() {
             is Push.Incident -> {
                 ReceiptWorker.enqueue(applicationContext, push.incidentId, ReceiptState.DELIVERED)
                 if (AlarmPolicy.isAlarm(push)) AlarmNotifier.show(applicationContext, push)
+                else if (push.quiet) QuietNotices.show(applicationContext, push.incidentId.hashCode(), getString(R.string.notice_check_first, push.assetName), null)
             }
             is Push.CheckIn -> CompanionNotifications.showCheckIn(applicationContext, push.assetName)
             // Android 10+ blocks activity starts from the background: a full-screen alarm notification opens it (review #6).
@@ -136,7 +137,11 @@ class HirzMessagingService : FirebaseMessagingService() {
             is Push.CloseConfirm -> QuietNotices.show(applicationContext, push.incidentId.hashCode(),
                 getString(R.string.close_confirm_title, push.assetName), getString(R.string.close_confirm_body))
             is Push.Notice -> QuietNotices.show(applicationContext, (push.kind + push.subject).hashCode(),
-                getString(if (push.kind == "gateway_silent") R.string.notice_gateway_silent else R.string.notice_custody, push.subject), null)
+                getString(when (push.kind) {
+                    "gateway_silent" -> R.string.notice_gateway_silent
+                    "digest" -> R.string.notice_digest
+                    else -> R.string.notice_custody
+                }, push.subject), null)
             null -> Unit
         }
     }

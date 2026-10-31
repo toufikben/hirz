@@ -193,6 +193,13 @@ class HirzClient(
     suspend fun relayTags(sourceToken: String): List<String> = http.get("$base/v1/relay/tags") { auth(sourceToken) }.ok()
     suspend fun relaySightings(sourceToken: String, batch: dz.hirz.shared.api.RelayBatch): dz.hirz.shared.api.RelayResult =
         http.post("$base/v1/relay/sightings") { auth(sourceToken); json(batch) }.ok()
+    suspend fun routines(assetId: String): List<dz.hirz.shared.api.RoutineDto> =
+        member { t -> http.get("$base/v1/assets/$assetId/routines") { auth(t) } }.ok()
+    suspend fun createRoutine(assetId: String, req: dz.hirz.shared.api.RoutineRequest): dz.hirz.shared.api.RoutineDto =
+        member { t -> http.post("$base/v1/assets/$assetId/routines") { auth(t); json(req) } }.ok()
+    suspend fun deleteRoutine(routineId: String) = member { t -> http.delete("$base/v1/routines/$routineId") { auth(t) } }.done()
+    suspend fun digests(circleId: String): List<dz.hirz.shared.api.DigestDto> =
+        member { t -> http.get("$base/v1/circles/$circleId/digests") { auth(t) } }.ok()
     suspend fun herds(circleId: String): List<dz.hirz.shared.api.HerdDto> = member { t -> http.get("$base/v1/circles/$circleId/herds") { auth(t) } }.ok()
     suspend fun createHerd(circleId: String, name: String): dz.hirz.shared.api.HerdDto =
         member { t -> http.post("$base/v1/circles/$circleId/herds") { auth(t); json(dz.hirz.shared.api.CreateHerdRequest(name)) } }.ok()

@@ -18,6 +18,8 @@
     <string name="close_confirm_body">Ouvrez Hirz et appuyez sur « Confirmer la fermeture » dans les 2 minutes</string>
     <string name="notice_custody">Garde partagée modifiée : %1$s</string>
     <string name="notice_gateway_silent">Passerelle SMS silencieuse : %1$s</string>
+    <string name="notice_check_first">À vérifier d\'abord : %1$s</string>
+    <string name="notice_digest">Résumé du soir prêt : %1$s</string>
     <string name="gateway_channel">Passerelle SMS</string>
     <string name="gateway_running">Hirz : passerelle SMS active</string>
 </resources>

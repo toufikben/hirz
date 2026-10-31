@@ -47,4 +47,5 @@ class FcmNotifier(app: FirebaseApp) : Notifier {
     }
 }
 
-private val CONDITION_RULES = setOf("RUN_AWAY_SPEED", "PAST_ADDRESS_HEADING")
+/** Rules that exist only for one condition: never named outside the asset's profile. */
+internal val CONDITION_RULES = setOf("RUN_AWAY_SPEED", "PAST_ADDRESS_HEADING")

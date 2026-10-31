@@ -1,0 +1,25 @@
+{
+  "name": "pacing_the_block",
+  "start": "2026-11-08T09:00:00Z",
+  "type": "elder",
+  "places": [
+    {
+      "name": "Dar",
+      "kind": "home",
+      "radius": 50
+    }
+  ],
+  "steps": [
+    {
+      "t": 0,
+      "action": "laps",
+      "north": 500,
+      "east": 0,
+      "laps": 3
+    }
+  ],
+  "expect": [
+    "PACING_LOOP"
+  ],
+  "positiveFor": "PACING_LOOP"
+}

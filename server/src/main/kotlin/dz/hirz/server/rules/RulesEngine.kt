@@ -16,6 +16,12 @@ import java.util.UUID
 import javax.sql.DataSource
 
 /** Runs the v0 rules on every accepted signal; boundary state is persisted per (asset, place). */
+/**
+ * A sparse track confirms an exit late (a phone back the next morning): the trip's first reading outside counts as its
+ * start within a day. The routine rules (missed arrival, still after dismissal) watch those windows meanwhile.
+ */
+private const val TRIP_BEGAN_MS = 24 * 3_600_000L
+
 class RulesEngine(
     private val db: DataSource,
     private val cfg: RuleConfig,
@@ -102,10 +108,11 @@ class RulesEngine(
             val fixAt = Instant.ofEpochMilli(fixMs)
             val profile = dz.hirz.server.assets.ProfileService.loadAt(c, s.assetId, fixAt) ?: return@tx
             lateTolerant = profile.lateTolerant
-            val night = Geometry.isActive(profile.nightWindow, fixAt)
+            val places = PlaceService.placesOf(c, s.circleId)
+            val nightHomePlace = places.firstOrNull { it.kind == profile.nightHome }?.let { centre(it.shape) }
+            val night = profile.isNight(fixAt, nightHomePlace)
             // Night exit watches home only, at night, for profiles that have it (design §4.3).
             val nightTier = profile.tierOf(RuleId.NIGHT_EXIT)?.takeIf { night }
-            val places = PlaceService.placesOf(c, s.circleId)
             // Store-and-forward devices (collars in pastures without coverage) are judged on fixes hours old (P6).
             val placeCfg = if (profile.lateTolerant) cfg.copy(boundaryMaxAgeMs = cfg.lateMaxAgeMs) else cfg
             for (place in places) {
@@ -146,13 +153,41 @@ class RulesEngine(
                         place.kind.alarmsOnEntry() -> RuleId.FORBIDDEN_ENTRY
                         else -> RuleId.PLACE_EXIT
                     }
+                    // A trip the asset's routine expects (to school, home after dismissal) is the routine rules' to watch; it is
+                    // judged when the trip began too, since a sparse track confirms the exit only at a later fix. An outing a
+                    // guardian started is theirs to answer for (the leash watches it).
                     // The profile decides how urgent this is, or that it does not run for this asset at all.
-                    profile.tierOf(rule)?.let { tier -> found += Finding(s.assetId, s.circleId, rule, tier, listOf(it), at) }
+                    val tier = profile.tierOf(rule) ?: return@let
+                    // A P0 is never muted, by a routine or by anyone.
+                    if (rule == RuleId.PLACE_EXIT && tier != Tier.P0) {
+                        val homeLike = place.kind == PlaceKind.HOME || place.kind == PlaceKind.BARN
+                        fun expected(t: Instant) = dz.hirz.server.jobs.RoutineScanner.expectedExit(c, s.assetId, s.circleId, placeId, homeLike, t)
+                        // When the trip began: the first reading beyond the margin of this run, within a day.
+                        val began = state.firstOutMs?.takeIf { fixAt.toEpochMilli() - it <= TRIP_BEGAN_MS }
+                        if (dz.hirz.server.presence.Outings.accompanied(c, s.assetId, at, point, accuracy.coerceAtMost(cfg.boundaryAccuracyFloorM), cfg) || expected(fixAt) ||
+                            began?.let { expected(Instant.ofEpochMilli(it)) } == true) return@let
+                    }
+                    found += Finding(s.assetId, s.circleId, rule, tier, listOf(it), at)
                 }
             }
             // Livestock: the herd out of the barn at night, and a head carried at vehicle speed.
             found += herdNightMove(c, s, profile, places, fixAt, at, night)
             truckSpeed(c, s, profile, point, accuracy, fixAt, at)?.let { found += it }
+            // Walking in circles outside home (elders): once per outing, re-armed at home.
+            profile.tierOf(RuleId.PACING_LOOP)?.let { tier ->
+                val atHome = places.filter { it.kind == PlaceKind.HOME }.any { Geometry.distanceOutsideM(c, it.shape, point) <= it.marginM.toDouble() }
+                if (atHome) { PersonState.clear(c, s.assetId, PACING); return@let }
+                if (PersonState.load(c, s.assetId, PACING, NightKey.serializer()) != null) return@let
+                val track = c.prepareStatement(
+                    """SELECT ST_Y(geog::geometry), ST_X(geog::geometry) FROM positions WHERE asset_id = ? AND quality = 'ok' AND geog IS NOT NULL
+                       AND fix_time >= ? AND COALESCE(accuracy_m, 9999) <= ? ORDER BY fix_time""",
+                ).apply { setObject(1, s.assetId); setTimestamp(2, java.sql.Timestamp.from(fixAt.minusMillis(cfg.pacingWindowMs))); setDouble(3, cfg.boundaryAccuracyFloorM) }
+                    .executeQuery().use { rs -> buildList { while (rs.next()) add(LatLon(rs.getDouble(1), rs.getDouble(2))) } }
+                if (PersonRules.pacing(track, cfg)) {
+                    PersonState.save(c, s.assetId, PACING, NightKey.serializer(), NightKey(nightKey(fixAt)))
+                    found += Finding(s.assetId, s.circleId, RuleId.PACING_LOOP, tier, listOf(dz.hirz.shared.api.Reason("pacing_loop")), at)
+                }
+            }
             // Running away from home at speed (autism): measured from the nearest home, never from a guardian's phone.
             profile.tierOf(RuleId.RUN_AWAY_SPEED)?.let { tier ->
                 val homeM = places.filter { it.kind == PlaceKind.HOME }.minOfOrNull { Geometry.distanceOutsideM(c, it.shape, point) } ?: return@let
@@ -198,7 +233,11 @@ class RulesEngine(
             }
         }
         // Only store-and-forward profiles: a person's P0 reported over a slow network is still a P0.
-        return if (lateTolerant) found.map { late(it, s.signal.serverTimeMs - fixMs) } else found
+        // The smart layer (design §4.5): "a place never visited" is a supporting reason on what was found anyway,
+        // never a finding and never a tier change.
+        val supported = if (found.isEmpty() || !newPlace(s.assetId, s.circleId, point, accuracy)) found
+            else found.map { it.copy(reasons = it.reasons + dz.hirz.shared.api.Reason("new_place")) }
+        return if (lateTolerant) supported.map { late(it, s.signal.serverTimeMs - fixMs) } else supported
     }
 
     /** `COLLAR_CUT` (design §12.2): the device reports it was removed or cut. */
@@ -294,6 +333,12 @@ class RulesEngine(
         return null
     }
 
+    /** Outside every place the circle named and every place the asset was learned to frequent. */
+    private fun newPlace(assetId: UUID, circleId: UUID, point: LatLon, accuracy: Double): Boolean = db.connection.use { c ->
+        PlaceService.placesOf(c, circleId).none { Geometry.distanceOutsideM(c, it.shape, point) <= 0.0 } &&
+            !dz.hirz.server.jobs.LearningJob.known(c, assetId, point, accuracy.coerceAtMost(cfg.boundaryAccuracyFloorM))
+    }
+
     /** The head a herd's alarms are raised on: the leader, or the same head every time. */
     private fun herdTarget(h: dz.hirz.shared.api.HerdDto): UUID = (h.leaderId ?: h.members.minOf { it }).let(UUID::fromString)
 
@@ -320,23 +365,24 @@ class RulesEngine(
     }
 
     private fun load(c: Connection, assetId: UUID, placeId: UUID): PlaceState =
-        c.prepareStatement("SELECT status, outside_count, inside_count, last_fix_ms FROM asset_rule_state WHERE asset_id = ? AND place_id = ?")
+        c.prepareStatement("SELECT status, outside_count, inside_count, last_fix_ms, first_out_ms FROM asset_rule_state WHERE asset_id = ? AND place_id = ?")
             .apply { setObject(1, assetId); setObject(2, placeId) }.executeQuery().use { rs ->
                 if (!rs.next()) PlaceState()
                 else PlaceState(
                     BoundaryStatus.valueOf(rs.getString(1).uppercase()), rs.getInt(2), rs.getInt(3),
                     rs.getLong(4).takeUnless { rs.wasNull() },
+                    rs.getLong(5).takeUnless { rs.wasNull() },
                 )
             }
 
     private fun save(c: Connection, assetId: UUID, placeId: UUID, st: PlaceState) {
         c.prepareStatement(
-            """INSERT INTO asset_rule_state (asset_id, place_id, status, outside_count, inside_count, last_fix_ms) VALUES (?, ?, ?, ?, ?, ?)
+            """INSERT INTO asset_rule_state (asset_id, place_id, status, outside_count, inside_count, last_fix_ms, first_out_ms) VALUES (?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT (asset_id, place_id) DO UPDATE SET status = EXCLUDED.status, outside_count = EXCLUDED.outside_count,
-                 inside_count = EXCLUDED.inside_count, last_fix_ms = EXCLUDED.last_fix_ms""",
+                 inside_count = EXCLUDED.inside_count, last_fix_ms = EXCLUDED.last_fix_ms, first_out_ms = EXCLUDED.first_out_ms""",
         ).apply {
             setObject(1, assetId); setObject(2, placeId); setString(3, st.status.name.lowercase())
-            setInt(4, st.outsideCount); setInt(5, st.insideCount); setObject(6, st.lastFixMs)
+            setInt(4, st.outsideCount); setInt(5, st.insideCount); setObject(6, st.lastFixMs); setObject(7, st.firstOutMs)
         }.executeUpdate()
     }
 }
@@ -346,6 +392,7 @@ private const val RUN_AWAY = "RUN_AWAY_SPEED"
 private const val PAST_ADDRESS = "PAST_ADDRESS_HEADING"
 private const val TRUCK = "TRUCK_SPEED"
 private const val KEYLESS = "KEYLESS"
+private const val PACING = "PACING_LOOP"
 
 /** The ignition start a keyless alarm was raised for. */
 @kotlinx.serialization.Serializable

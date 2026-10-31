@@ -1,0 +1,46 @@
+{
+  "name": "missed_arrival",
+  "start": "2026-11-08T06:30:00Z",
+  "type": "child",
+  "places": [
+    {
+      "name": "Dar",
+      "kind": "home",
+      "radius": 50
+    },
+    {
+      "name": "Ecole",
+      "kind": "school",
+      "north": 1113,
+      "radius": 80
+    }
+  ],
+  "routine": {
+    "place": "Ecole",
+    "template": "school"
+  },
+  "steps": [
+    {
+      "t": 0,
+      "action": "fix",
+      "north": 0,
+      "east": 0,
+      "acc": 10
+    },
+    {
+      "t": 2460,
+      "action": "fix",
+      "north": 0,
+      "east": 0,
+      "acc": 10
+    },
+    {
+      "t": 2460,
+      "action": "scan"
+    }
+  ],
+  "expect": [
+    "MISSED_ARRIVAL"
+  ],
+  "positiveFor": "MISSED_ARRIVAL"
+}

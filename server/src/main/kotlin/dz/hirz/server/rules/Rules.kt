@@ -15,6 +15,8 @@ data class PlaceState(
     val outsideCount: Int = 0,
     val insideCount: Int = 0,
     val lastFixMs: Long? = null,
+    /** The first reading of the current run beyond the margin: when the trip began (P7). */
+    val firstOutMs: Long? = null,
 )
 
 /** One accepted boundary reading of an asset against one place. */
@@ -53,9 +55,10 @@ object PlaceBoundary {
         val deep = r.distanceOutsideM <= -cfg.reentryHysteresisM
         return when (s.status) {
             BoundaryStatus.INSIDE -> {
-                if (!beyond) return StepResult(s.copy(outsideCount = 0, insideCount = 0), null)
+                if (!beyond) return StepResult(s.copy(outsideCount = 0, insideCount = 0, firstOutMs = null), null)
                 val count = s.outsideCount + 1
-                if (count < exitReadings) return StepResult(s.copy(outsideCount = count), null)
+                val began = if (s.outsideCount == 0) r.fixMs else s.firstOutMs ?: r.fixMs
+                if (count < exitReadings) return StepResult(s.copy(outsideCount = count, firstOutMs = began), null)
                 StepResult(PlaceState(BoundaryStatus.OUTSIDE, 0, 0, s.lastFixMs), if (active) reason("left_place", place, r, count) else null)
             }
             BoundaryStatus.OUTSIDE, BoundaryStatus.UNKNOWN -> {

@@ -18,6 +18,8 @@
     <string name="close_confirm_body">Open Hirz and tap \"Confirm close\" within 2 minutes</string>
     <string name="notice_custody">Shared custody changed: %1$s</string>
     <string name="notice_gateway_silent">SMS gateway silent: %1$s</string>
+    <string name="notice_check_first">Check first: %1$s</string>
+    <string name="notice_digest">Evening digest ready: %1$s</string>
     <string name="gateway_channel">SMS gateway</string>
     <string name="gateway_running">Hirz: SMS gateway running</string>
 </resources>

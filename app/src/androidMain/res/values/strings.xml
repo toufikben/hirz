@@ -18,6 +18,8 @@
     <string name="close_confirm_body">افتح حِرز واضغط «تأكيد الإغلاق» خلال دقيقتين</string>
     <string name="notice_custody">تغيّرت الحضانة المشتركة: %1$s</string>
     <string name="notice_gateway_silent">بوابة الرسائل صامتة: %1$s</string>
+    <string name="notice_check_first">تحقّق أولًا: %1$s</string>
+    <string name="notice_digest">ملخص المساء جاهز: %1$s</string>
     <string name="gateway_channel">بوابة الرسائل</string>
     <string name="gateway_running">حِرز: بوابة الرسائل تعمل</string>
 </resources>

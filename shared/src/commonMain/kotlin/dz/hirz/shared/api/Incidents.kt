@@ -17,6 +17,8 @@ enum class RuleId {
     HAZARD_PROXIMITY, NIGHT_EXIT, RUN_AWAY_SPEED, PAST_ADDRESS_HEADING, CURFEW, COASTAL_NIGHT,
     /** Livestock and presence (design §4.3, §12.2, P6). */
     HERD_NIGHT_MOVE, HERD_DISPERSION, COLLAR_CUT, ANIMAL_STILL, VEHICLE_SPEED_UNEXPLAINED, LEASH_BREAK, KEYLESS_NO_OWNER,
+    /** Routines (design §4.3, §12.2, P7). */
+    MISSED_ARRIVAL, STATIONARY_AFTER_DISMISSAL, UNUSUAL_STOP, PACING_LOOP,
 }
 
 /** A machine reason the app renders through i18n, e.g. `left_place{place, readings, distanceM, accuracyM, ageS}`. */
@@ -78,6 +80,8 @@ data class IncidentDto(
     val deliveries: List<DeliveryDto> = emptyList(),
     val pendingClose: PendingCloseDto? = null,
     val escalation: EscalationViewDto? = null,
+    /** Repeated false alarms of this rule on this asset: the first push was quiet; it escalates as usual (P7). */
+    val verifyFirst: Boolean = false,
 )
 
 /**

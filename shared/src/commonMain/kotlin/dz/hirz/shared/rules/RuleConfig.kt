@@ -77,6 +77,27 @@ data class RuleConfig(
     val ownerGraceMs: Long = 90_000L,
     /** A store-and-forward finding older than this rings at P1 at most: the moment has passed (P6). */
     val lateDemoteMs: Long = 30 * 60_000L,
+    /** Routines (P7): minutes after arrive-by before a missed arrival; a source silent longer than this says nothing. */
+    val arrivalGraceMin: Int = 10,
+    val routineSourceFreshMs: Long = 15 * 60_000L,
+    /** Standing still somewhere unknown: after dismissal (P1), or on the way to the routine's place (P2). */
+    val dismissalStillMs: Long = 15 * 60_000L,
+    val unusualStopMs: Long = 10 * 60_000L,
+    val routineStillRadiusM: Double = 40.0,
+    /** Pacing (elders, P7): this much walking in this window, inside this radius, the same cell revisited this often. */
+    val pacingWindowMs: Long = 30 * 60_000L,
+    val pacingPathM: Double = 1_000.0,
+    val pacingRadiusM: Double = 250.0,
+    val pacingCellM: Double = 50.0,
+    val pacingRevisits: Int = 3,
+    /** Learning (P7): a dwell is this long within this radius; a place is dwelt at on this many days in the window. */
+    val learnDwellMs: Long = 20 * 60_000L,
+    val learnRadiusM: Double = 50.0,
+    val learnDays: Int = 3,
+    val learnWindowMs: Long = 30L * 24 * 3_600_000L,
+    /** Verify first (P7): this many incidents of one rule on one asset reviewed as false within the window. */
+    val verifyFirstReviews: Int = 3,
+    val verifyFirstWindowMs: Long = 30L * 24 * 3_600_000L,
     val leashPingMaxAgeMs: Long = 120_000L,
     /** A fix older than this says nothing about where the teen is now. */
     val curfewFixMaxAgeMs: Long = 30 * 60_000,
