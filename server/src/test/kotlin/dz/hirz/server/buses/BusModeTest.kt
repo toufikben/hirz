@@ -99,7 +99,7 @@ class BusModeTest {
             val f = client.fleet(env)
             env.db.connection.use { c ->
                 c.createStatement().executeUpdate(
-                    "INSERT INTO incidents (asset_id, circle_id, rule, tier, state, opened_at) VALUES ('${f.busId}', '${f.circleId}', 'ARMED_MOVED', 'P1', 'open', now())",
+                    "INSERT INTO incidents (asset_id, circle_id, rule, tier, state, opened_at) VALUES ('${f.busId}', '${f.circleId}', 'ARMED_MOVEMENT', 'P1', 'open', now())",
                 )
             }
             assertEquals(HttpStatusCode.Conflict, client.postJson("/v1/assets/${f.busId}/mode", "test.boss", ModeRequest(VehicleMode.MAINTENANCE)).status)

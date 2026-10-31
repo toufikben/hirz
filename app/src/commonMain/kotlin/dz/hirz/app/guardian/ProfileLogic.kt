@@ -59,5 +59,12 @@ object ProfileLogic {
         RuleId.STATIONARY_AFTER_DISMISSAL -> t(lang, "توقف بعد الانصراف", "Immobile après la sortie", "Stopped after dismissal")
         RuleId.UNUSUAL_STOP -> t(lang, "توقف غير معتاد", "Arrêt inhabituel", "Unusual stop")
         RuleId.PACING_LOOP -> t(lang, "الدوران في نفس المكان", "Tourne en rond", "Pacing in circles")
+        RuleId.ROUTE_DEVIATION -> t(lang, "الخروج عن مسار الحافلة", "Bus hors itinéraire", "Bus off its route")
+        RuleId.STOP_LATE -> t(lang, "تأخر الحافلة عن المحطة", "Bus en retard à l'arrêt", "Bus late at a stop")
+        RuleId.UNSCHEDULED_STOP -> t(lang, "توقف غير مجدول", "Arrêt non prévu", "Unscheduled stop")
+        RuleId.OVERSPEED_IN_SERVICE -> t(lang, "سرعة زائدة في الخدمة", "Excès de vitesse en service", "Speeding in service")
+        RuleId.UNBOARDED -> t(lang, "لم يصعد الحافلة", "N'est pas monté dans le bus", "Did not board the bus")
+        RuleId.NOT_DROPPED -> t(lang, "لم ينزل حيث يجب", "Pas descendu à son arrêt", "Not dropped off")
+        RuleId.LEFT_IN_VEHICLE -> t(lang, "تُرك داخل المركبة", "Oublié dans le véhicule", "Left in the vehicle")
     }
 }

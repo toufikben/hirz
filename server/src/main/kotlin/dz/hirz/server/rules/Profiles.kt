@@ -76,11 +76,23 @@ object Profiles {
             put(RuleId.MISSED_ARRIVAL, Tier.P1)
             return@buildMap
         }
+        if (type == AssetType.BUS) {
+            // In route mode only (P9); outside a run the theft rules of P4 apply.
+            put(RuleId.ROUTE_DEVIATION, Tier.P1)
+            put(RuleId.STOP_LATE, Tier.P2)
+            put(RuleId.UNSCHEDULED_STOP, Tier.P2)
+            put(RuleId.OVERSPEED_IN_SERVICE, Tier.P2)
+            return@buildMap
+        }
         if (type !in PEOPLE) return@buildMap
         // Only where the owner drew a shore place; for any person, not only teens.
         put(RuleId.COASTAL_NIGHT, Tier.P1)
         // Only during an outing the guardian started.
         put(RuleId.LEASH_BREAK, Tier.P1)
+        // Only for a child the family registered on a bus (P9).
+        put(RuleId.UNBOARDED, Tier.P1)
+        put(RuleId.NOT_DROPPED, Tier.P1)
+        put(RuleId.LEFT_IN_VEHICLE, Tier.P0)
         // Only where the owner set a routine (P7).
         put(RuleId.MISSED_ARRIVAL, Tier.P1)
         put(RuleId.STATIONARY_AFTER_DISMISSAL, Tier.P1)

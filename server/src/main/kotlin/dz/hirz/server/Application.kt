@@ -133,6 +133,7 @@ fun Application.module(deps: Deps) {
         dz.hirz.server.jobs.HerdScanner(deps.db, deps.clock, deps.rules, recorder).start(this)
         dz.hirz.server.jobs.LeashScanner(deps.db, deps.clock, deps.rules, recorder).start(this)
         dz.hirz.server.jobs.RoutineScanner(deps.db, deps.clock, deps.rules, recorder).start(this)
+        dz.hirz.server.jobs.BusScanner(deps.db, deps.clock, deps.rules, recorder).start(this)
         dz.hirz.server.jobs.LearningJob(deps.db, deps.clock, deps.rules).start(this)
         dz.hirz.server.jobs.DigestJob(deps.db, deps.clock, deps.notifier).start(this)
         dz.hirz.server.jobs.TrialMetricsJob(deps.db, deps.clock, deps.rules).start(this)

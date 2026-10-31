@@ -19,6 +19,8 @@ enum class RuleId {
     HERD_NIGHT_MOVE, HERD_DISPERSION, COLLAR_CUT, ANIMAL_STILL, VEHICLE_SPEED_UNEXPLAINED, LEASH_BREAK, KEYLESS_NO_OWNER,
     /** Routines (design §4.3, §12.2, P7). */
     MISSED_ARRIVAL, STATIONARY_AFTER_DISMISSAL, UNUSUAL_STOP, PACING_LOOP,
+    /** Buses and the children riding them (design §4.3, §12.2, P9). */
+    ROUTE_DEVIATION, STOP_LATE, UNSCHEDULED_STOP, OVERSPEED_IN_SERVICE, UNBOARDED, NOT_DROPPED, LEFT_IN_VEHICLE,
 }
 
 /** A machine reason the app renders through i18n, e.g. `left_place{place, readings, distanceM, accuracyM, ageS}`. */

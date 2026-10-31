@@ -137,6 +137,13 @@ object ReasonText {
                 "After dismissal: still for ${a["minutes"]} min at an unknown place",
             )
             "unusual_stop" -> t("توقّف ${a["minutes"]} د في الطريق في مكان غير معروف", "Arrêt de ${a["minutes"]} min en route, lieu inconnu", "Stopped ${a["minutes"]} min on the way at an unknown place")
+            "route_deviation" -> t("خرجت الحافلة عن المسار «${a["route"]}» بـ ${a["distanceM"]} م", "Bus hors de l'itinéraire « ${a["route"]} » de ${a["distanceM"]} m", "Bus ${a["distanceM"]} m off route \"${a["route"]}\"")
+            "stop_late" -> t("الحافلة متأخرة ${a["minutes"]} د عن «${a["stop"]}»", "Bus en retard de ${a["minutes"]} min à « ${a["stop"]} »", "Bus ${a["minutes"]} min late at \"${a["stop"]}\"")
+            "unscheduled_stop" -> t("الحافلة متوقفة ${a["minutes"]} د خارج المحطات", "Bus arrêté ${a["minutes"]} min hors des arrêts", "Bus stopped ${a["minutes"]} min away from any stop")
+            "overspeed_in_service" -> t("الحافلة تسير بـ ${a["speedKmh"]} كم/سا", "Bus à ${a["speedKmh"]} km/h", "Bus at ${a["speedKmh"]} km/h")
+            "unboarded" -> t("غادرت الحافلة «${a["stop"]}» ولم يصعد", "Le bus a quitté « ${a["stop"]} » sans lui", "The bus left \"${a["stop"]}\" without them")
+            "not_dropped" -> t("لم ينزل في «${a["stop"]}»", "Pas descendu à « ${a["stop"]} »", "Not dropped at \"${a["stop"]}\"")
+            "left_in_vehicle" -> t("ما زال داخل المركبة بعد إطفاء المحرك بـ ${a["minutes"]} د", "Toujours dans le véhicule ${a["minutes"]} min après l'arrêt du moteur", "Still inside ${a["minutes"]} min after the engine stopped")
             "pacing_loop" -> t("يدور في حلقة في المكان نفسه", "Tourne en rond au même endroit", "Walking in loops in one area")
             "new_place" -> t("نحو مكان لم يزره من قبل", "Vers un lieu jamais visité", "Toward a place never visited")
             "keyless_no_owner" -> t("شُغّل المحرّك ولا هاتف من العائلة قربه", "Moteur démarré sans téléphone de la famille à proximité", "Engine started with no family phone near")
