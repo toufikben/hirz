@@ -155,4 +155,38 @@ class LeashTest {
             assertTrue(client.open(f).isEmpty(), "a five-minute-old fix says nothing about where the child is now")
         }
     }
+
+    @Test
+    fun taggedChildWhoGoesSilentRaises() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val f = client.family(Condition.AUTISM)
+            val tag = "eddystone:00112233445566778899aabbccddeeff"
+            client.postJson("/v1/assets/${f.assetId}/tags", "test.mom", dz.hirz.shared.api.TagRequest(tag, "eddystone", -45, env.clock.millis()))
+            val outing: OutingDto = client.postJson("/v1/assets/${f.assetId}/outings", "test.dad", OutingRequest(hours = 3)).body()
+            client.postJson("/v1/outings/${outing.id}/ping", "test.dad", OutingPing(SOUK, 8.0, env.clock.millis(), listOf(tag)))
+            scanner(env).scanOnce()
+            env.clock.advance(70.seconds)
+            client.ping(env, outing.id, SOUK); scanner(env).scanOnce()
+            assertEquals(Tier.P0, client.open(f).single { it.rule == RuleId.LEASH_BREAK }.tier,
+                "his tag went quiet and his phone sends nothing: that is the case that matters")
+        }
+    }
+
+    @Test
+    fun coarseFixOfTheChildDoesNotRaise() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val f = client.family(Condition.AUTISM)
+            val outing: OutingDto = client.postJson("/v1/assets/${f.assetId}/outings", "test.dad", OutingRequest(hours = 3)).body()
+            client.ping(env, outing.id, SOUK)
+            client.postJson("/v1/ingest", f.childToken, IngestBatch(listOf(IngestSignal("x", env.clock.millis(), north(120.0), 150.0))))
+            scanner(env).scanOnce()
+            env.clock.advance(70.seconds)
+            client.ping(env, outing.id, SOUK)
+            client.postJson("/v1/ingest", f.childToken, IngestBatch(listOf(IngestSignal("y", env.clock.millis(), north(130.0), 150.0))))
+            scanner(env).scanOnce()
+            assertTrue(client.open(f).isEmpty(), "a 150 m indoor fix in a mall cannot tell 120 m apart")
+        }
+    }
 }

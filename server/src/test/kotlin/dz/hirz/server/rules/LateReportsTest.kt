@@ -114,4 +114,14 @@ class LateReportsTest {
             assertEquals(listOf(RuleId.SILENT_SOURCE), client.open(a).map { it.rule })
         }
     }
+
+    @Test
+    fun aFewMinutesLateKeepsP0() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val a = client.animal()
+            client.postJson("/v1/ingest", a.token, exitTrack(env.clock.millis() - 5 * 60_000L))
+            assertEquals(Tier.P0, client.open(a).single().tier, "a collar that uploads every five minutes is live, not late")
+        }
+    }
 }

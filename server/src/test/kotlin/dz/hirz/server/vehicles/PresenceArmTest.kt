@@ -25,6 +25,11 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.get
+import io.ktor.client.request.put
+import io.ktor.client.request.setBody
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
+import dz.hirz.shared.api.RelayGrant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -44,6 +49,10 @@ private suspend fun HttpClient.car(env: TestEnv, tag: Boolean = true): TaggedCar
     val carSource: PairResponse = pair(pairingCode("test.mom", car.id).code).body()
     val phoneAsset = newAsset("test.mom", circle.id, AssetType.LONE_WORKER, "Mom")
     val phone: PairResponse = pair(pairingCode("test.mom", phoneAsset.id).code, adult = true, consent = true).body()
+    // The owner lets this phone relay tags (a server-side grant, not the phone's own say).
+    put("/v1/assets/${phoneAsset.id}/sources/${phone.sourceId}/relay") {
+        bearerAuth("test.mom"); contentType(ContentType.Application.Json); setBody(RelayGrant(true))
+    }
     return TaggedCar(circle.id, car.id, carSource.sourceToken, phone.sourceToken)
 }
 
@@ -65,9 +74,11 @@ class PresenceArmTest {
             val c = client.car(env)
             client.ignition(env, c, false)
             client.seen(env, c)
-            env.clock.advance(3.minutes)
+            env.clock.advance(5.minutes)
+            assertEquals(VehicleMode.DISARMED, client.state(c).mode, "a few missed scans are not yet absence")
+            env.clock.advance(2.minutes)
             val s = client.state(c)
-            assertEquals(VehicleMode.ARMED, s.mode, "mom walked away two minutes ago: no need to wait the 10-minute auto-arm")
+            assertEquals(VehicleMode.ARMED, s.mode, "six minutes unheard: armed before the 10-minute auto-arm")
             assertEquals("owner_away", s.reason)
         }
     }
@@ -90,10 +101,13 @@ class PresenceArmTest {
             val c = client.car(env)
             client.ignition(env, c, false)
             client.seen(env, c)
-            env.clock.advance(5.minutes)
+            env.clock.advance(7.minutes)
             assertEquals(VehicleMode.ARMED, client.state(c).mode)
             client.ignition(env, c, true)
-            assertEquals(Tier.P1, client.open(c).single { it.rule == RuleId.KEYLESS_NO_OWNER }.tier, "started with no family phone near: a relay attack")
+            assertTrue(client.open(c).isEmpty(), "a grace for the owner's phone to be heard")
+            env.clock.advance(100.seconds)
+            client.ignition(env, c, true)
+            assertEquals(Tier.P1, client.open(c).single { it.rule == RuleId.KEYLESS_NO_OWNER }.tier, "still no family phone: a relay attack")
         }
     }
 
@@ -128,7 +142,7 @@ class PresenceArmTest {
             val c = client.car(env)
             client.ignition(env, c, false)
             client.seen(env, c)
-            env.clock.advance(3.minutes)
+            env.clock.advance(7.minutes)
             assertEquals(VehicleMode.ARMED, client.state(c).mode)
             env.clock.advance(1.minutes)
             client.seen(env, c)
@@ -136,6 +150,25 @@ class PresenceArmTest {
             assertEquals(VehicleMode.DISARMED, client.state(c).mode, "mom came back from the bakery")
             client.ignition(env, c, true)
             assertTrue(client.open(c).isEmpty(), "and drives off without an alarm")
+        }
+    }
+
+    @Test
+    fun errandWithTheEngineStartedBeforeTheSightingIsNoAlarm() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val c = client.car(env)
+            client.ignition(env, c, false)
+            client.seen(env, c)
+            env.clock.advance(7.minutes)
+            assertEquals(VehicleMode.ARMED, client.state(c).mode)
+            client.ignition(env, c, true)
+            env.clock.advance(30.seconds)
+            client.seen(env, c)
+            env.clock.advance(30.seconds)
+            client.ignition(env, c, true)
+            assertTrue(client.open(c).isEmpty(), "mom started the car a moment before her phone was heard")
+            assertEquals(VehicleMode.DISARMED, client.state(c).mode)
         }
     }
 }

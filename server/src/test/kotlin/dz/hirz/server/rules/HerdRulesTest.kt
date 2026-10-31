@@ -201,4 +201,21 @@ class HerdRulesTest {
             assertTrue(client.open(h).none { it.rule == RuleId.ANIMAL_STILL }, "fattening in the barn before Eid is not sickness")
         }
     }
+
+    @Test
+    fun aSecondTheftAfterTheHerdAlarmClosedStillRings() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val h = client.herd(env, Instant.parse("2026-11-02T21:05:00Z"), size = 3) // 22:05 Algiers
+            repeat(2) { h.tokens.forEach { t -> client.fix(env, t, BARN) }; env.clock.advance(10.seconds) }
+            listOf(200.0, 260.0).forEach { m -> client.fix(env, h.tokens[0], at(m)); env.clock.advance(10.seconds) }
+            assertEquals(1, client.open(h).count { it.rule == RuleId.HERD_NIGHT_MOVE })
+            // The herd came home late; the owner closed the alarm.
+            env.db.connection.use { c -> c.createStatement().executeUpdate("UPDATE incidents SET state = 'closed', closed_at = now()") }
+            env.clock.now = Instant.parse("2026-11-03T02:00:00Z") // 03:00
+            repeat(2) { client.fix(env, h.tokens[2], BARN); env.clock.advance(10.seconds) }
+            listOf(200.0, 260.0).forEach { m -> client.fix(env, h.tokens[2], at(m)); env.clock.advance(10.seconds) }
+            assertTrue(client.open(h).any { it.rule == RuleId.NIGHT_EXIT }, "the 03:00 theft of one head rings: ${client.open(h)}")
+        }
+    }
 }

@@ -25,6 +25,10 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.get
+import io.ktor.client.request.put
+import io.ktor.client.request.setBody
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import kotlin.test.Test
@@ -39,7 +43,7 @@ private const val TAG = "eddystone:0102030405060708090a0b0c0d0e0f"
 private class Setup(val ownerCircle: String, val ewe: String, val relayToken: String, val relaySourceId: String)
 
 /** mom's ewe wearing [TAG]; the shepherd (another circle) carries a paired Hirz phone that relays. */
-private suspend fun HttpClient.setup(env: TestEnv, register: Boolean = true): Setup {
+private suspend fun HttpClient.setup(env: TestEnv, register: Boolean = true, grant: Boolean = true): Setup {
     val circle = newCircle("test.mom")
     postJson("/v1/circles/${circle.id}/places", "test.mom", CreatePlaceRequest("Zriba", PlaceKind.BARN, ShapeDto.Circle(BARN, 40.0), marginM = 50))
     val ewe = newAsset("test.mom", circle.id, AssetType.LIVESTOCK, "Naaja")
@@ -47,6 +51,9 @@ private suspend fun HttpClient.setup(env: TestEnv, register: Boolean = true): Se
     // The shepherd's phone belongs to the herd owner's circle: a relay only carries its own circle's tags.
     val phone = newAsset("test.mom", circle.id, AssetType.LONE_WORKER, "Raai")
     val p: PairResponse = pair(pairingCode("test.mom", phone.id).code, adult = true, consent = true).body()
+    if (grant) put("/v1/assets/${phone.id}/sources/${p.sourceId}/relay") {
+        bearerAuth("test.mom"); contentType(ContentType.Application.Json); setBody(dz.hirz.shared.api.RelayGrant(true))
+    }
     return Setup(circle.id, ewe.id, p.sourceToken, p.sourceId)
 }
 
@@ -186,6 +193,16 @@ class BleTest {
                 dz.hirz.server.incidents.IncidentService(env.db, env.clock, env.notifier, circles))).scanOnce()
             val open = client.get("/v1/circles/${s.ownerCircle}/incidents?state=open") { bearerAuth("test.mom") }.body<List<IncidentDto>>()
             assertTrue(open.none { it.rule == dz.hirz.shared.api.RuleId.SILENT_SOURCE && it.assetId == s.ewe }, "a tag nobody hears is not a device gone dark")
+        }
+    }
+
+    @Test
+    fun aPhoneNobodyGrantedCannotRelay() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val s = client.setup(env, grant = false)
+            assertEquals(0, client.relay(env, s, north(100.0), rssi = -55).accepted, "a teen's phone does not write its sibling's track")
+            assertEquals(HttpStatusCode.Forbidden, client.get("/v1/relay/tags") { bearerAuth(s.relayToken) }.status)
         }
     }
 }
