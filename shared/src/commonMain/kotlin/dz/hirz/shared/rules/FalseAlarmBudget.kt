@@ -16,10 +16,10 @@ data class TrialMetrics(
     val guidedTests: Int,
     val guidedMissed: Int,
     val p0GuidedTests: Int,
-    val p0DeliveryP95Ms: Long?,
-    val p0AckMedianMs: Long?,
+    val p0DeliveryP95Ms: Long? = null,
+    val p0AckMedianMs: Long? = null,
     /** Share of asset-hours with a fresh fix, 0..1. */
-    val coverage: Double?,
+    val coverage: Double? = null,
     val digestRated: Int,
     val digestUseful: Int,
     val closedP0P1: Int,
