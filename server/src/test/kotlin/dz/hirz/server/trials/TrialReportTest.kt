@@ -29,13 +29,13 @@ private suspend fun HttpClient.trial(): TrialDto =
  * [days] asset-days of a quiet, well-run trial over 4 assets: full coverage, every guided test rang. One row in ten
  * has a P0 guided test delivered in 6 s and claimed in 70 s, and one closed P1 that was reviewed.
  */
-private fun seed(env: TestEnv, trialId: String, days: Int, falseP0: Int = 0, falseP1: Int = 0) = env.db.connection.use { c ->
+private fun seed(env: TestEnv, trialId: String, days: Int, falseP0: Int = 0, falseP1: Int = 0, prefix: String = "a") = env.db.connection.use { c ->
     repeat(days) { i ->
         val p0 = i % 10 == 0
         c.createStatement().executeUpdate(
             """INSERT INTO trial_daily (trial_id, circle_pseudo, asset_pseudo, day, live_hours, fresh_hours, findings, false_p0, false_p1,
                  closed_p0p1, reviewed_p0p1, guided_tests, guided_missed, p0_guided, p0_delivery_ms, p0_ack_ms, digest_rated, digest_useful)
-               VALUES ('$trialId', 'c${i % 2}', 'a${i % 4}', DATE '${LocalDate.parse("2026-11-01").plusDays((i / 4).toLong())}', 24, 23,
+               VALUES ('$trialId', 'c${i % 2}', '$prefix${i % 4}', DATE '${LocalDate.parse("2026-11-01").plusDays((i / 4).toLong())}', 24, 23,
                  '{"UNUSUAL_STOP/P2": 1}'::jsonb, ${if (i < falseP0) 1 else 0}, ${if (i < falseP1) 1 else 0},
                  ${if (p0) 2 else 0}, ${if (p0) 2 else 0}, ${if (p0) 1 else 0}, 0, ${if (p0) 1 else 0},
                  ${if (p0) "'{6000}'" else "'{}'"}::bigint[], ${if (p0) "'{70000}'" else "'{}'"}::bigint[], 2, 2)""",
@@ -54,7 +54,7 @@ class TrialReportTest {
             assertEquals(120, r.metrics.assetDays)
             assertTrue(r.passed, r.lines.filter { it.verdict != Verdict.PASS }.toString())
             assertEquals(120, r.findings["UNUSUAL_STOP/P2"])
-            seed(env, t.id, 1, falseP0 = 1)
+            seed(env, t.id, 1, falseP0 = 1, prefix = "x")
             val worse: TrialReportDto = client.get("/v1/operator/trials/${t.id}/report") { bearerAuth("test.ops") }.body()
             assertFalse(worse.passed)
             assertEquals(Verdict.FAIL, worse.lines.single { it.id == "false_p0" }.verdict, "one false P0 in 121 asset-days")

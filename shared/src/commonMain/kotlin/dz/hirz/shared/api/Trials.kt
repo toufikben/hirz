@@ -39,3 +39,15 @@ data class GuidedTestRequest(val assetId: String, val rule: RuleId)
 
 @Serializable
 data class GuidedTestDto(val id: String, val assetId: String, val rule: RuleId, val startedAtMs: Long)
+
+/** The operator's view of a trial (P8): aggregates only, judged against the budget. */
+@Serializable
+data class TrialReportDto(
+    val trial: TrialDto,
+    val circles: Int,
+    val metrics: dz.hirz.shared.rules.TrialMetrics,
+    val lines: List<dz.hirz.shared.rules.BudgetLine>,
+    val passed: Boolean,
+    /** Findings per "RULE/TIER" over the whole trial. */
+    val findings: Map<String, Int>,
+)
