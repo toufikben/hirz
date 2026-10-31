@@ -1,0 +1,78 @@
+{
+  "name": "livestock_on_a_truck",
+  "start": "2026-11-02T09:00:00Z",
+  "type": "livestock",
+  "places": [
+    {
+      "name": "Zriba",
+      "kind": "barn",
+      "radius": 40
+    },
+    {
+      "name": "Mra",
+      "kind": "pasture",
+      "north": 3000,
+      "radius": 1000
+    }
+  ],
+  "steps": [
+    {
+      "t": 0,
+      "action": "fix",
+      "north": 5000,
+      "speed": 40
+    },
+    {
+      "t": 10,
+      "action": "fix",
+      "north": 5110,
+      "speed": 40
+    },
+    {
+      "t": 20,
+      "action": "fix",
+      "north": 5220,
+      "speed": 40
+    },
+    {
+      "t": 30,
+      "action": "fix",
+      "north": 5330,
+      "speed": 40
+    },
+    {
+      "t": 40,
+      "action": "fix",
+      "north": 5440,
+      "speed": 40
+    },
+    {
+      "t": 50,
+      "action": "fix",
+      "north": 5550,
+      "speed": 40
+    },
+    {
+      "t": 60,
+      "action": "fix",
+      "north": 5660,
+      "speed": 40
+    },
+    {
+      "t": 70,
+      "action": "fix",
+      "north": 5770,
+      "speed": 40
+    },
+    {
+      "t": 80,
+      "action": "fix",
+      "north": 5880,
+      "speed": 40
+    }
+  ],
+  "expect": [
+    "VEHICLE_SPEED_UNEXPLAINED"
+  ],
+  "positiveFor": "VEHICLE_SPEED_UNEXPLAINED"
+}

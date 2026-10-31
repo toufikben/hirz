@@ -10,6 +10,9 @@ import kotlin.test.fail
 
 private val P5_RULES = listOf(RuleId.NIGHT_EXIT, RuleId.HAZARD_PROXIMITY, RuleId.RUN_AWAY_SPEED, RuleId.PAST_ADDRESS_HEADING, RuleId.CURFEW, RuleId.COASTAL_NIGHT)
 
+/** P6 rules a single asset can raise in the replay runner; the herd-wide ones have their own tests (HerdRulesTest). */
+private val MATRIX_RULES = P5_RULES + RuleId.VEHICLE_SPEED_UNEXPLAINED
+
 class PeopleScenariosTest {
     /** AC-19: every P5 rule has a scenario that raises it and one where it must stay quiet. */
     @Test
@@ -21,7 +24,7 @@ class PeopleScenariosTest {
             if (got != s.expect.toSet()) "${s.name}: open $got, expected ${s.expect.toSet()}" else null
         }
         if (failures.isNotEmpty()) fail(failures.joinToString("\n"))
-        P5_RULES.forEach { r ->
+        (P5_RULES + RuleId.VEHICLE_SPEED_UNEXPLAINED).forEach { r ->
             assertTrue(all.any { it.positiveFor == r.name }, "no positive scenario for $r")
             assertTrue(all.any { r.name !in it.expect }, "no negative scenario for $r")
         }
@@ -37,17 +40,18 @@ class PeopleScenariosTest {
             "child" to (AssetType.CHILD to Condition.NONE), "teen" to (AssetType.TEEN to Condition.NONE),
             "elder" to (AssetType.ELDER to Condition.NONE), "dementia" to (AssetType.ELDER to Condition.DEMENTIA),
             "autism" to (AssetType.CHILD to Condition.AUTISM),
+            "livestock" to (AssetType.LIVESTOCK to Condition.NONE),
         )
         val matrix = profiles.associate { (label, tc) ->
             val raised = PeopleScenarios.all().flatMap { s -> PeopleScenarios.run(s, tc.first, tc.second) }
-            label to P5_RULES.associateWith { r -> raised.count { it == r.name } }
+            label to MATRIX_RULES.associateWith { r -> raised.count { it == r.name } }
         }
         println("P5 confusion matrix (scenarios raising each rule, per profile):")
-        println("profile".padEnd(10) + P5_RULES.joinToString(" ") { it.name.take(14).padEnd(14) })
-        matrix.forEach { (label, row) -> println(label.padEnd(10) + P5_RULES.joinToString(" ") { row.getValue(it).toString().padEnd(14) }) }
+        println("profile".padEnd(10) + MATRIX_RULES.joinToString(" ") { it.name.take(14).padEnd(14) })
+        matrix.forEach { (label, row) -> println(label.padEnd(10) + MATRIX_RULES.joinToString(" ") { row.getValue(it).toString().padEnd(14) }) }
         val off = profiles.flatMap { (label, tc) ->
             val allowed = Profiles.defaults(tc.first, tc.second).keys
-            P5_RULES.filter { it !in allowed && matrix.getValue(label).getValue(it) > 0 }.map { "$label raised $it" }
+            MATRIX_RULES.filter { it !in allowed && matrix.getValue(label).getValue(it) > 0 }.map { "$label raised $it" }
         }
         if (off.isNotEmpty()) fail(off.joinToString("\n"))
     }
