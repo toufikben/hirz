@@ -95,6 +95,9 @@ data class RuleConfig(
     val learnRadiusM: Double = 50.0,
     val learnDays: Int = 3,
     val learnWindowMs: Long = 30L * 24 * 3_600_000L,
+    /** Verify first (P7): this many incidents of one rule on one asset reviewed as false within the window. */
+    val verifyFirstReviews: Int = 3,
+    val verifyFirstWindowMs: Long = 30L * 24 * 3_600_000L,
     val leashPingMaxAgeMs: Long = 120_000L,
     /** A fix older than this says nothing about where the teen is now. */
     val curfewFixMaxAgeMs: Long = 30 * 60_000,

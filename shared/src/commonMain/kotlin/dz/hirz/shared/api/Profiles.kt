@@ -26,6 +26,9 @@ data class ProfileDto(
     val nightBySun: Boolean = false,
     /** Ramadan evenings (21:30–23:30) count as night exits after all. */
     val ramadanNightOff: Boolean = false,
+    /** Rules whose P1 now starts quietly after repeated false alarms on this asset. */
+    val verifyFirst: List<RuleId> = emptyList(),
+    val verifyFirstOff: Boolean = false,
 )
 
 /** [tier] null keeps the default tier. */
@@ -44,4 +47,6 @@ data class ProfileUpdate(
     val curfewMinute: Int? = null,
     val nightBySun: Boolean? = null,
     val ramadanNightOff: Boolean? = null,
+    /** True turns verify-first off for this asset: every P1 rings again. */
+    val verifyFirstOff: Boolean? = null,
 )

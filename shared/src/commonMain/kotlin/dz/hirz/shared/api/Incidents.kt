@@ -80,6 +80,8 @@ data class IncidentDto(
     val deliveries: List<DeliveryDto> = emptyList(),
     val pendingClose: PendingCloseDto? = null,
     val escalation: EscalationViewDto? = null,
+    /** Repeated false alarms of this rule on this asset: the first push was quiet; it escalates as usual (P7). */
+    val verifyFirst: Boolean = false,
 )
 
 /**

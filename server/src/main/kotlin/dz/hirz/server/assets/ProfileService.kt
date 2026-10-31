@@ -51,7 +51,10 @@ data class ProfileRow(
 }
 
 /** Reads and changes behavior profiles (design §4.4). Owners decide the condition, birth date and anything lowered. */
-class ProfileService(private val db: DataSource, private val circles: CircleService) {
+class ProfileService(
+    private val db: DataSource, private val circles: CircleService,
+    private val clock: java.time.Clock = java.time.Clock.systemUTC(), private val cfg: dz.hirz.shared.rules.RuleConfig = dz.hirz.shared.rules.RuleConfig.DEFAULT,
+) {
     companion object {
         fun row(c: Connection, assetId: UUID): ProfileRow? =
             c.prepareStatement(
@@ -85,7 +88,7 @@ class ProfileService(private val db: DataSource, private val circles: CircleServ
         val row = row(c, assetId) ?: notFound()
         // Not contacts or temporary members (a babysitter): the profile names a condition.
         circles.requireRole(c, row.circleId, memberId, setOf(Role.OWNER, Role.GUARDIAN, Role.VIEWER))
-        dto(row, row.profile())
+        dto(row, row.profile(), assetId, c)
     }
 
     fun update(assetId: UUID, memberId: UUID, req: ProfileUpdate): ProfileDto = db.tx { c ->
@@ -122,21 +125,22 @@ class ProfileService(private val db: DataSource, private val circles: CircleServ
             """UPDATE assets SET condition = ?, profile_overrides = ?::jsonb, night_window = COALESCE(?::jsonb, night_window),
                  birth_date = COALESCE(?, birth_date), condition_on_sheet = COALESCE(?, condition_on_sheet), night_exceptions = ?::jsonb,
                  curfew_minute = CASE WHEN ?::int = -1 THEN NULL ELSE COALESCE(?::int, curfew_minute) END,
-                 night_by_sun = COALESCE(?, night_by_sun), ramadan_night_off = COALESCE(?, ramadan_night_off) WHERE id = ?""",
+                 night_by_sun = COALESCE(?, night_by_sun), ramadan_night_off = COALESCE(?, ramadan_night_off),
+                 verify_first_off = COALESCE(?, verify_first_off) WHERE id = ?""",
         ).apply {
             setString(1, condition.name.lowercase()); setString(2, apiJson.encodeToString(overridesSer, overrides))
             setString(3, req.nightWindow?.let { apiJson.encodeToString(windowsSer, it) })
             setObject(4, birth); setObject(5, req.conditionOnSheet); setString(6, apiJson.encodeToString(exceptionsSer, exceptions))
             setObject(7, req.curfewMinute); setObject(8, req.curfewMinute)
-            setObject(9, req.nightBySun); setObject(10, req.ramadanNightOff); setObject(11, assetId)
+            setObject(9, req.nightBySun); setObject(10, req.ramadanNightOff); setObject(11, req.verifyFirstOff); setObject(12, assetId)
         }.executeUpdate()
         // The audit records what changed, never the condition itself.
         audit(c, row.circleId, memberId, "profile_changed",
             """{"asset":"$assetId","condition_changed":${req.condition != null && req.condition != row.condition},"overrides":${overrides.size}}""")
-        dto(row(c, assetId)!!, after)
+        dto(row(c, assetId)!!, after, assetId, c)
     }
 
-    private fun dto(row: ProfileRow, p: Profile) = ProfileDto(
+    private fun dto(row: ProfileRow, p: Profile, assetId: UUID, c: Connection) = ProfileDto(
         condition = row.condition,
         rules = p.rules.entries.sortedBy { it.key.ordinal }.map { (rule, s) ->
             RuleSettingDto(rule, s.enabled, s.tier, s.defaultTier, locked = s.defaultTier == Tier.P0)
@@ -144,6 +148,10 @@ class ProfileService(private val db: DataSource, private val circles: CircleServ
         nightWindow = p.nightWindow, birthDate = row.birthDate?.toString(), conditionOnSheet = row.conditionOnSheet,
         nightExceptions = row.nightExceptions, curfewMinute = row.curfewMinute,
         nightBySun = p.nightBySun, ramadanNightOff = row.ramadanNightOff,
+        verifyFirst = dz.hirz.server.incidents.VerifyFirst.rules(c, assetId, clock.instant(), cfg).mapNotNull { r -> dz.hirz.shared.api.RuleId.entries.firstOrNull { it.name == r } }
+            .filter { p.tierOf(it) == dz.hirz.shared.api.Tier.P1 }.sortedBy { it.ordinal },
+        verifyFirstOff = c.prepareStatement("SELECT verify_first_off FROM assets WHERE id = ?").apply { setObject(1, assetId) }
+            .executeQuery().use { it.next() && it.getBoolean(1) },
     )
 }
 

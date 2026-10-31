@@ -159,7 +159,7 @@ fun Application.module(deps: Deps) {
             meRoutes(deps)
             circleRoutes(circles)
             assetRoutes(assets)
-            profileRoutes(dz.hirz.server.assets.ProfileService(deps.db, circles))
+            profileRoutes(dz.hirz.server.assets.ProfileService(deps.db, circles, deps.clock, deps.rules))
             herdRoutes(dz.hirz.server.herds.HerdService(deps.db, circles))
             routineRoutes(dz.hirz.server.routines.RoutineService(deps.db, circles))
             bleMemberRoutes(ble)

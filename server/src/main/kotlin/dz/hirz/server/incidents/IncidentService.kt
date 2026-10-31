@@ -85,6 +85,7 @@ class IncidentService(
     override fun open(finding: Finding, findingId: Long) {
         val now = clock.instant()
         var raised = false
+        var quiet = false
         val (incidentId, isNew) = db.tx { c ->
             val inserted = c.prepareStatement(
                 """INSERT INTO incidents (asset_id, circle_id, rule, tier, silent, reasons, opened_at)
@@ -99,6 +100,11 @@ class IncidentService(
                 .use { if (it.next()) it.getObject(1, UUID::class.java) else null }
                 ?: throw IllegalStateException("incident closed concurrently; the finding is retried by the next evaluation")
             c.prepareStatement("UPDATE findings SET incident_id = ? WHERE id = ?").apply { setObject(1, id); setLong(2, findingId) }.executeUpdate()
+            // Repeated false alarms of this rule on this asset: its P1 starts quietly (never a P0).
+            if (inserted != null && finding.tier == Tier.P1 && finding.rule.name in VerifyFirst.rules(c, finding.assetId, now, dz.hirz.shared.rules.RuleConfig.DEFAULT)) {
+                c.prepareStatement("UPDATE incidents SET verify_first = true WHERE id = ?").apply { setObject(1, id) }.executeUpdate()
+                quiet = true
+            }
             // A stronger finding raises the open incident's tier (never lowers it): P1 armed movement → P0 at speed.
             if (inserted == null) {
                 raised = c.prepareStatement("UPDATE incidents SET tier = ? WHERE id = ? AND tier > ?")
@@ -118,7 +124,7 @@ class IncidentService(
             // P0: every source reports every 15 s until close (design §6.2). Never under duress: the carrier's phone gets nothing.
             escalation?.onOpened(incidentId, finding.circleId, finding.tier)
             if (finding.tier == Tier.P0 && !finding.silent) pushToSources(finding.assetId, "high_rate")
-            fanOut(incidentId, finding)
+            fanOut(incidentId, finding, quiet)
         }
         notifyChanged(finding.circleId, incidentId)
     }
@@ -131,7 +137,7 @@ class IncidentService(
         notifyChanged(circleId, incidentId)
     }
 
-    private fun fanOut(incidentId: UUID, f: Finding) {
+    private fun fanOut(incidentId: UUID, f: Finding, quiet: Boolean = false) {
         data class Recipient(val member: UUID, val token: String?)
         val now = clock.instant()
         val (assetName, recipients) = db.connection.use { c ->
@@ -151,7 +157,7 @@ class IncidentService(
             }.executeQuery().toList { Recipient(it.getObject(1, UUID::class.java), it.getString(2)) }
             name to list
         }
-        val message = AlertMessage("incident", incidentId, f.tier.name, assetName, f.rule.name)
+        val message = AlertMessage(if (quiet) "incident_quiet" else "incident", incidentId, f.tier.name, assetName, f.rule.name)
         val results = runBlocking(Dispatchers.IO) {
             coroutineScope {
                 recipients.map { r ->
@@ -532,6 +538,8 @@ class IncidentService(
             .copy(
                 pendingClose = ClosePolicy.pending(c, id)?.takeIf { clock.instant().isBefore(it.expiresAt) }?.dto(),
                 escalation = ladderView(c, id),
+                verifyFirst = c.prepareStatement("SELECT verify_first FROM incidents WHERE id = ?").apply { setObject(1, id) }
+                    .executeQuery().use { it.next() && it.getBoolean(1) },
             )
     }
 
