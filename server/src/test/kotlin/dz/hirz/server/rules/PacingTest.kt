@@ -30,15 +30,15 @@ import kotlin.time.Duration.Companion.seconds
 private val HOME = LatLon(36.7538, 3.0588)
 private fun at(north: Double, east: Double) = LatLon(HOME.lat + north / 111_320.0, HOME.lon + east / (111_320.0 * 0.8016))
 
-private class Walker(val circleId: String, val token: String)
+private class Pacer(val circleId: String, val token: String)
 
 /** An elder with a home of [homeRadius] m; adult consent. */
-private suspend fun HttpClient.elder(homeRadius: Double = 50.0): Walker {
+private suspend fun HttpClient.elder(homeRadius: Double = 50.0): Pacer {
     val circle = newCircle("test.mom")
     postJson("/v1/circles/${circle.id}/places", "test.mom", CreatePlaceRequest("Dar", PlaceKind.HOME, ShapeDto.Circle(HOME, homeRadius)))
     val a = newAsset("test.mom", circle.id, AssetType.ELDER, "Jeddi")
     val p: PairResponse = pair(pairingCode("test.mom", a.id).code, adult = true, consent = true).body()
-    return Walker(circle.id, p.sourceToken)
+    return Pacer(circle.id, p.sourceToken)
 }
 
 /** The corners of a 200 m square around a block 500 m north of home, walked [laps] times, one fix every 30 s (≈40 m). */
@@ -51,12 +51,12 @@ private fun block(laps: Int): List<LatLon> {
     return (1..laps).flatMap { one }
 }
 
-private suspend fun HttpClient.walk(env: TestEnv, w: Walker, points: List<LatLon>) = points.forEachIndexed { i, p ->
+private suspend fun HttpClient.walk(env: TestEnv, w: Pacer, points: List<LatLon>) = points.forEachIndexed { i, p ->
     postJson("/v1/ingest", w.token, IngestBatch(listOf(IngestSignal("w$i", env.clock.millis(), p, 10.0))))
     env.clock.advance(30.seconds)
 }
 
-private suspend fun HttpClient.open(w: Walker): List<IncidentDto> = get("/v1/circles/${w.circleId}/incidents?state=open") { bearerAuth("test.mom") }.body()
+private suspend fun HttpClient.open(w: Pacer): List<IncidentDto> = get("/v1/circles/${w.circleId}/incidents?state=open") { bearerAuth("test.mom") }.body()
 
 class PacingTest {
     @Test
