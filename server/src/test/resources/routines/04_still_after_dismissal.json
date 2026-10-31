@@ -1,0 +1,67 @@
+{
+  "name": "still_after_dismissal",
+  "start": "2026-11-08T15:36:00Z",
+  "type": "child",
+  "places": [
+    {
+      "name": "Dar",
+      "kind": "home",
+      "radius": 50
+    },
+    {
+      "name": "Ecole",
+      "kind": "school",
+      "north": 1113,
+      "radius": 80
+    }
+  ],
+  "routine": {
+    "place": "Ecole",
+    "template": "school"
+  },
+  "steps": [
+    {
+      "t": 0,
+      "action": "fix",
+      "north": 1113,
+      "east": 540,
+      "acc": 10
+    },
+    {
+      "t": 300,
+      "action": "fix",
+      "north": 1113,
+      "east": 540,
+      "acc": 10
+    },
+    {
+      "t": 600,
+      "action": "fix",
+      "north": 1113,
+      "east": 540,
+      "acc": 10
+    },
+    {
+      "t": 900,
+      "action": "fix",
+      "north": 1113,
+      "east": 540,
+      "acc": 10
+    },
+    {
+      "t": 1200,
+      "action": "fix",
+      "north": 1113,
+      "east": 540,
+      "acc": 10
+    },
+    {
+      "t": 1200,
+      "action": "scan"
+    }
+  ],
+  "expect": [
+    "STATIONARY_AFTER_DISMISSAL"
+  ],
+  "positiveFor": "STATIONARY_AFTER_DISMISSAL"
+}

@@ -1,0 +1,23 @@
+{
+  "name": "long_straight_walk",
+  "start": "2026-11-08T09:00:00Z",
+  "type": "elder",
+  "places": [
+    {
+      "name": "Dar",
+      "kind": "home",
+      "radius": 50
+    }
+  ],
+  "steps": [
+    {
+      "t": 0,
+      "action": "walk",
+      "north": 500,
+      "toNorth": 2860,
+      "n": 60
+    }
+  ],
+  "expect": [],
+  "negativeFor": "PACING_LOOP"
+}
