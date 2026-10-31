@@ -32,6 +32,7 @@ import dz.hirz.server.assets.assetRoutes
 import dz.hirz.server.assets.profileRoutes
 import dz.hirz.server.herds.herdRoutes
 import dz.hirz.server.ble.bleMemberRoutes
+import dz.hirz.server.presence.outingRoutes
 import dz.hirz.server.ble.bleRelayRoutes
 import dz.hirz.server.assets.pairRoutes
 import dz.hirz.server.assets.sourcePushRoutes
@@ -124,6 +125,7 @@ fun Application.module(deps: Deps) {
         dz.hirz.server.jobs.JammingScanner(deps.db, deps.clock, deps.rules, vehicleModes, recorder).start(this)
         dz.hirz.server.jobs.CurfewScanner(deps.db, deps.clock, deps.rules, recorder).start(this)
         dz.hirz.server.jobs.HerdScanner(deps.db, deps.clock, deps.rules, recorder).start(this)
+        dz.hirz.server.jobs.LeashScanner(deps.db, deps.clock, deps.rules, recorder).start(this)
         dz.hirz.server.jobs.AgeTransitionJob(deps.db, deps.clock, deps.notifier).start(this)
         dz.hirz.server.sms.GatewaySilenceScanner(deps.db, deps.clock, deps.notifier).start(this)
         RetentionPurge(deps.db, deps.clock).start(this)
@@ -156,6 +158,7 @@ fun Application.module(deps: Deps) {
             profileRoutes(dz.hirz.server.assets.ProfileService(deps.db, circles))
             herdRoutes(dz.hirz.server.herds.HerdService(deps.db, circles))
             bleMemberRoutes(ble)
+            outingRoutes(dz.hirz.server.presence.Outings(deps.db, deps.clock, circles))
             placeRoutes(places)
             incidentRoutes(incidents)
             codeWordRoutes(codeWords)

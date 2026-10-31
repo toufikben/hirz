@@ -69,6 +69,9 @@ data class RuleConfig(
     /** A head moving this fast this long is in a vehicle. */
     val truckKmh: Double = 25.0,
     val truckMs: Long = 60_000L,
+    /** Leash (P6): apart this long during an outing is lost; a guardian phone silent this long says nothing. */
+    val leashMs: Long = 60_000L,
+    val leashPingMaxAgeMs: Long = 120_000L,
     /** A fix older than this says nothing about where the teen is now. */
     val curfewFixMaxAgeMs: Long = 30 * 60_000,
 ) {

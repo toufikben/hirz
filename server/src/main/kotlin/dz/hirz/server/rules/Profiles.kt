@@ -61,11 +61,13 @@ object Profiles {
         if (type !in PEOPLE) return@buildMap
         // Only where the owner drew a shore place; for any person, not only teens.
         put(RuleId.COASTAL_NIGHT, Tier.P1)
+        // Only during an outing the guardian started.
+        put(RuleId.LEASH_BREAK, Tier.P1)
         if (type == AssetType.TEEN) put(RuleId.CURFEW, Tier.P2)
         if (type == AssetType.ELDER) put(RuleId.NIGHT_EXIT, Tier.P1)
         when (condition) {
             Condition.DEMENTIA -> { put(RuleId.PAST_ADDRESS_HEADING, Tier.P1); put(RuleId.NIGHT_EXIT, Tier.P1) }
-            Condition.AUTISM -> { put(RuleId.HAZARD_PROXIMITY, Tier.P0); put(RuleId.RUN_AWAY_SPEED, Tier.P0) }
+            Condition.AUTISM -> { put(RuleId.HAZARD_PROXIMITY, Tier.P0); put(RuleId.RUN_AWAY_SPEED, Tier.P0); put(RuleId.LEASH_BREAK, Tier.P0) }
             Condition.NONE -> {}
         }
     }
