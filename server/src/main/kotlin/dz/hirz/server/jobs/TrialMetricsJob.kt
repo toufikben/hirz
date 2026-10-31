@@ -109,7 +109,8 @@ class TrialMetricsJob(private val db: DataSource, private val clock: Clock, priv
             .executeQuery().toList { Guided(it.getString(1), it.getTimestamp(2).toInstant(), it.getBoolean(3)) }
         val p0Guided = guided.count { g ->
             val rule = RuleId.entries.firstOrNull { it.name == g.rule } ?: return@count false
-            ProfileService.loadAt(c, asset, g.at)?.tierOf(rule) == Tier.P0
+            // SOS and duress are P0 for everyone and are not in the profile.
+            rule == RuleId.SOS || rule == RuleId.DURESS || ProfileService.loadAt(c, asset, g.at)?.tierOf(rule) == Tier.P0
         }
 
         val (rated, useful) = c.prepareStatement(
