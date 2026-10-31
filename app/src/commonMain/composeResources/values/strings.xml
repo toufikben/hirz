@@ -82,6 +82,8 @@
     <string name="kind_past_address">عنوان قديم</string>
     <string name="kind_coast">شاطئ</string>
     <string name="kind_more">المزيد</string>
+    <string name="kind_pasture">مرعى</string>
+    <string name="kind_barn">حظيرة</string>
     <string name="alarm_ready_title">جاهزية الإنذار على هذا الهاتف</string>
     <string name="perm_notifications">الإشعارات غير مسموحة</string>
     <string name="perm_fullscreen">الإنذار بملء الشاشة غير مسموح</string>

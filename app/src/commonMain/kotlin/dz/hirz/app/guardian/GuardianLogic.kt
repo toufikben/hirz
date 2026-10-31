@@ -112,6 +112,25 @@ object ReasonText {
             )
             "curfew" -> t("خارج البيت بعد الساعة ${a["curfew"]}", "Dehors après ${a["curfew"]}", "Out after ${a["curfew"]}")
             "coastal_night" -> t("عند «${a["place"]}» ليلًا", "À « ${a["place"]} » la nuit", "At \"${a["place"]}\" at night")
+            "herd_night_move" -> t(
+                "قطيع «${a["herd"]}» خارج الحظيرة ليلًا (${a["out"]} من ${a["heads"]})",
+                "Troupeau « ${a["herd"]} » hors de l'enclos la nuit (${a["out"]} sur ${a["heads"]})",
+                "Herd \"${a["herd"]}\" out of the barn at night (${a["out"]} of ${a["heads"]})",
+            )
+            "herd_dispersed" -> t(
+                "تشتت القطيع فجأة (${a["spreadM"]} م، ${a["heads"]} رأس)",
+                "Troupeau soudain dispersé (${a["spreadM"]} m, ${a["heads"]} têtes)",
+                "Herd suddenly scattered (${a["spreadM"]} m, ${a["heads"]} heads)",
+            )
+            "animal_still" -> t("رأس ساكن منذ ${a["hours"]} ساعات (مرض؟)", "Animal immobile depuis ${a["hours"]} h (malade ?)", "Animal still for ${a["hours"]} h (sick?)")
+            "collar_cut" -> t("نُزع الطوق أو قُطع", "Collier retiré ou coupé", "Collar removed or cut")
+            "truck_speed" -> t("رأس يسير بسرعة مركبة (${a["speedKmh"]} كم/سا)", "Animal à vitesse de véhicule (${a["speedKmh"]} km/h)", "Animal moving at vehicle speed (${a["speedKmh"]} km/h)")
+            "leash_break" -> t(
+                "ابتعد عن مرافقه ${a["distanceM"]} م منذ ${a["seconds"]} ث",
+                "Séparé de l'accompagnant : ${a["distanceM"]} m depuis ${a["seconds"]} s",
+                "Separated from the guardian: ${a["distanceM"]} m for ${a["seconds"]} s",
+            )
+            "keyless_no_owner" -> t("شُغّل المحرّك ولا هاتف من العائلة قربه", "Moteur démarré sans téléphone de la famille à proximité", "Engine started with no family phone near")
             else -> t("حدث", "Événement", "Event")
         }
     }

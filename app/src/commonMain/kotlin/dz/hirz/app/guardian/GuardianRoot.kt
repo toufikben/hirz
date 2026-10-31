@@ -191,7 +191,8 @@ private val PLACE_KINDS = listOf(
     PlaceKind.HOME to Res.string.kind_home, PlaceKind.SCHOOL to Res.string.kind_school, PlaceKind.MOSQUE to Res.string.kind_mosque,
     PlaceKind.LESSONS to Res.string.kind_lessons, PlaceKind.PARK to Res.string.kind_park, PlaceKind.RELATIVE to Res.string.kind_relative,
     PlaceKind.FORBIDDEN to Res.string.kind_forbidden, PlaceKind.HAZARD to Res.string.kind_hazard,
-    PlaceKind.PAST_ADDRESS to Res.string.kind_past_address, PlaceKind.OTHER to Res.string.kind_other,
+    PlaceKind.PAST_ADDRESS to Res.string.kind_past_address, PlaceKind.PASTURE to Res.string.kind_pasture,
+    PlaceKind.BARN to Res.string.kind_barn, PlaceKind.OTHER to Res.string.kind_other,
 )
 
 /** Offered only under "more", with a neutral label (design §12.2 COASTAL_NIGHT: set by hand, never promoted). */
@@ -313,6 +314,7 @@ private fun CircleTab(env: AppEnvironment, client: HirzClient, circle: CircleDto
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(a.name, style = MaterialTheme.typography.titleMedium)
                     if (a.type !in VEHICLE_TYPES) ProfileCard(client, a, isOwner = circle.myRole == Role.OWNER)
+                    if (a.type !in VEHICLE_TYPES && a.type != AssetType.LIVESTOCK && (circle.myRole == Role.OWNER || circle.myRole == Role.GUARDIAN)) OutingButton(client, a.id)
                     if (a.type in VEHICLE_TYPES) {
                         VehicleCard(client, a, isOwner = circle.myRole == Role.OWNER, canEdit = circle.myRole == Role.OWNER || circle.myRole == Role.GUARDIAN)
                         if (circle.myRole == Role.OWNER || circle.myRole == Role.GUARDIAN) OutlinedButton({ wizardFor = a.id }) {
@@ -343,6 +345,9 @@ private fun CircleTab(env: AppEnvironment, client: HirzClient, circle: CircleDto
             OutlinedTextField(assetName, { assetName = it }, label = { Text(stringResource(Res.string.asset_name)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 ASSET_TYPES.forEach { (t, label) -> FilterChip(assetType == t, { assetType = t }, { Text(stringResource(label)) }) }
+                FilterChip(assetType == AssetType.LIVESTOCK, { assetType = AssetType.LIVESTOCK }, {
+                    Text(when (currentLang()) { "ar" -> "ماشية"; "fr" -> "Bétail"; else -> "Livestock" })
+                })
                 FilterChip(assetType == AssetType.CAR, { assetType = AssetType.CAR }, {
                     Text(when (currentLang()) { "ar" -> "سيارة"; "fr" -> "Voiture"; else -> "Car" })
                 })
@@ -350,6 +355,7 @@ private fun CircleTab(env: AppEnvironment, client: HirzClient, circle: CircleDto
             Button({ scope.launch { runCatching { client.createAsset(circle.id, CreateAssetRequest(assetType, assetName.trim())) }.onSuccess { assetName = ""; reload() } } },
                 enabled = assetName.isNotBlank()) { Text(stringResource(Res.string.add_asset)) }
         }
+        item { HerdsCard(client, circle.id, assets, canEdit = circle.myRole == Role.OWNER || circle.myRole == Role.GUARDIAN) }
         item { HorizontalDivider(); CodeWordCard(client, circle) }
         item { ContactsCard(client, circle) }
         item { SignOutButton(client, { platformPushToken() }, { env.auth.signOut() }) }
