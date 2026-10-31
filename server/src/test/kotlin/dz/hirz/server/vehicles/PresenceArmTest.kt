@@ -34,28 +34,28 @@ import kotlin.time.Duration.Companion.seconds
 private val PARKED = LatLon(36.7538, 3.0588)
 private const val CAR_TAG = "ibeacon:fda50693-a4e2-4fb1-afcf-c6eb07647825:7:7"
 
-private class Car(val circleId: String, val carId: String, val carToken: String, val phoneToken: String)
+private class TaggedCar(val circleId: String, val carId: String, val carToken: String, val phoneToken: String)
 
 /** mom's car on a phone-as-tracker, optionally with a BLE tag, and mom's own Hirz phone in the same circle (the relay). */
-private suspend fun HttpClient.car(env: TestEnv, tag: Boolean = true): Car {
+private suspend fun HttpClient.car(env: TestEnv, tag: Boolean = true): TaggedCar {
     val circle = newCircle("test.mom")
     val car = newAsset("test.mom", circle.id, AssetType.CAR, "Clio")
     if (tag) postJson("/v1/assets/${car.id}/tags", "test.mom", TagRequest(CAR_TAG, "ibeacon", proofRssi = -45, proofAtMs = env.clock.millis()))
     val carSource: PairResponse = pair(pairingCode("test.mom", car.id).code).body()
     val phoneAsset = newAsset("test.mom", circle.id, AssetType.LONE_WORKER, "Mom")
     val phone: PairResponse = pair(pairingCode("test.mom", phoneAsset.id).code, adult = true, consent = true).body()
-    return Car(circle.id, car.id, carSource.sourceToken, phone.sourceToken)
+    return TaggedCar(circle.id, car.id, carSource.sourceToken, phone.sourceToken)
 }
 
-private suspend fun HttpClient.ignition(env: TestEnv, c: Car, on: Boolean) =
+private suspend fun HttpClient.ignition(env: TestEnv, c: TaggedCar, on: Boolean) =
     postJson("/v1/ingest", c.carToken, IngestBatch(listOf(IngestSignal("i${env.clock.millis()}", env.clock.millis(), PARKED, 8.0, ignition = on))))
 
-private suspend fun HttpClient.seen(env: TestEnv, c: Car) =
+private suspend fun HttpClient.seen(env: TestEnv, c: TaggedCar) =
     postJson("/v1/relay/sightings", c.phoneToken, RelayBatch(RelayFix(PARKED, 10.0, env.clock.millis()), listOf(Sighting(CAR_TAG, -60, env.clock.millis()))))
 
-private suspend fun HttpClient.state(c: Car): VehicleStateDto = get("/v1/assets/${c.carId}/vehicle") { bearerAuth("test.mom") }.body()
+private suspend fun HttpClient.state(c: TaggedCar): VehicleStateDto = get("/v1/assets/${c.carId}/vehicle") { bearerAuth("test.mom") }.body()
 
-private suspend fun HttpClient.open(c: Car): List<IncidentDto> = get("/v1/circles/${c.circleId}/incidents?state=open") { bearerAuth("test.mom") }.body()
+private suspend fun HttpClient.open(c: TaggedCar): List<IncidentDto> = get("/v1/circles/${c.circleId}/incidents?state=open") { bearerAuth("test.mom") }.body()
 
 class PresenceArmTest {
     @Test
