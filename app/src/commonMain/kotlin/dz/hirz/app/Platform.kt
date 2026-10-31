@@ -4,6 +4,9 @@ import androidx.compose.runtime.Composable
 import dz.hirz.app.api.HirzClient
 import kotlinx.coroutines.flow.StateFlow
 
+/** The app's version and the device model, for problem reports (P8); never anything that locates the phone. */
+expect fun appInfo(): Pair<String, String>
+
 /** The FCM registration token of this install, or null when push is unavailable. */
 expect suspend fun platformPushToken(): String?
 

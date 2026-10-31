@@ -214,3 +214,6 @@ class AndroidCompanionPort(private val activity: ComponentActivity) : CompanionP
         runCatching { activity.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
     }
 }
+
+actual fun appInfo(): Pair<String, String> =
+    BuildConfig.VERSION_NAME to "${Build.MANUFACTURER} ${Build.MODEL} (Android ${Build.VERSION.RELEASE})"

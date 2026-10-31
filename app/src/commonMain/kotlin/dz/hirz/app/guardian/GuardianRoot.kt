@@ -309,6 +309,8 @@ private fun CircleTab(env: AppEnvironment, client: HirzClient, circle: CircleDto
             invite?.let { Text(stringResource(Res.string.invite_code, it), style = MaterialTheme.typography.titleLarge) }
         }
         item { DigestCard(client, circle.id) }
+        item { TrialCard(client, circle.id, assets, isOwner = circle.myRole == Role.OWNER, canTest = circle.myRole == Role.OWNER || circle.myRole == Role.GUARDIAN) }
+        item { ProblemReportCard(client, circle.id) }
         item { HorizontalDivider(); Text(stringResource(Res.string.people_and_things), style = MaterialTheme.typography.titleMedium) }
         items(assets, key = { it.id }) { a ->
             Card(Modifier.fillMaxWidth()) {
@@ -386,9 +388,16 @@ private fun IncidentsTab(client: HirzClient, circle: CircleDto, live: LiveState)
         runCatching { client.emergencyNumbers(circle.id) }.onSuccess { numbers = it }
     }
     val open = live.incidents.values.sortedWith(compareBy({ it.tier }, { -it.openedAtMs }))
+    // P8: recent closed alarms ask what they were, once each on this phone.
+    var closed by remember(circle.id) { mutableStateOf<List<IncidentDto>>(emptyList()) }
+    LaunchedEffect(circle.id) {
+        closed = runCatching { client.incidents(circle.id, openOnly = false) }.getOrDefault(emptyList())
+            .filter { it.state == "closed" && (it.tier == dz.hirz.shared.api.Tier.P0 || it.tier == dz.hirz.shared.api.Tier.P1) }.take(5)
+    }
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (open.isEmpty()) item { Text(stringResource(Res.string.no_open_incidents)) }
         items(open, key = { it.id }) { inc -> IncidentCard(client, inc, view, numbers) { live.apply(LiveEvent.IncidentUpdate(it)) } }
+        items(closed, key = { "closed-" + it.id }) { inc -> OutcomePrompt(client, inc) { closed = closed.filter { it.id != inc.id } } }
         item {
             Text(stringResource(Res.string.emergency_numbers), style = MaterialTheme.typography.titleMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
