@@ -72,7 +72,11 @@ data class RuleConfig(
     /** Leash (P6): apart this long during an outing is lost; a guardian phone silent this long says nothing. */
     val leashMs: Long = 60_000L,
     /** A tagged car arms this long after the last family phone heard it, once parked (P6); also "near" for keyless. */
-    val ownerAwayMs: Long = 120_000L,
+    val ownerAwayMs: Long = 6 * 60_000L,
+    /** After an owner-away car starts, how long to wait for the owner's phone to be heard before calling it a theft. */
+    val ownerGraceMs: Long = 90_000L,
+    /** A store-and-forward finding older than this rings at P1 at most: the moment has passed (P6). */
+    val lateDemoteMs: Long = 30 * 60_000L,
     val leashPingMaxAgeMs: Long = 120_000L,
     /** A fix older than this says nothing about where the teen is now. */
     val curfewFixMaxAgeMs: Long = 30 * 60_000,

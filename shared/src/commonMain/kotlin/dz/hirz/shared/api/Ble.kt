@@ -24,3 +24,7 @@ data class RelayBatch(val relay: RelayFix, val sightings: List<Sighting>)
 /** [dropped]: unknown tags, rate-limited repeats and stale sightings; never says which. */
 @Serializable
 data class RelayResult(val accepted: Int, val dropped: Int)
+
+/** An owner or guardian lets (or stops) a family phone relaying BLE tags. */
+@Serializable
+data class RelayGrant(val enabled: Boolean)

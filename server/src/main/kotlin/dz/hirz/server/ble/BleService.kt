@@ -48,7 +48,7 @@ data class BleLimits(
     /** Older sightings (a phone that was offline) are still stored-and-forwarded, up to this. */
     val maxSightingAge: Duration = Duration.ofHours(72),
     /** A sighting is placed at a phone fix taken within this of hearing it. */
-    val fixToSightingMs: Long = 60_000,
+    val fixToSightingMs: Long = 120_000,
 )
 
 /**
@@ -92,21 +92,40 @@ class BleService(
 
     /** The tags a relay phone may upload: those registered in its own circle, so strangers' tags never leave a phone. */
     fun tagsFor(relay: SourcePrincipal): List<String> = db.tx { c ->
+        if (!granted(c, relay.sourceId)) throw dz.hirz.server.ApiException(HttpStatusCode.Forbidden, "relay_not_granted")
         c.prepareStatement(
             """SELECT t.tag_id FROM ble_tags t JOIN assets a ON a.id = t.asset_id JOIN sources s ON s.id = t.source_id
                WHERE a.circle_id = ? AND s.revoked_at IS NULL ORDER BY t.tag_id""",
         ).apply { setObject(1, relay.circleId) }.executeQuery().use { rs -> buildList { while (rs.next()) add(rs.getString(1)) } }
     }
 
+    /** Whether an owner or guardian let this phone relay tags (a teen's phone does not write its sibling's track). */
+    private fun granted(c: java.sql.Connection, sourceId: UUID): Boolean =
+        c.prepareStatement("SELECT relay_enabled FROM sources WHERE id = ? AND revoked_at IS NULL").apply { setObject(1, sourceId) }
+            .executeQuery().use { it.next() && it.getBoolean(1) }
+
+    fun grant(assetId: UUID, sourceId: UUID, memberId: UUID, enabled: Boolean) = db.tx { c ->
+        val circle = c.prepareStatement("SELECT circle_id FROM assets WHERE id = ?").apply { setObject(1, assetId) }
+            .executeQuery().use { if (it.next()) it.getObject(1, UUID::class.java) else notFound() }
+        circles.requireRole(c, circle, memberId, EDITORS)
+        val n = c.prepareStatement("UPDATE sources SET relay_enabled = ? WHERE id = ? AND asset_id = ? AND kind = 'companion' AND revoked_at IS NULL")
+            .apply { setBoolean(1, enabled); setObject(2, sourceId); setObject(3, assetId) }.executeUpdate()
+        if (n == 0) notFound()
+        audit(c, circle, memberId, "relay_grant", """{"source":"$sourceId","enabled":$enabled}""")
+    }
+
     fun relay(relay: SourcePrincipal, batch: RelayBatch): RelayResult {
         if (batch.sightings.size > 200) unprocessable("batch_too_large")
+        if (!db.connection.use { granted(it, relay.sourceId) }) return RelayResult(0, batch.sightings.size)
         val now = clock.instant()
         var accepted = 0
         var dropped = 0
         for (s in batch.sightings) {
             // The fix the phone had when it heard this tag (a buffered sighting carries its own), never a later one.
             val fix = s.at ?: batch.relay
-            if (!sane(fix) || abs(fix.fixTimeMs - s.seenAtMs) > limits.fixToSightingMs) { dropped++; continue }
+            // Without a fix from about when it was heard, the sighting still says "a family phone was near" (presence),
+            // but it places nothing.
+            val placeable = sane(fix) && abs(fix.fixTimeMs - s.seenAtMs) <= limits.fixToSightingMs
             val target = db.tx { c ->
                 val tag = c.prepareStatement(
                     """SELECT t.source_id, t.asset_id, a.circle_id FROM ble_tags t JOIN assets a ON a.id = t.asset_id
@@ -125,7 +144,7 @@ class BleService(
                     .apply { setString(1, s.tagId.lowercase()); setObject(2, relay.sourceId); setTimestamp(3, seen.ts()); setInt(4, s.rssi) }.executeUpdate()
                 tag
             }
-            if (target == null) { dropped++; continue }
+            if (target == null || !placeable) { dropped++; continue }
             val where = LatLon(coarse(fix.position.lat), coarse(fix.position.lon))
             val accuracy = fix.accuracyM + BleFrames.rangeM(s.rssi)
             val signal = IngestSignal(
@@ -151,6 +170,14 @@ fun Route.bleMemberRoutes(service: BleService) {
     }
     delete("/v1/assets/{id}/tags/{tagId}") {
         service.unregister(uuidOrNotFound(call.parameters["id"]), call.member().memberId, call.parameters["tagId"] ?: notFound())
+        call.respond(HttpStatusCode.NoContent)
+    }
+}
+
+fun Route.bleGrantRoutes(service: BleService) {
+    io.ktor.server.routing.put("/v1/assets/{id}/sources/{sourceId}/relay") {
+        service.grant(uuidOrNotFound(call.parameters["id"]), uuidOrNotFound(call.parameters["sourceId"]), call.member().memberId,
+            call.receive<dz.hirz.shared.api.RelayGrant>().enabled)
         call.respond(HttpStatusCode.NoContent)
     }
 }

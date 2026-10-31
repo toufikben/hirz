@@ -4,6 +4,6 @@ ALTER TABLE asset_groups ADD COLUMN leader_asset uuid REFERENCES assets(id) ON D
 ALTER TABLE asset_groups ADD COLUMN market_window jsonb NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE asset_groups ADD COLUMN eid_date date;
 ALTER TABLE asset_group_members ADD COLUMN kind text;
-UPDATE asset_group_members SET kind = 'herd';
+UPDATE asset_group_members m SET kind = g.kind FROM asset_groups g WHERE g.id = m.group_id;
 ALTER TABLE asset_group_members ALTER COLUMN kind SET NOT NULL;
 CREATE UNIQUE INDEX asset_group_members_one_herd ON asset_group_members (asset_id) WHERE kind = 'herd';

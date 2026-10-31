@@ -30,6 +30,9 @@ class RelayBuffer(private var known: Set<String>, private val throttleMs: Long =
 
     /** Drops the first [n] sightings, once the server took them. */
     fun acknowledge(n: Int) = repeat(minOf(n, items.size)) { items.removeFirst() }
+
+    /** Drops exactly [sent]: sightings evicted or added while the upload ran are not lost or removed by mistake. */
+    fun acknowledge(sent: List<Sighting>) { val done = sent.toSet(); items.removeAll { it in done } }
 }
 
 /** Scanning 10 s of every minute: enough to hear a herd that grazes slowly, a fraction of the battery. */

@@ -315,6 +315,12 @@ private fun CircleTab(env: AppEnvironment, client: HirzClient, circle: CircleDto
                     Text(a.name, style = MaterialTheme.typography.titleMedium)
                     if (a.type !in VEHICLE_TYPES) ProfileCard(client, a, isOwner = circle.myRole == Role.OWNER)
                     if (a.type !in VEHICLE_TYPES && a.type != AssetType.LIVESTOCK && (circle.myRole == Role.OWNER || circle.myRole == Role.GUARDIAN)) OutingButton(client, a.id)
+                    // A family phone relays the circle's BLE tags only once an owner or guardian allows it.
+                    if (circle.myRole == Role.OWNER || circle.myRole == Role.GUARDIAN) a.sources.filter { it.kind == "companion" && !it.revoked }.forEach { src ->
+                        OutlinedButton({ scope.launch { runCatching { client.grantRelay(a.id, src.id, true) } } }) {
+                            Text(when (currentLang()) { "fr" -> "Ce téléphone relaie les balises"; "en" -> "Let this phone relay tags"; else -> "اسمح لهذا الهاتف بنقل الأطواق" })
+                        }
+                    }
                     if (a.type in VEHICLE_TYPES) {
                         VehicleCard(client, a, isOwner = circle.myRole == Role.OWNER, canEdit = circle.myRole == Role.OWNER || circle.myRole == Role.GUARDIAN)
                         if (circle.myRole == Role.OWNER || circle.myRole == Role.GUARDIAN) OutlinedButton({ wizardFor = a.id }) {

@@ -49,7 +49,8 @@ object BleRelay {
             val now = System.currentTimeMillis()
             // Each sighting keeps the fix the phone had when it heard the tag: a batch uploaded hours later in the
             // village must not place the herd in the village. No fresh fix, no sighting.
-            val fix = lastFix?.takeIf { kotlin.math.abs(now - it.fixTimeMs) <= 60_000 } ?: return
+            // Presence counts even without a fix; the server places it only when the fix is within 2 min.
+            val fix = lastFix?.takeIf { kotlin.math.abs(now - it.fixTimeMs) <= 120_000 }
             synchronized(buffer) { buffer.offer(id, result.rssi, now, fix) }
         }
     }
@@ -58,7 +59,7 @@ object BleRelay {
     @SuppressLint("MissingPermission")
     suspend fun tick(context: Context, client: HirzClient, sourceToken: String, nowMs: Long) {
         if (!enabled(context) || !permitted(context)) { stop(context); return }
-        if (nowMs - knownAtMs > 30 * 60_000L) runCatching { client.relayTags(sourceToken) }.onSuccess { tags ->
+        if (nowMs - knownAtMs > 5 * 60_000L) runCatching { client.relayTags(sourceToken) }.onSuccess { tags ->
             synchronized(buffer) { buffer.setKnown(tags.toSet()) }; knownAtMs = nowMs
         }
         val scanner = context.getSystemService(BluetoothManager::class.java)?.adapter?.bluetoothLeScanner ?: return
@@ -76,7 +77,7 @@ object BleRelay {
         val batch = synchronized(buffer) { buffer.nextBatch() }
         if (batch.isEmpty()) return
         runCatching { client.relaySightings(sourceToken, RelayBatch(fix, batch)) }.onSuccess {
-            synchronized(buffer) { buffer.acknowledge(batch.size) }
+            synchronized(buffer) { buffer.acknowledge(batch) }
         }
     }
 

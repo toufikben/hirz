@@ -17,3 +17,5 @@ CREATE TABLE ble_sightings (
 );
 CREATE INDEX ble_sightings_tag_relay ON ble_sightings (tag_id, relay_source_id, seen_at DESC);
 CREATE INDEX ble_sightings_tag_seen ON ble_sightings (tag_id, seen_at DESC);
+-- A phone relays tags only once an owner or guardian allowed it.
+ALTER TABLE sources ADD COLUMN relay_enabled boolean NOT NULL DEFAULT false;

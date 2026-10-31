@@ -204,6 +204,8 @@ class HirzClient(
         member { t -> http.put("$base/v1/herds/$herdId/market") { auth(t); json(dz.hirz.shared.api.MarketRequest(window)) } }.ok()
     suspend fun setEid(herdId: String, date: String?): dz.hirz.shared.api.HerdDto =
         member { t -> http.put("$base/v1/herds/$herdId/eid") { auth(t); json(dz.hirz.shared.api.EidRequest(date)) } }.ok()
+    suspend fun grantRelay(assetId: String, sourceId: String, enabled: Boolean) =
+        member { t -> http.put("$base/v1/assets/$assetId/sources/$sourceId/relay") { auth(t); json(dz.hirz.shared.api.RelayGrant(enabled)) } }.done()
     suspend fun startOuting(assetId: String, hours: Int): dz.hirz.shared.api.OutingDto =
         member { t -> http.post("$base/v1/assets/$assetId/outings") { auth(t); json(dz.hirz.shared.api.OutingRequest(hours)) } }.ok()
     suspend fun pingOuting(outingId: String, ping: dz.hirz.shared.api.OutingPing) =

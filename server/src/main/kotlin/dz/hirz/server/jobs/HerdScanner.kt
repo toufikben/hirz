@@ -81,7 +81,7 @@ class HerdScanner(private val db: DataSource, private val clock: Clock, private 
             c.prepareStatement("SELECT pg_advisory_xact_lock(hashtext(?))").apply { setString(1, herd.toString()) }.executeQuery().close()
             val members = c.prepareStatement("SELECT asset_id FROM asset_group_members WHERE group_id = ? AND kind = 'herd'")
                 .apply { setObject(1, herd) }.executeQuery().toList { it.getObject(1, UUID::class.java) }
-            val target = leader ?: members.firstOrNull() ?: return@tx null
+            val target = leader ?: members.minOrNull() ?: return@tx null
             val profile = ProfileService.loadAt(c, target, now) ?: return@tx null
             val fixes = lastFixes(c, members, now.minusMillis(cfg.herdFixMaxAgeMs))
             val st = c.prepareStatement("SELECT state::text FROM herd_rule_state WHERE herd_id = ?").apply { setObject(1, herd) }

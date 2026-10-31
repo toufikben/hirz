@@ -63,10 +63,11 @@ class Outings(private val db: DataSource, private val clock: Clock, private val 
         val heard = p.seenTags.any { it.lowercase() in tags }
         c.prepareStatement(
             """UPDATE outings SET last_ping_at = ?, last_lat = ?, last_lon = ?,
-                 together_at = CASE WHEN ? THEN ? ELSE together_at END WHERE id = ?""",
+                 together_at = CASE WHEN ? THEN ? ELSE together_at END,
+                 tag_heard_at = CASE WHEN ? THEN ? ELSE tag_heard_at END WHERE id = ?""",
         ).apply {
             setTimestamp(1, now.ts()); setDouble(2, p.position.lat); setDouble(3, p.position.lon)
-            setBoolean(4, heard); setTimestamp(5, now.ts()); setObject(6, outingId)
+            setBoolean(4, heard); setTimestamp(5, now.ts()); setBoolean(6, heard); setTimestamp(7, now.ts()); setObject(8, outingId)
         }.executeUpdate()
     }
 

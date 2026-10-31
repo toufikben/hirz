@@ -11,6 +11,7 @@ CREATE TABLE outings (
     last_lat         double precision,
     last_lon         double precision,
     together_at      timestamptz,
+    tag_heard_at     timestamptz,  -- the guardian's phone heard the person's tag at least once this outing
     raised_at        timestamptz
 );
 CREATE INDEX outings_active ON outings (asset_id) WHERE ended_at IS NULL;

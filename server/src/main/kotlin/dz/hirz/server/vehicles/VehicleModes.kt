@@ -39,6 +39,8 @@ data class ModeState(
     val ownerNearby: Boolean? = null,
     /** A family phone relayed the car's tag in the last day: presence is being watched at all. */
     val relayActive: Boolean = false,
+    /** Since when the ignition has been in its current state. */
+    val ignitionSince: Instant? = null,
 )
 
 /**
@@ -87,7 +89,8 @@ class VehicleModes(private val db: DataSource, private val clock: Clock, private
         val ownerSeenAt = if (!tagged) null else c.prepareStatement(
             """SELECT max(s.seen_at) FROM ble_sightings s JOIN ble_tags t ON t.tag_id = s.tag_id
                JOIN sources r ON r.id = s.relay_source_id JOIN assets ra ON ra.id = r.asset_id
-               JOIN assets car ON car.id = t.asset_id WHERE t.asset_id = ? AND ra.circle_id = car.circle_id AND s.seen_at <= ?""",
+               JOIN assets car ON car.id = t.asset_id
+               WHERE t.asset_id = ? AND ra.circle_id = car.circle_id AND r.relay_enabled AND s.seen_at <= ?""",
         ).apply { setObject(1, assetId); setTimestamp(2, at.ts()) }.executeQuery().use { it.next(); it.getTimestamp(1)?.toInstant() }
         val r = ModeResolver.resolve(ModeInput(o, auths, schedule, saved.ignition, saved.ignitionSince, latched, ownerSeenAt), at, cfg)
         val wire = r.mode.name.lowercase()
@@ -121,7 +124,7 @@ class VehicleModes(private val db: DataSource, private val clock: Clock, private
         }
         val nearby = if (!tagged) null else ownerSeenAt != null && !ownerSeenAt.isBefore(at.minusMillis(cfg.ownerAwayMs))
         val relayActive = ownerSeenAt != null && !ownerSeenAt.isBefore(at.minusSeconds(24 * 3600))
-        return ModeState(r.mode, r.reason, r.since, armed, saved.ignition, nearby, relayActive)
+        return ModeState(r.mode, r.reason, r.since, armed, saved.ignition, nearby, relayActive, saved.ignitionSince)
     }
 
     private fun lastFix(c: Connection, assetId: UUID, upTo: Instant? = null): LatLon? =

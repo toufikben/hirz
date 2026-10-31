@@ -32,6 +32,7 @@ import dz.hirz.server.assets.assetRoutes
 import dz.hirz.server.assets.profileRoutes
 import dz.hirz.server.herds.herdRoutes
 import dz.hirz.server.ble.bleMemberRoutes
+import dz.hirz.server.ble.bleGrantRoutes
 import dz.hirz.server.presence.outingRoutes
 import dz.hirz.server.ble.bleRelayRoutes
 import dz.hirz.server.assets.pairRoutes
@@ -158,6 +159,7 @@ fun Application.module(deps: Deps) {
             profileRoutes(dz.hirz.server.assets.ProfileService(deps.db, circles))
             herdRoutes(dz.hirz.server.herds.HerdService(deps.db, circles))
             bleMemberRoutes(ble)
+            bleGrantRoutes(ble)
             outingRoutes(dz.hirz.server.presence.Outings(deps.db, deps.clock, circles))
             placeRoutes(places)
             incidentRoutes(incidents)
