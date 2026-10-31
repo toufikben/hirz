@@ -101,7 +101,7 @@ data class ActionRequest(val kind: String, val value: String? = null)
 
 /** After close: was it a false alarm? Counted per rule for the false-alarm budget (design §5.9). */
 @Serializable
-data class ReviewRequest(val falseAlarm: Boolean, val note: String? = null)
+data class ReviewRequest(val falseAlarm: Boolean = false, val note: String? = null, /** P8: wins over [falseAlarm] when given. */ val outcome: Outcome? = null)
 
 @Serializable
 data class CheckInSentDto(val sent: Int)

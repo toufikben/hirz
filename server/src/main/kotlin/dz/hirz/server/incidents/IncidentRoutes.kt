@@ -56,7 +56,7 @@ fun Route.incidentRoutes(service: IncidentService) {
     }
     post("/v1/incidents/{id}/review") {
         val body = call.receive<ReviewRequest>()
-        service.review(uuidOrNotFound(call.parameters["id"]), call.member().memberId, body.falseAlarm, body.note)
+        service.review(uuidOrNotFound(call.parameters["id"]), call.member().memberId, body.outcome?.isFalseAlarm ?: body.falseAlarm, body.note, body.outcome)
         call.respond(HttpStatusCode.NoContent)
     }
     get("/v1/circles/{id}/false-alarms") {
