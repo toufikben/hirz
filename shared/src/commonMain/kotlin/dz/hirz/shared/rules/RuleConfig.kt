@@ -71,6 +71,8 @@ data class RuleConfig(
     val truckMs: Long = 60_000L,
     /** Leash (P6): apart this long during an outing is lost; a guardian phone silent this long says nothing. */
     val leashMs: Long = 60_000L,
+    /** A tagged car arms this long after the last family phone heard it, once parked (P6); also "near" for keyless. */
+    val ownerAwayMs: Long = 120_000L,
     val leashPingMaxAgeMs: Long = 120_000L,
     /** A fix older than this says nothing about where the teen is now. */
     val curfewFixMaxAgeMs: Long = 30 * 60_000,

@@ -60,7 +60,11 @@ class RulesEngine(
                 speedKmh = s.signal.speedKmh, ignition = s.signal.ignition, alarms = s.signal.alarms,
                 isLatestFix = s.isLatestFix && s.quality == "ok",
             )
-            val (next, found) = VehicleRules.evaluate(st, mode.mode, mode.armedPosition, reading, cfg)
+            val (next, evaluated) = VehicleRules.evaluate(st, mode.mode, mode.armedPosition, reading, cfg)
+            // KEYLESS_NO_OWNER (P6): the engine starts and no family phone has heard the car's tag (a relay attack).
+            val keyless = mode.ownerNearby == false && reading.ignition == true && mode.ignition != true &&
+                mode.mode != dz.hirz.shared.api.VehicleMode.AUTHORIZED && mode.mode != dz.hirz.shared.api.VehicleMode.MAINTENANCE
+            val found = if (keyless) evaluated + VehicleHit(RuleId.KEYLESS_NO_OWNER, Tier.P1, dz.hirz.shared.api.Reason("keyless_no_owner")) else evaluated
             // Any report ends a jamming-by-silence episode.
             c.prepareStatement(
                 """INSERT INTO vehicle_rule_state (asset_id, moving_count, last_fix_ms, jamming_since) VALUES (?, ?, ?, NULL)

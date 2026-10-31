@@ -22,6 +22,8 @@ data class ModeInput(
     val ignitionSince: Instant?,
     /** Set while the car is armed by auto-arm or the schedule: that arming outlives the ignition turning on. */
     val latched: Latched? = null,
+    /** When a family phone last heard the car's BLE tag; null when the car has no tag or none ever did (P6). */
+    val ownerSeenAt: Instant? = null,
 )
 
 data class Resolved(val mode: VehicleMode, val reason: String, val since: Instant?)
@@ -45,20 +47,27 @@ object ModeResolver {
         val autoArmAt = parkedSince?.plusMillis(cfg.autoArmAfterMs)
         val autoArm = autoArmAt != null && !at.isBefore(autoArmAt)
         val lastAuthEnd = i.authorizations.map { it.endsAt }.filter { !it.isAfter(at) }.maxOrNull()
+        // Owner away (P6): parked, and no family phone has heard the car's tag for ownerAwayMs.
+        val awayFrom = if (parkedSince != null && i.ownerSeenAt != null) maxOf(parkedSince, i.ownerSeenAt).plusMillis(cfg.ownerAwayMs) else null
+        val awayArm = awayFrom != null && !at.isBefore(awayFrom) && (lastAuthEnd == null || lastAuthEnd.isBefore(awayFrom))
 
         val l = i.latched
         if (l != null && (o == null || o.at.isBefore(l.since)) && (lastAuthEnd == null || lastAuthEnd.isBefore(l.since))) {
-            if (l.reason == "auto_arm") return Resolved(VehicleMode.ARMED, "auto_arm", l.since)
+            if (l.reason == "auto_arm" || l.reason == "owner_away") return Resolved(VehicleMode.ARMED, l.reason, l.since)
             if (l.reason == "schedule" && (i.ignitionOn == true || Geometry.isActive(i.schedule, at))) return Resolved(VehicleMode.ARMED, "schedule", l.since)
         }
 
         if (o?.mode == VehicleMode.ARMED && (lastAuthEnd == null || lastAuthEnd.isBefore(o.at))) return Resolved(VehicleMode.ARMED, "manual", o.at)
         if (o?.mode == VehicleMode.DISARMED && (lastAuthEnd == null || lastAuthEnd.isBefore(o.at))) {
             // A parking that started after the disarm re-arms the car; one that started before does not.
-            return if (autoArm && parkedSince!!.isAfter(o.at)) Resolved(VehicleMode.ARMED, "auto_arm", autoArmAt)
-            else Resolved(VehicleMode.DISARMED, "manual", o.at)
+            return when {
+                awayArm && parkedSince!!.isAfter(o.at) -> Resolved(VehicleMode.ARMED, "owner_away", awayFrom)
+                autoArm && parkedSince!!.isAfter(o.at) -> Resolved(VehicleMode.ARMED, "auto_arm", autoArmAt)
+                else -> Resolved(VehicleMode.DISARMED, "manual", o.at)
+            }
         }
         if (i.schedule.isNotEmpty() && i.ignitionOn != true && Geometry.isActive(i.schedule, at)) return Resolved(VehicleMode.ARMED, "schedule", null)
+        if (awayArm) return Resolved(VehicleMode.ARMED, "owner_away", awayFrom)
         // Parked through the end of an authorization: the auto-arm delay counts from the end, not from the parking.
         val armFrom = parkedSince?.let { p -> lastAuthEnd?.takeIf { it.isAfter(p) } ?: p }?.plusMillis(cfg.autoArmAfterMs)
         if (armFrom != null && !at.isBefore(armFrom)) return Resolved(VehicleMode.ARMED, "auto_arm", armFrom)
