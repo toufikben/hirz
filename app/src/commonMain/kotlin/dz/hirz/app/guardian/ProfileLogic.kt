@@ -55,5 +55,9 @@ object ProfileLogic {
         RuleId.VEHICLE_SPEED_UNEXPLAINED -> t(lang, "سرعة مركبة بلا تفسير", "Vitesse de véhicule inexpliquée", "Unexplained vehicle speed")
         RuleId.LEASH_BREAK -> t(lang, "الانفصال عن المرافق", "Séparé de l'accompagnant", "Separated from the guardian")
         RuleId.KEYLESS_NO_OWNER -> t(lang, "تشغيل بلا هاتف المالك", "Démarrage sans le téléphone du propriétaire", "Started with no owner phone near")
+        RuleId.MISSED_ARRIVAL -> t(lang, "لم يصل في موعده", "Pas arrivé à l'heure", "Missed arrival")
+        RuleId.STATIONARY_AFTER_DISMISSAL -> t(lang, "توقف بعد الانصراف", "Immobile après la sortie", "Stopped after dismissal")
+        RuleId.UNUSUAL_STOP -> t(lang, "توقف غير معتاد", "Arrêt inhabituel", "Unusual stop")
+        RuleId.PACING_LOOP -> t(lang, "الدوران في نفس المكان", "Tourne en rond", "Pacing in circles")
     }
 }

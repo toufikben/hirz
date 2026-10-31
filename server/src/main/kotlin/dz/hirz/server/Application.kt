@@ -128,6 +128,7 @@ fun Application.module(deps: Deps) {
         dz.hirz.server.jobs.CurfewScanner(deps.db, deps.clock, deps.rules, recorder).start(this)
         dz.hirz.server.jobs.HerdScanner(deps.db, deps.clock, deps.rules, recorder).start(this)
         dz.hirz.server.jobs.LeashScanner(deps.db, deps.clock, deps.rules, recorder).start(this)
+        dz.hirz.server.jobs.RoutineScanner(deps.db, deps.clock, deps.rules, recorder).start(this)
         dz.hirz.server.jobs.AgeTransitionJob(deps.db, deps.clock, deps.notifier).start(this)
         dz.hirz.server.sms.GatewaySilenceScanner(deps.db, deps.clock, deps.notifier).start(this)
         RetentionPurge(deps.db, deps.clock).start(this)

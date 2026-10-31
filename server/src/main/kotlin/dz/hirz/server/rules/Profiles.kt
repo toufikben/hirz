@@ -59,6 +59,8 @@ object Profiles {
             put(RuleId.VEHICLE_SPEED_UNEXPLAINED, Tier.P1)
             put(RuleId.COLLAR_CUT, Tier.P1)
             put(RuleId.ANIMAL_STILL, Tier.P2)
+            // Only where the owner set a routine (the barn at night).
+            put(RuleId.MISSED_ARRIVAL, Tier.P1)
             return@buildMap
         }
         if (type !in PEOPLE) return@buildMap
@@ -66,8 +68,12 @@ object Profiles {
         put(RuleId.COASTAL_NIGHT, Tier.P1)
         // Only during an outing the guardian started.
         put(RuleId.LEASH_BREAK, Tier.P1)
+        // Only where the owner set a routine (P7).
+        put(RuleId.MISSED_ARRIVAL, Tier.P1)
+        put(RuleId.STATIONARY_AFTER_DISMISSAL, Tier.P1)
+        put(RuleId.UNUSUAL_STOP, Tier.P2)
         if (type == AssetType.TEEN) put(RuleId.CURFEW, Tier.P2)
-        if (type == AssetType.ELDER) put(RuleId.NIGHT_EXIT, Tier.P1)
+        if (type == AssetType.ELDER) { put(RuleId.NIGHT_EXIT, Tier.P1); put(RuleId.PACING_LOOP, Tier.P2) }
         when (condition) {
             Condition.DEMENTIA -> { put(RuleId.PAST_ADDRESS_HEADING, Tier.P1); put(RuleId.NIGHT_EXIT, Tier.P1) }
             Condition.AUTISM -> { put(RuleId.HAZARD_PROXIMITY, Tier.P0); put(RuleId.RUN_AWAY_SPEED, Tier.P0); put(RuleId.LEASH_BREAK, Tier.P0) }

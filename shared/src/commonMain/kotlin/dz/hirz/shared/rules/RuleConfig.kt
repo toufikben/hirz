@@ -77,6 +77,9 @@ data class RuleConfig(
     val ownerGraceMs: Long = 90_000L,
     /** A store-and-forward finding older than this rings at P1 at most: the moment has passed (P6). */
     val lateDemoteMs: Long = 30 * 60_000L,
+    /** Routines (P7): minutes after arrive-by before a missed arrival; a source silent longer than this says nothing. */
+    val arrivalGraceMin: Int = 10,
+    val routineSourceFreshMs: Long = 15 * 60_000L,
     val leashPingMaxAgeMs: Long = 120_000L,
     /** A fix older than this says nothing about where the teen is now. */
     val curfewFixMaxAgeMs: Long = 30 * 60_000,
