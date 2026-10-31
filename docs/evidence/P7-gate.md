@@ -1,6 +1,6 @@
 # P7 gate — evidence
 
-## Automated (CI 41219780564, all jobs green)
+## Automated (CI 41225082908, all jobs green)
 - **Routines** (`RoutineTest`): templates (school Sun–Thu 08:00 / 16:30, mosque, lessons, pasture day, barn night) on
   the circle's own places; viewers cannot edit; every change is audited.
 - **`MISSED_ARRIVAL`** (`MissedArrivalTest`): P1 ten minutes after arrive-by with no good fix inside the place. Not on
@@ -45,6 +45,21 @@ The month now passes at zero P1 and zero P0.
 
 Kept on purpose: leaving home by day with no routine and no outing still rings `PLACE_EXIT` (pinned since P5 by
 `leavingHomeAt2pmIsPlaceExitAsBefore`). A family that does not want that sets the home's active hours.
+
+## Whole-branch review
+A fresh review found two critical defects, fixed with tests (`ExpectedExitTest` 13, CI 41225082908):
+- An outing muted place exits while it was merely open: a guardian whose app died, or who started it from work, hid
+  the child's exits for up to 6 h. An outing now mutes only while the guardian's phone pinged in the last 2 min from
+  within 50 m of the child.
+- A routine or an outing could mute a PLACE_EXIT the owner raised to P0, and Ramadan evenings could mute a P0
+  NIGHT_EXIT. A P0 is never muted; Ramadan evenings never apply to dementia or autism.
+Also fixed: the routine's own place is never "home" (a barn at night); leaving it is expected only up to 2 h after
+dismissal; arriving and leaving before the bell is a missed arrival; a silent phone last seen somewhere unknown still
+raises MISSED_ARRIVAL; routines, turning verify-first back on and the false-alarm reviews that count are the owner's;
+the digest goes only to incident recipients and covers 20:00 to 20:00; learned places go with their positions;
+Awal Muharram, Ashura and the Mawlid are holidays. A trip is judged from its first reading outside (V35).
+Accepted risk: two stray readings outside home in the morning, then hours without fixes, make a later real exit look
+like the school run; on a school day MISSED_ARRIVAL still rings if the child is not at school.
 
 ## Family trial
 **Not run yet.** It needs one family for a school month (two children with the school routine). Results (missed
