@@ -90,6 +90,11 @@ data class RuleConfig(
     val pacingRadiusM: Double = 250.0,
     val pacingCellM: Double = 50.0,
     val pacingRevisits: Int = 3,
+    /** Learning (P7): a dwell is this long within this radius; a place is dwelt at on this many days in the window. */
+    val learnDwellMs: Long = 20 * 60_000L,
+    val learnRadiusM: Double = 50.0,
+    val learnDays: Int = 3,
+    val learnWindowMs: Long = 30L * 24 * 3_600_000L,
     val leashPingMaxAgeMs: Long = 120_000L,
     /** A fix older than this says nothing about where the teen is now. */
     val curfewFixMaxAgeMs: Long = 30 * 60_000,

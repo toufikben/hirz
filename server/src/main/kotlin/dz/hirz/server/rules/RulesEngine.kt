@@ -214,7 +214,11 @@ class RulesEngine(
             }
         }
         // Only store-and-forward profiles: a person's P0 reported over a slow network is still a P0.
-        return if (lateTolerant) found.map { late(it, s.signal.serverTimeMs - fixMs) } else found
+        // The smart layer (design §4.5): "a place never visited" is a supporting reason on what was found anyway,
+        // never a finding and never a tier change.
+        val supported = if (found.isEmpty() || !newPlace(s.assetId, s.circleId, point, accuracy)) found
+            else found.map { it.copy(reasons = it.reasons + dz.hirz.shared.api.Reason("new_place")) }
+        return if (lateTolerant) supported.map { late(it, s.signal.serverTimeMs - fixMs) } else supported
     }
 
     /** `COLLAR_CUT` (design §12.2): the device reports it was removed or cut. */
@@ -308,6 +312,12 @@ class RulesEngine(
         val d = Geometry.distanceOutsideM(c, home.shape, centre(target.shape))
         PersonState.save(c, s.assetId, NIGHT_OUT, NightOut.serializer(), NightOut(home.id, target.id, d, exception.window, tier))
         return null
+    }
+
+    /** Outside every place the circle named and every place the asset was learned to frequent. */
+    private fun newPlace(assetId: UUID, circleId: UUID, point: LatLon, accuracy: Double): Boolean = db.connection.use { c ->
+        PlaceService.placesOf(c, circleId).none { Geometry.distanceOutsideM(c, it.shape, point) <= 0.0 } &&
+            !dz.hirz.server.jobs.LearningJob.known(c, assetId, point, accuracy.coerceAtMost(cfg.boundaryAccuracyFloorM))
     }
 
     /** The head a herd's alarms are raised on: the leader, or the same head every time. */
