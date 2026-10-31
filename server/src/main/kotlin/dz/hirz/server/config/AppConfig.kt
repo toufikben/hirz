@@ -15,6 +15,8 @@ data class AppConfig(
     val traccarUser: String? = null,
     val traccarPassword: String? = null,
     val deviceHost: String = "localhost",
+    /** Firebase uids of the field-trial operators (HIRZ_OPERATORS, comma-separated); empty means none. */
+    val operators: Set<String> = emptySet(),
     val claimProofS: IntRange = 45..95,
 ) {
     companion object {
@@ -28,6 +30,7 @@ data class AppConfig(
                 .also { require(it.size == 32) { "HIRZ_DATA_KEY must decode to 32 bytes" } },
             publicBaseUrl = env["HIRZ_PUBLIC_BASE_URL"] ?: "http://localhost:${env["PORT"] ?: "8080"}",
             deviceHost = env["HIRZ_DEVICE_HOST"] ?: "localhost",
+            operators = env["HIRZ_OPERATORS"].orEmpty().split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet(),
             // A blank value (an unfilled .env line) counts as unset (review I2).
             traccarUrl = env["HIRZ_TRACCAR_URL"]?.takeIf { it.isNotBlank() },
             traccarUser = env["HIRZ_TRACCAR_USER"]?.takeIf { it.isNotBlank() },

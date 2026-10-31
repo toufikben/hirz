@@ -160,6 +160,25 @@ class HirzClient(
     suspend fun confirmClose(id: String): IncidentDto = member { t -> http.post("$base/v1/incidents/$id/close/confirm") { auth(t) } }.ok()
     suspend fun action(id: String, kind: String, value: String? = null): IncidentDto =
         member { t -> http.post("$base/v1/incidents/$id/actions") { auth(t); json(ActionRequest(kind, value)) } }.ok()
+    /** P8: what a closed alarm turned out to be. */
+    suspend fun reviewOutcome(id: String, outcome: dz.hirz.shared.api.Outcome) =
+        member { t -> http.post("$base/v1/incidents/$id/review") { auth(t); json(ReviewRequest(outcome = outcome)) } }.done()
+    suspend fun digestFeedback(digestId: String, index: Int, useful: Boolean) =
+        member { t -> http.post("$base/v1/digests/$digestId/feedback") { auth(t); json(dz.hirz.shared.api.DigestFeedbackRequest(index, useful)) } }.done()
+    suspend fun pendingReviews(circleId: String): List<IncidentDto> = member { t -> http.get("$base/v1/circles/$circleId/reviews/pending") { auth(t) } }.ok()
+    suspend fun openTrials(): List<dz.hirz.shared.api.TrialDto> = member { t -> http.get("$base/v1/trials/open") { auth(t) } }.ok()
+    /** The circle's trial, or null when it is in none (204). */
+    suspend fun circleTrial(circleId: String): dz.hirz.shared.api.CircleTrialDto? {
+        val res = member { t -> http.get("$base/v1/circles/$circleId/trial") { auth(t) } }
+        return if (res.status == io.ktor.http.HttpStatusCode.NoContent) null else res.ok()
+    }
+    suspend fun joinTrial(circleId: String, trialId: String, consentVersion: Int) =
+        member { t -> http.post("$base/v1/circles/$circleId/trial") { auth(t); json(dz.hirz.shared.api.JoinTrialRequest(trialId, consentVersion)) } }.done()
+    suspend fun leaveTrial(circleId: String) = member { t -> http.delete("$base/v1/circles/$circleId/trial") { auth(t) } }.done()
+    suspend fun guidedTest(circleId: String, assetId: String, rule: dz.hirz.shared.api.RuleId): dz.hirz.shared.api.GuidedTestDto =
+        member { t -> http.post("$base/v1/circles/$circleId/trial/tests") { auth(t); json(dz.hirz.shared.api.GuidedTestRequest(assetId, rule)) } }.ok()
+    suspend fun reportProblem(req: dz.hirz.shared.api.ProblemReportRequest) =
+        member { t -> http.post("$base/v1/feedback") { auth(t); json(req) } }.done()
     suspend fun review(id: String, falseAlarm: Boolean, note: String? = null) =
         member { t -> http.post("$base/v1/incidents/$id/review") { auth(t); json(ReviewRequest(falseAlarm, note)) } }.done()
     suspend fun myLocation(id: String, position: LatLon, accuracyM: Double?) =

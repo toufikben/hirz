@@ -21,6 +21,9 @@ fun Route.incidentRoutes(service: IncidentService) {
         val openOnly = call.request.queryParameters["state"] == "open"
         call.respond(service.list(uuidOrNotFound(call.parameters["id"]), call.member().memberId, openOnly))
     }
+    get("/v1/circles/{id}/reviews/pending") {
+        call.respond(service.pendingReviews(uuidOrNotFound(call.parameters["id"]), call.member().memberId))
+    }
     get("/v1/incidents/{id}") {
         call.respond(service.get(uuidOrNotFound(call.parameters["id"]), call.member().memberId))
     }
@@ -56,7 +59,7 @@ fun Route.incidentRoutes(service: IncidentService) {
     }
     post("/v1/incidents/{id}/review") {
         val body = call.receive<ReviewRequest>()
-        service.review(uuidOrNotFound(call.parameters["id"]), call.member().memberId, body.falseAlarm, body.note)
+        service.review(uuidOrNotFound(call.parameters["id"]), call.member().memberId, body.outcome?.isFalseAlarm ?: body.falseAlarm, body.note, body.outcome)
         call.respond(HttpStatusCode.NoContent)
     }
     get("/v1/circles/{id}/false-alarms") {

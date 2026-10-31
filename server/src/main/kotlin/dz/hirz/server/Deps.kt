@@ -27,6 +27,8 @@ data class Deps(
     /** Range of the claim's challenge interval in seconds (HIRZ_CLAIM_PROOF_S). */
     val claimProofS: IntRange = 45..95,
     val startJobs: Boolean = true,
+    /** Field-trial operators' uids (HIRZ_OPERATORS). */
+    val operators: Set<String> = emptySet(),
     /** Extra observers of accepted signals (tests); the rules engine and live hub are wired inside the module. */
     val extraIngestListeners: List<IngestListener> = emptyList(),
 )

@@ -81,6 +81,7 @@ fun DigestCard(client: HirzClient, circleId: String) {
     fun t(ar: String, fr: String, en: String) = when (lang) { "ar" -> ar; "fr" -> fr; else -> en }
     var open by remember { mutableStateOf(false) }
     var digests by remember { mutableStateOf<List<DigestDto>>(emptyList()) }
+    val scope = rememberCoroutineScope()
     LaunchedEffect(open) { if (open) runCatching { client.digests(circleId) }.onSuccess { digests = it } }
 
     OutlinedButton({ open = !open }) { Text(t("ملخص المساء", "Résumé du soir", "Evening digest")) }
@@ -89,7 +90,14 @@ fun DigestCard(client: HirzClient, circleId: String) {
         if (digests.isEmpty()) Text(t("لا شيء يُذكر", "Rien à signaler", "Nothing to report"), style = MaterialTheme.typography.bodySmall)
         digests.forEach { d ->
             Text(d.day, style = MaterialTheme.typography.titleSmall)
-            d.items.forEach { Text("• " + DigestLogic.line(it, lang), style = MaterialTheme.typography.bodyMedium) }
+            d.items.forEachIndexed { i, item ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("• " + DigestLogic.line(item, lang), style = MaterialTheme.typography.bodyMedium)
+                    // Was this line worth telling? (P8: the digest's usefulness is part of the budget.)
+                    TextButton({ scope.launch { runCatching { client.digestFeedback(d.id, i, true) } } }) { Text("👍") }
+                    TextButton({ scope.launch { runCatching { client.digestFeedback(d.id, i, false) } } }) { Text("👎") }
+                }
+            }
         }
     }
 }

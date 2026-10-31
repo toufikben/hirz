@@ -32,6 +32,8 @@ import dz.hirz.server.assets.assetRoutes
 import dz.hirz.server.assets.profileRoutes
 import dz.hirz.server.herds.herdRoutes
 import dz.hirz.server.routines.routineRoutes
+import dz.hirz.server.trials.trialRoutes
+import dz.hirz.server.trials.trialReportRoutes
 import dz.hirz.server.digest.digestRoutes
 import dz.hirz.server.ble.bleMemberRoutes
 import dz.hirz.server.ble.bleGrantRoutes
@@ -132,6 +134,7 @@ fun Application.module(deps: Deps) {
         dz.hirz.server.jobs.RoutineScanner(deps.db, deps.clock, deps.rules, recorder).start(this)
         dz.hirz.server.jobs.LearningJob(deps.db, deps.clock, deps.rules).start(this)
         dz.hirz.server.jobs.DigestJob(deps.db, deps.clock, deps.notifier).start(this)
+        dz.hirz.server.jobs.TrialMetricsJob(deps.db, deps.clock, deps.rules).start(this)
         dz.hirz.server.jobs.AgeTransitionJob(deps.db, deps.clock, deps.notifier).start(this)
         dz.hirz.server.sms.GatewaySilenceScanner(deps.db, deps.clock, deps.notifier).start(this)
         RetentionPurge(deps.db, deps.clock).start(this)
@@ -164,7 +167,10 @@ fun Application.module(deps: Deps) {
             profileRoutes(dz.hirz.server.assets.ProfileService(deps.db, circles, deps.clock, deps.rules))
             herdRoutes(dz.hirz.server.herds.HerdService(deps.db, circles))
             routineRoutes(dz.hirz.server.routines.RoutineService(deps.db, circles))
-            digestRoutes(dz.hirz.server.digest.DigestService(deps.db, circles))
+            val trialService = dz.hirz.server.trials.TrialService(deps.db, deps.clock, circles, deps.operators)
+            trialRoutes(trialService)
+            trialReportRoutes(dz.hirz.server.trials.TrialReport(deps.db, trialService))
+            digestRoutes(dz.hirz.server.digest.DigestService(deps.db, circles, deps.clock))
             bleMemberRoutes(ble)
             bleGrantRoutes(ble)
             outingRoutes(dz.hirz.server.presence.Outings(deps.db, deps.clock, circles))
@@ -219,6 +225,7 @@ fun main() {
         traccar = traccarAdmin(cfg),
         deviceHost = cfg.deviceHost,
         claimProofS = cfg.claimProofS,
+        operators = cfg.operators,
     )
     val port = System.getenv("PORT")?.toIntOrNull() ?: 8080
     embeddedServer(Netty, port = port) { module(deps) }.start(wait = true)

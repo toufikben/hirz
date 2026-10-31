@@ -201,6 +201,17 @@ class IncidentService(
         ).apply { setObject(1, circleId); setArray(2, c.createArrayOf("uuid", arrayOf(circleId))) }.executeQuery().toList { it.getObject(1, UUID::class.java) }.map { load(c, it) }
     }
 
+    /** Closed P0/P1 alarms of the last 30 days this owner or guardian has not said anything about yet (P8). */
+    fun pendingReviews(circleId: UUID, memberId: UUID): List<IncidentDto> = db.connection.use { c ->
+        circles.requireRole(c, circleId, memberId, EDITORS)
+        c.prepareStatement(
+            """SELECT i.id FROM incidents i WHERE i.circle_id = ? AND i.state = 'closed' AND i.tier IN ('P0', 'P1') AND i.closed_at >= ?
+               AND NOT EXISTS (SELECT 1 FROM incident_reviews r WHERE r.incident_id = i.id AND r.member_id = ?)
+               ORDER BY i.closed_at DESC LIMIT 20""",
+        ).apply { setObject(1, circleId); setTimestamp(2, clock.instant().minus(java.time.Duration.ofDays(30)).ts()); setObject(3, memberId) }
+            .executeQuery().toList { it.getObject(1, UUID::class.java) }.map { load(c, it) }
+    }
+
     fun get(incidentId: UUID, memberId: UUID): IncidentDto = db.connection.use { c ->
         requireSeeing(c, incidentId, memberId, Role.entries.toSet())
         load(c, incidentId)
@@ -378,13 +389,17 @@ class IncidentService(
     }
 
     /** Post-close review by an owner or guardian; the latest answer per reviewer counts. */
-    fun review(incidentId: UUID, memberId: UUID, falseAlarm: Boolean, note: String?) = mutate(incidentId, memberId, EDITORS) { c, now ->
+    fun review(incidentId: UUID, memberId: UUID, falseAlarm: Boolean, note: String?, outcome: dz.hirz.shared.api.Outcome? = null) =
+        mutate(incidentId, memberId, EDITORS) { c, now ->
         if (openTier(c, incidentId) != null) conflict("not_closed")
         c.prepareStatement(
-            """INSERT INTO incident_reviews (incident_id, member_id, false_alarm, note, at) VALUES (?, ?, ?, ?, ?)
-               ON CONFLICT (incident_id, member_id) DO UPDATE SET false_alarm = EXCLUDED.false_alarm, note = EXCLUDED.note, at = EXCLUDED.at""",
-        ).apply { setObject(1, incidentId); setObject(2, memberId); setBoolean(3, falseAlarm); setString(4, note?.take(500)); setTimestamp(5, now.ts()) }
-            .executeUpdate()
+            """INSERT INTO incident_reviews (incident_id, member_id, false_alarm, note, at, outcome) VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT (incident_id, member_id) DO UPDATE SET false_alarm = EXCLUDED.false_alarm, note = EXCLUDED.note, at = EXCLUDED.at,
+                 outcome = EXCLUDED.outcome""",
+        ).apply {
+            setObject(1, incidentId); setObject(2, memberId); setBoolean(3, falseAlarm); setString(4, note?.take(500)); setTimestamp(5, now.ts())
+            setString(6, outcome?.name?.lowercase())
+        }.executeUpdate()
         event(c, incidentId, "reviewed", memberId, """{"falseAlarm":$falseAlarm}""", now)
     }
 
