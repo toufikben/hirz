@@ -39,6 +39,18 @@ Also fixed: tags are never silent sources; the leash needs a fresh fix; one herd
 at 04:30; stillness only in a pasture; an old Eid date does not erase next year's season; sightings purged after a week.
 Accepted risk: proof of possession at tag registration is the phone's own report (no trusted hardware).
 
+A second independent review (Codex could not run: usage limit) found three more critical defects, fixed with tests
+(CI 41203403206):
+- The herd's once-per-night alarm silenced a second theft the same night. It now holds only while its incident is open
+  and re-arms when the family closes it.
+- LEASH_BREAK could not fire for a tagged child who went silent, and the outing stopped pinging when its card scrolled
+  away. A tag the guardian's phone stopped hearing now raises "lost contact"; the outing runs in its own session and
+  sends the tags it hears.
+- Owner-away arming tripped on the owner's own errands. It now waits 6 min, and a start gets 90 s for the owner's
+  phone to be heard before it counts as a theft.
+Also: a collar a few minutes late keeps its P0 (demotion only after 30 min); coarse fixes cannot break the leash; only
+phones an owner or guardian allowed can relay tags.
+
 ## Breeder trial
 **Not run yet.** It needs one breeder for two weeks:
 - a GSM leader collar;
