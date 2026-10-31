@@ -13,10 +13,15 @@ enum class Role {
 }
 
 @Serializable
-data class CreateCircleRequest(val name: String)
+/** A family, or an institution (school, transport company, elders' home) that families share children with (P9). */
+@Serializable
+enum class CircleKind { @SerialName("family") FAMILY, @SerialName("institution") INSTITUTION }
 
 @Serializable
-data class CircleDto(val id: String, val name: String, val myRole: Role)
+data class CreateCircleRequest(val name: String, val kind: CircleKind = CircleKind.FAMILY)
+
+@Serializable
+data class CircleDto(val id: String, val name: String, val myRole: Role, val kind: CircleKind = CircleKind.FAMILY)
 
 @Serializable
 data class MemberDto(

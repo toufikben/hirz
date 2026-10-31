@@ -45,6 +45,7 @@ import javax.sql.DataSource
 
 private val EDITORS = setOf(Role.OWNER, Role.GUARDIAN)
 private val MAX_HANDOVER = Duration.ofDays(14)
+private val ALGIERS = java.time.ZoneId.of("Africa/Algiers")
 
 object Custody {
     /** True while a handover that mutes place exits covers [at]. Only PLACE_EXIT ever consults this. */
@@ -118,13 +119,32 @@ class CustodyService(
         if (used as Boolean) gone("link_code_used")
         if (expired as Boolean) gone("link_code_expired")
         if (to == from) unprocessable("same_circle")
+        // With an institution (P9): only in its hours, and until the end of the school year at most a year ahead.
+        val institution = c.prepareStatement("SELECT kind = 'institution' FROM circles WHERE id = ?").apply { setObject(1, to) }
+            .executeQuery().use { it.next() && it.getBoolean(1) }
+        val today = now.atZone(ALGIERS).toLocalDate()
+        val expires = if (!institution) null else {
+            if (req.windows.isEmpty()) unprocessable("windows_required")
+            val last = req.expiresOn?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() ?: unprocessable("bad_date") }
+                ?: java.time.LocalDate.of(if (today.monthValue <= 6) today.year else today.year + 1, 6, 30)
+            if (last.isBefore(today) || last.isAfter(today.plusDays(366))) unprocessable("bad_date")
+            last.plusDays(1).atStartOfDay(ALGIERS).toInstant()
+        }
+        val windows = if (institution) req.windows else emptyList()
         c.prepareStatement("UPDATE circle_link_codes SET used_at = ? WHERE id = ?").apply { setTimestamp(1, now.ts()); setObject(2, codeId) }.executeUpdate()
         val id = c.prepareStatement(
-            "INSERT INTO asset_consents (asset_id, from_circle, to_circle, requested_by, requested_at) VALUES (?, ?, ?, ?, ?) RETURNING id",
-        ).apply { setObject(1, assetId); setObject(2, from); setObject(3, to); setObject(4, actor); setTimestamp(5, now.ts()) }
-            .executeQuery().use { it.next(); it.getObject(1, UUID::class.java) }
-        audit(c, from, actor, "custody_requested", """{"consent":"$id","asset":"$assetId"}""")
-        ConsentDto(id.toString(), assetId.toString(), from.toString(), to.toString(), "pending")
+            """INSERT INTO asset_consents (asset_id, from_circle, to_circle, requested_by, requested_at, scope, windows, expires_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?::jsonb, ?) RETURNING id""",
+        ).apply {
+            setObject(1, assetId); setObject(2, from); setObject(3, to); setObject(4, actor); setTimestamp(5, now.ts())
+            setString(6, if (institution) "institution" else "custody")
+            setString(7, if (institution) kotlinx.serialization.json.Json.encodeToString(
+                kotlinx.serialization.builtins.ListSerializer(dz.hirz.shared.api.ActiveWindow.serializer()), windows) else null)
+            setTimestamp(8, expires?.ts())
+        }.executeQuery().use { it.next(); it.getObject(1, UUID::class.java) }
+        audit(c, from, actor, "custody_requested", """{"consent":"$id","asset":"$assetId","scope":"${if (institution) "institution" else "custody"}"}""")
+        ConsentDto(id.toString(), assetId.toString(), from.toString(), to.toString(), "pending",
+            if (institution) "institution" else "custody", windows, expires?.toEpochMilli())
     }
 
     /** Only the owner of the receiving circle accepts; then both circles see the asset. */
@@ -165,8 +185,8 @@ class CustodyService(
         c.prepareStatement(
             """SELECT a.id, a.circle_id, a.name, a.type, (SELECT max(s.last_heartbeat_at) FROM sources s WHERE s.asset_id = a.id AND s.revoked_at IS NULL)
                FROM asset_consents k JOIN assets a ON a.id = k.asset_id
-               WHERE k.to_circle = ? AND k.accepted_at IS NOT NULL AND k.revoked_at IS NULL ORDER BY a.name""",
-        ).apply { setObject(1, circleId) }.executeQuery()
+               WHERE k.to_circle = ? AND k.accepted_at IS NOT NULL AND k.revoked_at IS NULL AND consent_live(k.windows, k.expires_at, ?) ORDER BY a.name""",
+        ).apply { setObject(1, circleId); setTimestamp(2, clock.instant().ts()) }.executeQuery()
             .toList { Row(it.getObject(1, UUID::class.java), it.getString(2), it.getString(3), it.getString(4), it.getTimestamp(5)?.time) }
             .map { r ->
                 val last = c.prepareStatement(
@@ -178,11 +198,13 @@ class CustodyService(
 
     private fun load(c: Connection, consentId: UUID, forUpdate: Boolean): ConsentDto =
         c.prepareStatement(
-            "SELECT asset_id, from_circle, to_circle, accepted_at IS NOT NULL, revoked_at IS NOT NULL FROM asset_consents WHERE id = ?${if (forUpdate) " FOR UPDATE" else ""}",
+            "SELECT asset_id, from_circle, to_circle, accepted_at IS NOT NULL, revoked_at IS NOT NULL, scope, windows, expires_at FROM asset_consents WHERE id = ?${if (forUpdate) " FOR UPDATE" else ""}",
         ).apply { setObject(1, consentId) }.executeQuery().use {
             if (!it.next()) notFound()
             val state = when { it.getBoolean(5) -> "revoked"; it.getBoolean(4) -> "active"; else -> "pending" }
-            ConsentDto(consentId.toString(), it.getString(1), it.getString(2), it.getString(3), state)
+            val windows = it.getString(7)?.let { w -> kotlinx.serialization.json.Json.decodeFromString(
+                kotlinx.serialization.builtins.ListSerializer(dz.hirz.shared.api.ActiveWindow.serializer()), w) }.orEmpty()
+            ConsentDto(consentId.toString(), it.getString(1), it.getString(2), it.getString(3), state, it.getString(6), windows, it.getTimestamp(8)?.time)
         }
 
     /** A quiet P2 notice to every member of both circles; it carries the asset name only. */

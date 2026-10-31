@@ -15,7 +15,8 @@ import io.ktor.server.routing.post
 
 fun Route.circleRoutes(service: CircleService) {
     post("/v1/circles") {
-        call.respond(service.create(call.member().memberId, call.receive<CreateCircleRequest>().name))
+        val req = call.receive<CreateCircleRequest>()
+        call.respond(service.create(call.member().memberId, req.name, req.kind))
     }
     get("/v1/circles") {
         call.respond(service.list(call.member().memberId))

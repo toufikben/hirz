@@ -152,7 +152,7 @@ class IncidentService(
                    ORDER BY cm.priority""",
             ).apply {
                 // Shared custody: the other circle's members are alerted too (design §12.1).
-                setObject(1, f.assetId); setArray(2, c.createArrayOf("uuid", AssetAccess.circlesSeeing(c, f.assetId).toTypedArray()))
+                setObject(1, f.assetId); setArray(2, c.createArrayOf("uuid", AssetAccess.circlesSeeing(c, f.assetId, now).toTypedArray()))
                 setArray(3, c.createArrayOf("text", RECIPIENT_ROLES.toTypedArray())); setTimestamp(4, now.ts())
             }.executeQuery().toList { Recipient(it.getObject(1, UUID::class.java), it.getString(2)) }
             name to list
@@ -198,7 +198,8 @@ class IncidentService(
         c.prepareStatement(
             """SELECT id FROM incidents WHERE (circle_id = ? OR asset_id IN ($SHARED_ASSETS_SQL))
                ${if (openOnly) "AND state = 'open'" else ""} ORDER BY opened_at DESC LIMIT 200""",
-        ).apply { setObject(1, circleId); setArray(2, c.createArrayOf("uuid", arrayOf(circleId))) }.executeQuery().toList { it.getObject(1, UUID::class.java) }.map { load(c, it) }
+        ).apply { setObject(1, circleId); setArray(2, c.createArrayOf("uuid", arrayOf(circleId))); setTimestamp(3, clock.instant().ts()) }
+            .executeQuery().toList { it.getObject(1, UUID::class.java) }.map { load(c, it) }
     }
 
     /** Closed P0/P1 alarms of the last 30 days this owner or guardian has not said anything about yet (P8). */
@@ -519,7 +520,7 @@ class IncidentService(
     private fun requireSeeing(c: Connection, incidentId: UUID, memberId: UUID, roles: Set<Role>) {
         val assetId = c.prepareStatement("SELECT asset_id FROM incidents WHERE id = ?").apply { setObject(1, incidentId) }
             .executeQuery().use { if (it.next()) it.getObject(1, UUID::class.java) else notFound() }
-        val ok = AssetAccess.circlesSeeing(c, assetId).any { circle -> runCatching { circles.requireRole(c, circle, memberId, roles) }.isSuccess }
+        val ok = AssetAccess.circlesSeeing(c, assetId, clock.instant()).any { circle -> runCatching { circles.requireRole(c, circle, memberId, roles) }.isSuccess }
         if (!ok) notFound()
     }
 

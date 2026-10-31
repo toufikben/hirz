@@ -17,8 +17,20 @@ data class HandoverDto(val id: String, val assetId: String, val memberId: String
 data class LinkCodeDto(val code: String, val expiresAtMs: Long)
 
 @Serializable
-data class ConsentRequest(val otherCircleCode: String)
+data class ConsentRequest(
+    val otherCircleCode: String,
+    /** With an institution (P9): the hours it may see the child; required. */
+    val windows: List<ActiveWindow> = emptyList(),
+    /** With an institution: the last day (ISO); the end of the school year (30 June) by default. */
+    val expiresOn: String? = null,
+)
 
 /** [state]: `pending`, `active` or `revoked`. */
 @Serializable
-data class ConsentDto(val id: String, val assetId: String, val fromCircleId: String, val toCircleId: String, val state: String)
+data class ConsentDto(
+    val id: String, val assetId: String, val fromCircleId: String, val toCircleId: String, val state: String,
+    /** `custody` (two families) or `institution` (P9). */
+    val scope: String = "custody",
+    val windows: List<ActiveWindow> = emptyList(),
+    val expiresAtMs: Long? = null,
+)

@@ -47,21 +47,21 @@ class CircleService(private val db: DataSource, private val clock: Clock, privat
         return role
     }
 
-    fun create(memberId: UUID, name: String): CircleDto = db.tx { c ->
+    fun create(memberId: UUID, name: String, kind: dz.hirz.shared.api.CircleKind = dz.hirz.shared.api.CircleKind.FAMILY): CircleDto = db.tx { c ->
         require(name.isNotBlank() && name.length <= 80) { "name must be 1–80 characters" }
-        val id = c.prepareStatement("INSERT INTO circles (name) VALUES (?) RETURNING id").apply { setString(1, name.trim()) }
+        val id = c.prepareStatement("INSERT INTO circles (name, kind) VALUES (?, ?) RETURNING id").apply { setString(1, name.trim()); setString(2, kind.name.lowercase()) }
             .executeQuery().use { it.next(); it.getObject(1, UUID::class.java) }
         c.prepareStatement("INSERT INTO circle_members (circle_id, member_id, role, priority) VALUES (?, ?, 'owner', 1)")
             .apply { setObject(1, id); setObject(2, memberId) }.executeUpdate()
-        CircleDto(id.toString(), name.trim(), Role.OWNER)
+        CircleDto(id.toString(), name.trim(), Role.OWNER, kind)
     }
 
     fun list(memberId: UUID): List<CircleDto> = db.connection.use { c ->
         c.prepareStatement(
-            """SELECT ci.id, ci.name, cm.role FROM circle_members cm JOIN circles ci ON ci.id = cm.circle_id
+            """SELECT ci.id, ci.name, cm.role, ci.kind FROM circle_members cm JOIN circles ci ON ci.id = cm.circle_id
                WHERE cm.member_id = ? AND (cm.expires_at IS NULL OR cm.expires_at > ?) ORDER BY ci.created_at""",
         ).apply { setObject(1, memberId); setTimestamp(2, clock.instant().ts()) }
-            .executeQuery().toList { CircleDto(it.getString(1), it.getString(2), roleOf(it.getString(3))) }
+            .executeQuery().toList { CircleDto(it.getString(1), it.getString(2), roleOf(it.getString(3)), kindOf(it.getString(4))) }
     }
 
     fun members(circleId: UUID, memberId: UUID): List<MemberDto> = db.connection.use { c ->
@@ -118,9 +118,9 @@ class CircleService(private val db: DataSource, private val clock: Clock, privat
         c.prepareStatement("UPDATE invites SET used_at = ?, used_by = ? WHERE id = ?")
             .apply { setTimestamp(1, now.ts()); setObject(2, memberId); setObject(3, row.id) }.executeUpdate()
         audit(c, row.circleId, memberId, "member_joined", """{"role":"${row.role}"}""")
-        val name = c.prepareStatement("SELECT name FROM circles WHERE id = ?").apply { setObject(1, row.circleId) }
-            .executeQuery().use { it.next(); it.getString(1) }
-        CircleDto(row.circleId.toString(), name, roleOf(row.role))
+        val (name, kind) = c.prepareStatement("SELECT name, kind FROM circles WHERE id = ?").apply { setObject(1, row.circleId) }
+            .executeQuery().use { it.next(); it.getString(1) to it.getString(2) }
+        CircleDto(row.circleId.toString(), name, roleOf(row.role), kindOf(kind))
     }
 
     /** A no-app contact reached by SMS (design §5.6). Local Algerian numbers become +213. */
@@ -200,3 +200,6 @@ fun normalizePhone(raw: String): String? {
         else -> null
     }
 }
+
+fun kindOf(s: String): dz.hirz.shared.api.CircleKind =
+    if (s == "institution") dz.hirz.shared.api.CircleKind.INSTITUTION else dz.hirz.shared.api.CircleKind.FAMILY

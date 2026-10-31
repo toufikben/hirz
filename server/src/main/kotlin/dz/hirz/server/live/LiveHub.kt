@@ -91,7 +91,7 @@ class LiveHub(private val db: DataSource, private val incidents: IncidentService
     }
 
     /** The asset's own circle and every circle sharing its custody (design §12.1). */
-    private fun circlesSeeing(assetId: UUID): List<UUID> = db.connection.use { dz.hirz.server.custody.AssetAccess.circlesSeeing(it, assetId) }
+    private fun circlesSeeing(assetId: UUID): List<UUID> = db.connection.use { dz.hirz.server.custody.AssetAccess.circlesSeeing(it, assetId, clock.instant()) }
 
     override fun memberRemoved(circleId: UUID, memberId: UUID) {
         conns.filter { it.memberId == memberId && circleId in it.circles }.forEach { kick(it, circleId) }
