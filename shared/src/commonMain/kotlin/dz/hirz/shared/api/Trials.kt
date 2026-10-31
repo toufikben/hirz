@@ -50,4 +50,14 @@ data class TrialReportDto(
     val passed: Boolean,
     /** Findings per "RULE/TIER" over the whole trial. */
     val findings: Map<String, Int>,
+    /** Problem reports from the trial's circles, newest first. */
+    val problems: List<ProblemReportDto> = emptyList(),
 )
+
+/** "Report a problem" (P8): free text and the app's version and device model. No location, ever. */
+@Serializable
+data class ProblemReportRequest(val circleId: String, val text: String, val appVersion: String, val device: String)
+
+/** A problem report as the operator sees it: the circle's trial pseudonym, never the circle. */
+@Serializable
+data class ProblemReportDto(val circlePseudo: String, val text: String, val appVersion: String, val device: String, val atMs: Long)

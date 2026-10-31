@@ -57,8 +57,15 @@ class TrialReport(private val db: DataSource, private val trials: TrialService) 
         val findings = c.prepareStatement(
             "SELECT k, sum(v::int) FROM trial_daily, jsonb_each_text(findings) AS f(k, v) WHERE trial_id = ? GROUP BY k ORDER BY k",
         ).apply { setObject(1, trialId) }.executeQuery().toList { it.getString(1) to it.getInt(2) }.toMap()
+        // Reports from the trial's circles during the trial, under their pseudonym.
+        val problems = c.prepareStatement(
+            """SELECT tc.pseudonym, p.text, p.app_version, p.device, p.at FROM problem_reports p
+               JOIN trial_circles tc ON tc.circle_id = p.circle_id AND tc.trial_id = ? AND tc.left_at IS NULL AND p.at >= tc.consent_at
+               ORDER BY p.at DESC LIMIT 500""",
+        ).apply { setObject(1, trialId) }.executeQuery()
+            .toList { dz.hirz.shared.api.ProblemReportDto(it.getString(1), it.getString(2), it.getString(3), it.getString(4), it.getTimestamp(5).time) }
         val lines = BudgetGate.judge(metrics.first)
-        TrialReportDto(trial, metrics.second, metrics.first, lines, BudgetGate.passed(lines), findings)
+        TrialReportDto(trial, metrics.second, metrics.first, lines, BudgetGate.passed(lines), findings, problems)
     }
 
     fun csv(r: TrialReportDto): String = buildString {

@@ -116,6 +116,18 @@ class TrialService(private val db: DataSource, private val clock: Clock, private
         ).apply { setObject(1, circleId); setObject(2, today()); setObject(3, today()) }
             .executeQuery().use { if (it.next()) it.getObject(1, UUID::class.java) to it.getTimestamp(2).time else null }
 
+    /** A member's problem report; text capped at 2000 characters. */
+    fun problem(memberId: UUID, req: dz.hirz.shared.api.ProblemReportRequest) = db.tx { c ->
+        val circleId = uuidOrNotFound(req.circleId)
+        circles.requireRole(c, circleId, memberId)
+        val text = req.text.trim().take(2000)
+        if (text.isEmpty()) unprocessable("empty_report")
+        c.prepareStatement("INSERT INTO problem_reports (circle_id, member_id, text, app_version, device, at) VALUES (?, ?, ?, ?, ?, ?)").apply {
+            setObject(1, circleId); setObject(2, memberId); setString(3, text); setString(4, req.appVersion.take(40)); setString(5, req.device.take(80))
+            setTimestamp(6, clock.instant().ts())
+        }.executeUpdate()
+    }
+
     fun guidedTest(circleId: UUID, memberId: UUID, req: GuidedTestRequest): GuidedTestDto = db.tx { c ->
         circles.requireRole(c, circleId, memberId, setOf(Role.OWNER, Role.GUARDIAN))
         val assetId = uuidOrNotFound(req.assetId)
@@ -145,6 +157,10 @@ fun Route.trialRoutes(service: TrialService) {
     }
     delete("/v1/circles/{id}/trial") {
         service.leave(uuidOrNotFound(call.parameters["id"]), call.member().memberId)
+        call.respond(HttpStatusCode.NoContent)
+    }
+    post("/v1/feedback") {
+        service.problem(call.member().memberId, call.receive<dz.hirz.shared.api.ProblemReportRequest>())
         call.respond(HttpStatusCode.NoContent)
     }
     post("/v1/circles/{id}/trial/tests") {
