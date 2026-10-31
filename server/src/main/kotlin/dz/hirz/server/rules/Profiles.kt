@@ -21,6 +21,10 @@ data class Profile(
     val lateTolerant: Boolean = false,
     /** The place a night exit watches: home for people, the barn for livestock. */
     val nightHome: dz.hirz.shared.api.PlaceKind = dz.hirz.shared.api.PlaceKind.HOME,
+    /** Night from the real sunset and sunrise at the night home (livestock by default) instead of [nightWindow]. */
+    val nightBySun: Boolean = false,
+    /** Ramadan evening (people): from 21:30 to 23:30 is the tarawih, not night, unless the owner turned that off. */
+    val ramadanEvening: Boolean = false,
     /** In the two weeks before Eid al-Adha (livestock only): tiers raised, a smaller share of the herd is a night move. */
     val eidSeason: Boolean = false,
     /** Silence threshold for this profile; null keeps the global one. */
@@ -30,6 +34,15 @@ data class Profile(
 ) {
     /** The tier [rule] fires at, or null when it does not run for this asset. */
     fun tierOf(rule: RuleId): Tier? = rules[rule]?.takeIf { it.enabled }?.tier
+
+    /** Whether [at] is night for this asset, [where] being its night home (null: the fixed window). */
+    fun isNight(at: java.time.Instant, where: dz.hirz.shared.api.LatLon?): Boolean {
+        val local = at.atZone(java.time.ZoneId.of("Africa/Algiers"))
+        val minute = local.hour * 60 + local.minute
+        if (ramadanEvening && minute in 21 * 60 + 30 until 23 * 60 + 30) return false
+        if (nightBySun && where != null) return dz.hirz.server.calendar.SolarTimes.isNight(at, where)
+        return dz.hirz.server.places.Geometry.isActive(nightWindow, at)
+    }
 }
 
 /**
@@ -83,7 +96,7 @@ object Profiles {
 
     fun of(
         type: AssetType, condition: Condition, overrides: List<RuleOverride> = emptyList(), nightWindow: List<ActiveWindow>? = null,
-        nightExceptions: List<dz.hirz.shared.api.NightException> = emptyList(),
+        nightExceptions: List<dz.hirz.shared.api.NightException> = emptyList(), nightBySun: Boolean? = null,
     ): Profile {
         val byRule = overrides.associateBy { it.rule }
         val rules = defaults(type, condition).mapValues { (rule, def) ->
@@ -94,6 +107,7 @@ object Profiles {
         return Profile(condition, rules, night,
             hazardEntryReadings = if (condition == Condition.AUTISM) 1 else 2, nightExceptions = nightExceptions,
             lateTolerant = type == AssetType.LIVESTOCK,
+            nightBySun = nightBySun ?: (type == AssetType.LIVESTOCK),
             nightHome = if (type == AssetType.LIVESTOCK) dz.hirz.shared.api.PlaceKind.BARN else dz.hirz.shared.api.PlaceKind.HOME,
             silenceAfterMs = if (type == AssetType.LIVESTOCK) 6 * 3_600_000L else null,
             unknownOverrides = byRule.keys.filter { it !in rules }.toSet())
@@ -120,9 +134,13 @@ object Profiles {
      * The calendar's effect (design §12): livestock in the two weeks before Eid al-Adha has every P2 rule raised to P1.
      * The calendar never creates a P0, and people are never affected.
      */
-    fun seasonal(p: Profile, type: AssetType, at: java.time.Instant, eidOverride: java.time.LocalDate?): Profile {
-        if (type != AssetType.LIVESTOCK) return p
+    fun seasonal(p: Profile, type: AssetType, at: java.time.Instant, eidOverride: java.time.LocalDate?, ramadanNightOff: Boolean = false): Profile {
         val day = at.atZone(java.time.ZoneId.of("Africa/Algiers")).toLocalDate()
+        if (type in PEOPLE) {
+            // Ramadan evenings: after iftar the family goes out for the tarawih; that is not a night exit (design §12).
+            return if (!ramadanNightOff && dz.hirz.server.calendar.AlgerianCalendar.inRamadan(day)) p.copy(ramadanEvening = true) else p
+        }
+        if (type != AssetType.LIVESTOCK) return p
         if (!dz.hirz.server.calendar.AlgerianCalendar.inEidSeason(day, eidOverride)) return p
         return p.copy(eidSeason = true, rules = p.rules.mapValues { (_, s) -> if (s.tier == Tier.P2) s.copy(tier = Tier.P1) else s })
     }

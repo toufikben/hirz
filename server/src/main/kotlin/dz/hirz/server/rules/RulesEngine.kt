@@ -102,10 +102,11 @@ class RulesEngine(
             val fixAt = Instant.ofEpochMilli(fixMs)
             val profile = dz.hirz.server.assets.ProfileService.loadAt(c, s.assetId, fixAt) ?: return@tx
             lateTolerant = profile.lateTolerant
-            val night = Geometry.isActive(profile.nightWindow, fixAt)
+            val places = PlaceService.placesOf(c, s.circleId)
+            val nightHomePlace = places.firstOrNull { it.kind == profile.nightHome }?.let { centre(it.shape) }
+            val night = profile.isNight(fixAt, nightHomePlace)
             // Night exit watches home only, at night, for profiles that have it (design §4.3).
             val nightTier = profile.tierOf(RuleId.NIGHT_EXIT)?.takeIf { night }
-            val places = PlaceService.placesOf(c, s.circleId)
             // Store-and-forward devices (collars in pastures without coverage) are judged on fixes hours old (P6).
             val placeCfg = if (profile.lateTolerant) cfg.copy(boundaryMaxAgeMs = cfg.lateMaxAgeMs) else cfg
             for (place in places) {

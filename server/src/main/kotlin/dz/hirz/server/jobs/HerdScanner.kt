@@ -90,7 +90,8 @@ class HerdScanner(private val db: DataSource, private val clock: Clock, private 
             val rg = if (fixes.size >= cfg.herdMinMembers) HerdRules.radiusOfGyrationM(fixes.values.toList()) else null
             val window = st.samples.filter { nowMs - it.first <= cfg.herdDispersionWindowMs }
             val samples = if (rg != null) window + (nowMs to rg) else window
-            val night = Geometry.isActive(profile.nightWindow, now)
+            val barn = PlaceService.placesOf(c, circle).firstOrNull { it.kind == PlaceKind.BARN }?.shape?.let { (it as? dz.hirz.shared.api.ShapeDto.Circle)?.center }
+            val night = profile.isNight(now, barn)
             val tier = if (night) Tier.P1 else profile.tierOf(RuleId.HERD_DISPERSION)
             val quiet = st.firedAtMs != null && nowMs - st.firedAtMs < cfg.herdDispersionQuietMs
             val fire = rg != null && tier != null && !quiet && HerdRules.dispersed(window.map { it.second }, rg, cfg)
@@ -112,7 +113,8 @@ class HerdScanner(private val db: DataSource, private val clock: Clock, private 
             c.prepareStatement("SELECT pg_advisory_xact_lock(hashtext(?))").apply { setString(1, asset.toString()) }.executeQuery().close()
             val profile = ProfileService.loadAt(c, asset, now) ?: return@tx null
             val tier = profile.tierOf(RuleId.ANIMAL_STILL) ?: return@tx null
-            if (Geometry.isActive(profile.nightWindow, now)) return@tx null
+            val barn = PlaceService.placesOf(c, circle).firstOrNull { it.kind == PlaceKind.BARN }?.shape?.let { (it as? dz.hirz.shared.api.ShapeDto.Circle)?.center }
+            if (profile.isNight(now, barn)) return@tx null
             val last = PersonState.load(c, asset, STILL, StillState.serializer())
             if (last != null && now.toEpochMilli() - last.firedAtMs < 24 * 3_600_000L) return@tx null
             val track = c.prepareStatement(

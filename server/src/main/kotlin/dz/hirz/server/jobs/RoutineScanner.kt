@@ -77,7 +77,14 @@ class RoutineScanner(private val db: DataSource, private val clock: Clock, priva
      * arrival window opened. Not when the asset's sources are silent (that is the silence rule's to say), and not during
      * a handover that mutes place exits (a day with the other parent).
      */
-    private fun missedArrival(r: RoutineDto, now: Instant): Finding? = db.tx { c ->
+    /** The routine as it runs today: shifted by its Ramadan offset during Ramadan. */
+    private fun shifted(r: RoutineDto, now: Instant): RoutineDto {
+        if (r.ramadanOffsetMin == 0 || !AlgerianCalendar.inRamadan(now.atZone(ALGIERS).toLocalDate())) return r
+        return r.copy(arriveByMin = r.arriveByMin?.plus(r.ramadanOffsetMin), dismissalMin = r.dismissalMin?.plus(r.ramadanOffsetMin))
+    }
+
+    private fun missedArrival(raw: RoutineDto, now: Instant): Finding? = db.tx { c ->
+        val r = shifted(raw, now)
         val arriveBy = r.arriveByMin ?: return@tx null
         val asset = UUID.fromString(r.assetId)
         val local = now.atZone(ALGIERS)
@@ -141,7 +148,8 @@ class RoutineScanner(private val db: DataSource, private val clock: Clock, priva
             .apply { setObject(1, asset) }.executeQuery().use { if (it.next()) it.getObject(1, UUID::class.java) else null }
 
     /** `STATIONARY_AFTER_DISMISSAL` (v2 appendix C-1): from dismissal + 5 min, 15 min still somewhere unknown. Once a day. */
-    private fun afterDismissal(r: RoutineDto, now: Instant): Finding? = db.tx { c ->
+    private fun afterDismissal(raw: RoutineDto, now: Instant): Finding? = db.tx { c ->
+        val r = shifted(raw, now)
         val dismissal = r.dismissalMin ?: return@tx null
         val asset = UUID.fromString(r.assetId)
         val local = now.atZone(ALGIERS)
@@ -160,7 +168,8 @@ class RoutineScanner(private val db: DataSource, private val clock: Clock, priva
     }
 
     /** `UNUSUAL_STOP` (P2): on the way to the routine's place (the 90 min before arrive-by, not yet arrived), 10 min still somewhere unknown. */
-    private fun onTheWay(r: RoutineDto, now: Instant): Finding? = db.tx { c ->
+    private fun onTheWay(raw: RoutineDto, now: Instant): Finding? = db.tx { c ->
+        val r = shifted(raw, now)
         val arriveBy = r.arriveByMin ?: return@tx null
         val asset = UUID.fromString(r.assetId)
         val local = now.atZone(ALGIERS)

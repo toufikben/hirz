@@ -57,6 +57,17 @@ object AlgerianCalendar {
         LocalDate.of(2028, 6, 8) to LocalDate.of(2028, 9, 17),
     )
 
+    /** Ramadan (first and last day), astronomical estimates; the announced dates can differ by a day. */
+    private val RAMADAN = listOf(
+        LocalDate.of(2026, 2, 18) to LocalDate.of(2026, 3, 19),
+        LocalDate.of(2027, 2, 8) to LocalDate.of(2027, 3, 9),
+        LocalDate.of(2028, 1, 28) to LocalDate.of(2028, 2, 26),
+        LocalDate.of(2029, 1, 16) to LocalDate.of(2029, 2, 14),
+        LocalDate.of(2030, 1, 5) to LocalDate.of(2030, 2, 3),
+    )
+
+    fun inRamadan(day: LocalDate): Boolean = RAMADAN.any { (from, to) -> !day.isBefore(from) && !day.isAfter(to) }
+
     fun isNationalHoliday(day: LocalDate): Boolean {
         if (FIXED.any { (m, d) -> day.monthValue == m && day.dayOfMonth == d }) return true
         val eids = listOfNotNull(EID_AL_FITR[day.year], eidAlAdha(day.year))

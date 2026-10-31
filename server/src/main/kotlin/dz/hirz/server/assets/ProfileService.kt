@@ -41,11 +41,13 @@ data class ProfileRow(
     val nightWindow: List<ActiveWindow>?, val birthDate: LocalDate?, val conditionOnSheet: Boolean,
     val nightExceptions: List<dz.hirz.shared.api.NightException> = emptyList(),
     val curfewMinute: Int? = null,
+    val nightBySun: Boolean? = null,
+    val ramadanNightOff: Boolean = false,
 ) {
     fun profile(
         overrides: List<RuleOverride> = this.overrides, condition: Condition = this.condition, night: List<ActiveWindow>? = nightWindow,
         exceptions: List<dz.hirz.shared.api.NightException> = nightExceptions,
-    ): Profile = Profiles.of(type, condition, overrides, night, exceptions)
+    ): Profile = Profiles.of(type, condition, overrides, night, exceptions, nightBySun)
 }
 
 /** Reads and changes behavior profiles (design §4.4). Owners decide the condition, birth date and anything lowered. */
@@ -53,7 +55,7 @@ class ProfileService(private val db: DataSource, private val circles: CircleServ
     companion object {
         fun row(c: Connection, assetId: UUID): ProfileRow? =
             c.prepareStatement(
-                "SELECT circle_id, type, condition, profile_overrides::text, night_window::text, birth_date, condition_on_sheet, night_exceptions::text, curfew_minute FROM assets WHERE id = ?",
+                "SELECT circle_id, type, condition, profile_overrides::text, night_window::text, birth_date, condition_on_sheet, night_exceptions::text, curfew_minute, night_by_sun, ramadan_night_off FROM assets WHERE id = ?",
             ).apply { setObject(1, assetId) }.executeQuery().use {
                 if (!it.next()) null
                 else ProfileRow(
@@ -62,6 +64,7 @@ class ProfileService(private val db: DataSource, private val circles: CircleServ
                     it.getString(5)?.let { w -> apiJson.decodeFromString(windowsSer, w) },
                     it.getDate(6)?.toLocalDate(), it.getBoolean(7), apiJson.decodeFromString(exceptionsSer, it.getString(8)),
                     it.getInt(9).takeUnless { _ -> it.wasNull() },
+                    it.getObject(10) as Boolean?, it.getBoolean(11),
                 )
             }
 
@@ -71,7 +74,7 @@ class ProfileService(private val db: DataSource, private val circles: CircleServ
         /** [load] with the calendar applied at [at]: livestock before Eid al-Adha, with its herd's announced date if set. */
         fun loadAt(c: Connection, assetId: UUID, at: java.time.Instant): Profile? {
             val row = row(c, assetId) ?: return null
-            if (row.type != dz.hirz.shared.asset.AssetType.LIVESTOCK) return row.profile()
+            if (row.type != dz.hirz.shared.asset.AssetType.LIVESTOCK) return Profiles.seasonal(row.profile(), row.type, at, null, row.ramadanNightOff)
             val eid = dz.hirz.server.herds.HerdService.herdOf(c, assetId)?.let { dz.hirz.server.herds.HerdService.load(c, it) }
                 ?.eidDate?.let { LocalDate.parse(it) }
             return Profiles.seasonal(row.profile(), row.type, at, eid)
@@ -92,7 +95,7 @@ class ProfileService(private val db: DataSource, private val circles: CircleServ
         val owner = role == Role.OWNER
         // Windows, exceptions and the curfew can silence NIGHT_EXIT or CURFEW as surely as a switch: the owner's call.
         val ownerOnly = req.condition != null || req.birthDate != null || req.conditionOnSheet != null ||
-            req.nightWindow != null || req.nightExceptions != null || req.curfewMinute != null
+            req.nightWindow != null || req.nightExceptions != null || req.curfewMinute != null || req.nightBySun != null || req.ramadanNightOff != null
         if (!owner && ownerOnly) throw ApiException(HttpStatusCode.Forbidden, "owner_only")
         val birth = req.birthDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() ?: unprocessable("bad_birth_date") }
         val condition = req.condition ?: row.condition
@@ -118,12 +121,14 @@ class ProfileService(private val db: DataSource, private val circles: CircleServ
         c.prepareStatement(
             """UPDATE assets SET condition = ?, profile_overrides = ?::jsonb, night_window = COALESCE(?::jsonb, night_window),
                  birth_date = COALESCE(?, birth_date), condition_on_sheet = COALESCE(?, condition_on_sheet), night_exceptions = ?::jsonb,
-                 curfew_minute = CASE WHEN ?::int = -1 THEN NULL ELSE COALESCE(?::int, curfew_minute) END WHERE id = ?""",
+                 curfew_minute = CASE WHEN ?::int = -1 THEN NULL ELSE COALESCE(?::int, curfew_minute) END,
+                 night_by_sun = COALESCE(?, night_by_sun), ramadan_night_off = COALESCE(?, ramadan_night_off) WHERE id = ?""",
         ).apply {
             setString(1, condition.name.lowercase()); setString(2, apiJson.encodeToString(overridesSer, overrides))
             setString(3, req.nightWindow?.let { apiJson.encodeToString(windowsSer, it) })
             setObject(4, birth); setObject(5, req.conditionOnSheet); setString(6, apiJson.encodeToString(exceptionsSer, exceptions))
-            setObject(7, req.curfewMinute); setObject(8, req.curfewMinute); setObject(9, assetId)
+            setObject(7, req.curfewMinute); setObject(8, req.curfewMinute)
+            setObject(9, req.nightBySun); setObject(10, req.ramadanNightOff); setObject(11, assetId)
         }.executeUpdate()
         // The audit records what changed, never the condition itself.
         audit(c, row.circleId, memberId, "profile_changed",
@@ -138,6 +143,7 @@ class ProfileService(private val db: DataSource, private val circles: CircleServ
         },
         nightWindow = p.nightWindow, birthDate = row.birthDate?.toString(), conditionOnSheet = row.conditionOnSheet,
         nightExceptions = row.nightExceptions, curfewMinute = row.curfewMinute,
+        nightBySun = p.nightBySun, ramadanNightOff = row.ramadanNightOff,
     )
 }
 

@@ -22,6 +22,10 @@ data class ProfileDto(
     val nightExceptions: List<NightException> = emptyList(),
     /** A teen's curfew in minutes from midnight, Africa/Algiers; null when none. */
     val curfewMinute: Int? = null,
+    /** Night from the real sunset and sunrise at home (default for livestock). */
+    val nightBySun: Boolean = false,
+    /** Ramadan evenings (21:30–23:30) count as night exits after all. */
+    val ramadanNightOff: Boolean = false,
 )
 
 /** [tier] null keeps the default tier. */
@@ -38,4 +42,6 @@ data class ProfileUpdate(
     val conditionOnSheet: Boolean? = null,
     val nightExceptions: List<NightException>? = null,
     val curfewMinute: Int? = null,
+    val nightBySun: Boolean? = null,
+    val ramadanNightOff: Boolean? = null,
 )
