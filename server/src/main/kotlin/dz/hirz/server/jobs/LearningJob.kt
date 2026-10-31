@@ -61,7 +61,9 @@ class LearningJob(private val db: DataSource, private val clock: Clock, private 
         var i = 0
         while (i < track.size) {
             var j = i
-            while (j + 1 < track.size && OwnerOrder.metres(track[i].second, track[j + 1].second) <= cfg.learnRadiusM) j++
+            // A dwell is one continuous stay: a gap in the track (another day's visit to the same spot) ends it.
+            while (j + 1 < track.size && OwnerOrder.metres(track[i].second, track[j + 1].second) <= cfg.learnRadiusM &&
+                java.time.Duration.between(track[j].first, track[j + 1].first).toMillis() <= DWELL_GAP_MS) j++
             val span = java.time.Duration.between(track[i].first, track[j].first).toMillis()
             if (span >= cfg.learnDwellMs) {
                 val part = track.subList(i, j + 1)
@@ -91,6 +93,9 @@ class LearningJob(private val db: DataSource, private val clock: Clock, private 
     }
 
     companion object {
+        /** Fixes further apart than this are two stays, not one. */
+        private const val DWELL_GAP_MS = 3_600_000L
+
         /** Whether [at] is within an asset's learned places. */
         fun known(c: java.sql.Connection, assetId: UUID, at: LatLon, accuracyM: Double): Boolean =
             c.prepareStatement(
