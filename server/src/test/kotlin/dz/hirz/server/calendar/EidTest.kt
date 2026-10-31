@@ -35,8 +35,8 @@ class EidTest {
         assertTrue(AlgerianCalendar.inEidSeason(LocalDate.parse("2026-05-27"), null), "the day itself")
         assertFalse(AlgerianCalendar.inEidSeason(LocalDate.parse("2026-05-12"), null))
         assertFalse(AlgerianCalendar.inEidSeason(LocalDate.parse("2026-05-28"), null))
-        assertTrue(AlgerianCalendar.inEidSeason(LocalDate.parse("2026-06-01"), LocalDate.parse("2026-06-10")), "the owner's date wins")
-        assertFalse(AlgerianCalendar.inEidSeason(LocalDate.parse("2026-05-20"), LocalDate.parse("2026-06-10")))
+        assertTrue(AlgerianCalendar.inEidSeason(LocalDate.parse("2026-05-29"), LocalDate.parse("2026-05-29")), "the announced date wins (two days after the estimate)")
+        assertFalse(AlgerianCalendar.inEidSeason(LocalDate.parse("2026-05-14"), LocalDate.parse("2026-05-29")), "the season starts 14 days before the announced date")
     }
 
     @Test
