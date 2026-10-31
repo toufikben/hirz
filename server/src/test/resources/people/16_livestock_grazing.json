@@ -1,0 +1,81 @@
+{
+  "name": "livestock_grazing",
+  "start": "2026-11-02T09:00:00Z",
+  "type": "livestock",
+  "places": [
+    {
+      "name": "Zriba",
+      "kind": "barn",
+      "radius": 40
+    },
+    {
+      "name": "Mra",
+      "kind": "pasture",
+      "north": 3000,
+      "radius": 1000
+    }
+  ],
+  "steps": [
+    {
+      "t": 0,
+      "action": "fix",
+      "north": 3000,
+      "speed": 1
+    },
+    {
+      "t": 60,
+      "action": "fix",
+      "north": 3015,
+      "speed": 1
+    },
+    {
+      "t": 120,
+      "action": "fix",
+      "north": 3030,
+      "speed": 1
+    },
+    {
+      "t": 180,
+      "action": "fix",
+      "north": 3045,
+      "speed": 1
+    },
+    {
+      "t": 240,
+      "action": "fix",
+      "north": 3060,
+      "speed": 1
+    },
+    {
+      "t": 300,
+      "action": "fix",
+      "north": 3075,
+      "speed": 1
+    },
+    {
+      "t": 360,
+      "action": "fix",
+      "north": 3090,
+      "speed": 1
+    },
+    {
+      "t": 420,
+      "action": "fix",
+      "north": 3105,
+      "speed": 1
+    },
+    {
+      "t": 480,
+      "action": "fix",
+      "north": 3120,
+      "speed": 1
+    },
+    {
+      "t": 540,
+      "action": "fix",
+      "north": 3135,
+      "speed": 1
+    }
+  ],
+  "expect": []
+}

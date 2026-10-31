@@ -64,4 +64,20 @@ class ProfilesTest {
         assertFalse(Profiles.of(AssetType.CHILD, Condition.NONE, listOf(RuleOverride(RuleId.PLACE_EXIT, enabled = false)))
             .rules.getValue(RuleId.PLACE_EXIT).enabled)
     }
+
+    @Test
+    fun livestockProfileDefaults() {
+        val p = Profiles.of(AssetType.LIVESTOCK, Condition.NONE)
+        mapOf(
+            RuleId.HERD_NIGHT_MOVE to Tier.P1, RuleId.NIGHT_EXIT to Tier.P1, RuleId.PLACE_EXIT to Tier.P2,
+            RuleId.VEHICLE_SPEED_UNEXPLAINED to Tier.P1, RuleId.HERD_DISPERSION to Tier.P2, RuleId.COLLAR_CUT to Tier.P1,
+            RuleId.ANIMAL_STILL to Tier.P2, RuleId.HAZARD_PROXIMITY to Tier.P1,
+        ).forEach { (r, t) -> assertEquals(t, tier(p, r), "$r") }
+        assertTrue(p.lateTolerant, "collars store and forward")
+        assertEquals(6 * 3_600_000L, p.silenceAfterMs, "pastures without coverage")
+        val child = Profiles.of(AssetType.CHILD, Condition.NONE)
+        assertFalse(child.lateTolerant)
+        assertNull(child.silenceAfterMs, "people keep the global silence threshold")
+        assertNull(tier(child, RuleId.HERD_NIGHT_MOVE))
+    }
 }

@@ -15,6 +15,8 @@ enum class RuleId {
     ARMED_MOVEMENT, TOWING, POWER_CUT, JAMMING, PARKED_TILT, DOOR_OPEN_ARMED, ANTENNA_CUT,
     /** People profiles (design §4.3, §12.2, P5). */
     HAZARD_PROXIMITY, NIGHT_EXIT, RUN_AWAY_SPEED, PAST_ADDRESS_HEADING, CURFEW, COASTAL_NIGHT,
+    /** Livestock and presence (design §4.3, §12.2, P6). */
+    HERD_NIGHT_MOVE, HERD_DISPERSION, COLLAR_CUT, ANIMAL_STILL, VEHICLE_SPEED_UNEXPLAINED, LEASH_BREAK, KEYLESS_NO_OWNER,
 }
 
 /** A machine reason the app renders through i18n, e.g. `left_place{place, readings, distanceM, accuracyM, ageS}`. */

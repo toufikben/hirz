@@ -33,6 +33,7 @@ class RulesEngine(
         }
         if (s.cancelPin) recorder.appendToOpen(s.assetId, dz.hirz.shared.api.Reason("cancel_pin_entered"), RuleId.SOS)
         if (vehicles != null && vehicleRules(vehicles, s, at)) return
+        collarCut(s, at)
         val findings = boundaries(s, at)
         if (findings.isEmpty()) return
         // Only PLACE_EXIT can be muted, and only by a handover that says so; SOS, duress and silence never are.
@@ -59,7 +60,22 @@ class RulesEngine(
                 speedKmh = s.signal.speedKmh, ignition = s.signal.ignition, alarms = s.signal.alarms,
                 isLatestFix = s.isLatestFix && s.quality == "ok",
             )
-            val (next, found) = VehicleRules.evaluate(st, mode.mode, mode.armedPosition, reading, cfg)
+            val (next, evaluated) = VehicleRules.evaluate(st, mode.mode, mode.armedPosition, reading, cfg)
+            // Armed only because nobody's phone was heard (owner_away): a start gets a grace for the owner's phone to be
+            // heard (a duty-cycled scan) before it counts as a theft. Power, jamming and antenna alarms never wait.
+            val startedAt = if (mode.ignition == true) mode.ignitionSince ?: at else at
+            val ownerAway = mode.mode == dz.hirz.shared.api.VehicleMode.ARMED && mode.reason == "owner_away" && reading.ignition == true
+            val inGrace = ownerAway && at.isBefore(startedAt.plusMillis(cfg.ownerGraceMs))
+            val waiting = setOf(RuleId.ARMED_MOVEMENT, RuleId.TOWING, RuleId.DOOR_OPEN_ARMED, RuleId.PARKED_TILT)
+            val kept = if (inGrace) evaluated.filter { it.rule !in waiting } else evaluated
+            // KEYLESS_NO_OWNER (P6): an armed car runs and no family phone has heard its tag (a relay attack). Only where
+            // the family's phones do relay (heard in the last day), after the grace, once per start.
+            val keylessNow = mode.ownerNearby == false && mode.relayActive && reading.ignition == true && !inGrace &&
+                mode.mode == dz.hirz.shared.api.VehicleMode.ARMED
+            val episode = startedAt.toEpochMilli()
+            val keyless = keylessNow && PersonState.load(c, s.assetId, KEYLESS, KeylessState.serializer())?.startMs != episode
+            if (keyless) PersonState.save(c, s.assetId, KEYLESS, KeylessState.serializer(), KeylessState(episode))
+            val found = if (keyless) kept + VehicleHit(RuleId.KEYLESS_NO_OWNER, Tier.P1, dz.hirz.shared.api.Reason("keyless_no_owner")) else kept
             // Any report ends a jamming-by-silence episode.
             c.prepareStatement(
                 """INSERT INTO vehicle_rule_state (asset_id, moving_count, last_fix_ms, jamming_since) VALUES (?, ?, ?, NULL)
@@ -78,22 +94,26 @@ class RulesEngine(
         val point = LatLon(position.lat, position.lon)
         val accuracy = position.accuracyM ?: Double.MAX_VALUE
         val found = mutableListOf<Finding>()
+        var lateTolerant = false
         db.tx { c ->
             // One evaluation per asset at a time: overlapping batches never lose a reading (P1 minor #11).
             c.prepareStatement("SELECT pg_advisory_xact_lock(hashtext(?))").apply { setString(1, s.assetId.toString()) }.executeQuery().close()
-            val profile = dz.hirz.server.assets.ProfileService.load(c, s.assetId) ?: return@tx
             // Night windows are judged at the fix's own time: a phone that uploads its 02:00 fixes at 06:10 was out at 02:00.
             val fixAt = Instant.ofEpochMilli(fixMs)
+            val profile = dz.hirz.server.assets.ProfileService.loadAt(c, s.assetId, fixAt) ?: return@tx
+            lateTolerant = profile.lateTolerant
             val night = Geometry.isActive(profile.nightWindow, fixAt)
             // Night exit watches home only, at night, for profiles that have it (design §4.3).
             val nightTier = profile.tierOf(RuleId.NIGHT_EXIT)?.takeIf { night }
             val places = PlaceService.placesOf(c, s.circleId)
+            // Store-and-forward devices (collars in pastures without coverage) are judged on fixes hours old (P6).
+            val placeCfg = if (profile.lateTolerant) cfg.copy(boundaryMaxAgeMs = cfg.lateMaxAgeMs) else cfg
             for (place in places) {
                 val placeId = UUID.fromString(place.id)
                 val state = load(c, s.assetId, placeId)
                 val reading = Reading(fixMs, Geometry.distanceOutsideM(c, place.shape, point), accuracy, s.signal.serverTimeMs - fixMs)
-                if (!PlaceBoundary.accepts(state, place, reading, cfg)) continue
-                val homeAtNight = nightTier != null && place.kind == PlaceKind.HOME
+                if (!PlaceBoundary.accepts(state, place, reading, placeCfg)) continue
+                val homeAtNight = nightTier != null && place.kind == profile.nightHome
                 val entryReadings = when (place.kind) {
                     PlaceKind.HAZARD -> profile.hazardEntryReadings
                     PlaceKind.COAST -> cfg.reentryReadings
@@ -102,7 +122,7 @@ class RulesEngine(
                 val exitReadings = if (homeAtNight) cfg.nightExitReadings else cfg.exitReadings
                 // A coast place is judged below on its state, not on entry: being there at night is what matters.
                 val active = if (place.kind == PlaceKind.COAST) false else Geometry.isActive(place.activeHours, at) || homeAtNight
-                val result = PlaceBoundary.step(state, place, reading, active, cfg, entryReadings, exitReadings)
+                val result = PlaceBoundary.step(state, place, reading, active, placeCfg, entryReadings, exitReadings)
                 save(c, s.assetId, placeId, result.state)
                 if (place.kind == PlaceKind.COAST && night && result.state.status == BoundaryStatus.INSIDE) {
                     profile.tierOf(RuleId.COASTAL_NIGHT)?.let { tier ->
@@ -115,7 +135,7 @@ class RulesEngine(
                         }
                     }
                 }
-                if (place.kind == PlaceKind.HOME && result.state.status == BoundaryStatus.INSIDE) PersonState.clear(c, s.assetId, NIGHT_OUT)
+                if (place.kind == profile.nightHome && result.state.status == BoundaryStatus.INSIDE) PersonState.clear(c, s.assetId, NIGHT_OUT)
                 result.reason?.let {
                     if (homeAtNight && it.code == "left_place") {
                         found += nightExit(c, s, place, places, profile, nightTier!!, it, fixAt, at) ?: return@let
@@ -130,6 +150,9 @@ class RulesEngine(
                     profile.tierOf(rule)?.let { tier -> found += Finding(s.assetId, s.circleId, rule, tier, listOf(it), at) }
                 }
             }
+            // Livestock: the herd out of the barn at night, and a head carried at vehicle speed.
+            found += herdNightMove(c, s, profile, places, fixAt, at, night)
+            truckSpeed(c, s, profile, point, accuracy, fixAt, at)?.let { found += it }
             // Running away from home at speed (autism): measured from the nearest home, never from a guardian's phone.
             profile.tierOf(RuleId.RUN_AWAY_SPEED)?.let { tier ->
                 val homeM = places.filter { it.kind == PlaceKind.HOME }.minOfOrNull { Geometry.distanceOutsideM(c, it.shape, point) } ?: return@let
@@ -174,7 +197,83 @@ class RulesEngine(
                 }
             }
         }
-        return found
+        // Only store-and-forward profiles: a person's P0 reported over a slow network is still a P0.
+        return if (lateTolerant) found.map { late(it, s.signal.serverTimeMs - fixMs) } else found
+    }
+
+    /** `COLLAR_CUT` (design §12.2): the device reports it was removed or cut. */
+    private fun collarCut(s: IngestedSignal, at: Instant) {
+        if (dz.hirz.shared.signal.AlarmKind.REMOVAL !in s.signal.alarms) return
+        val tier = db.connection.use { c -> dz.hirz.server.assets.ProfileService.load(c, s.assetId) }?.tierOf(RuleId.COLLAR_CUT) ?: return
+        recorder.record(Finding(s.assetId, s.circleId, RuleId.COLLAR_CUT, tier, listOf(dz.hirz.shared.api.Reason("collar_cut")), at))
+    }
+
+    /**
+     * `HERD_NIGHT_MOVE`: at night, the herd's leader or at least [RuleConfig.herdNightShare] of its members with a fresh
+     * fix are confirmed outside the barn. Raised once per night on the leader (or the reporting head).
+     */
+    private fun herdNightMove(
+        c: Connection, s: IngestedSignal, profile: Profile, places: List<dz.hirz.shared.api.PlaceDto>, fixAt: Instant, at: Instant, night: Boolean,
+    ): List<Finding> {
+        val tier = profile.tierOf(RuleId.HERD_NIGHT_MOVE)?.takeIf { night } ?: return emptyList()
+        val barns = places.filter { it.kind == PlaceKind.BARN }.takeIf { it.isNotEmpty() } ?: return emptyList()
+        val herd = dz.hirz.server.herds.HerdService.herdOf(c, s.assetId) ?: return emptyList()
+        val h = dz.hirz.server.herds.HerdService.load(c, herd) ?: return emptyList()
+        val target = herdTarget(h)
+        // Already ringing for this herd: nothing new. Once the family closes it, the next move rings again.
+        if (openIncident(c, target, RuleId.HERD_NIGHT_MOVE)) return emptyList()
+        // Every head's barn state in one query: heads confirmed outside every barn.
+        val outsideAll = c.prepareStatement(
+            """SELECT asset_id FROM asset_rule_state WHERE asset_id = ANY(?) AND place_id = ANY(?) AND status = 'outside'
+               GROUP BY asset_id HAVING count(*) = ?""",
+        ).apply {
+            setArray(1, c.createArrayOf("uuid", h.members.toTypedArray())); setArray(2, c.createArrayOf("uuid", barns.map { it.id }.toTypedArray()))
+            setInt(3, barns.size)
+        }.executeQuery().use { rs -> buildSet { while (rs.next()) add(rs.getObject(1, UUID::class.java)) } }
+        fun outside(asset: UUID) = asset in outsideAll
+        // One query for the whole herd: which heads have a fresh fix.
+        val fresh = c.prepareStatement(
+            "SELECT DISTINCT asset_id FROM positions WHERE asset_id = ANY(?) AND quality = 'ok' AND fix_time >= ?",
+        ).apply {
+            setArray(1, c.createArrayOf("uuid", h.members.toTypedArray())); setTimestamp(2, java.sql.Timestamp.from(fixAt.minusMillis(cfg.herdFixMaxAgeMs)))
+        }.executeQuery().use { rs -> buildList { while (rs.next()) add(rs.getObject(1, UUID::class.java)) } }
+        val leader = h.leaderId?.let(UUID::fromString)
+        val out = fresh.count(::outside)
+        // Before Eid al-Adha half the usual share is enough: thieves take a few heads, not the whole herd.
+        val share = if (profile.eidSeason) cfg.herdNightShare / 2 else cfg.herdNightShare
+        val moving = (leader != null && leader in fresh && outside(leader)) || (fresh.isNotEmpty() && out.toDouble() / fresh.size >= share)
+        if (!moving) return emptyList()
+        return listOf(Finding(target, s.circleId, RuleId.HERD_NIGHT_MOVE, tier, listOf(dz.hirz.shared.api.Reason("herd_night_move", mapOf(
+            "herd" to h.name, "out" to out.toString(), "heads" to fresh.size.toString(),
+        ))), at))
+    }
+
+    /** `VEHICLE_SPEED_UNEXPLAINED`: a head carried at vehicle speed outside its herd's market hours; P0 with a night exit open. */
+    private fun truckSpeed(c: Connection, s: IngestedSignal, profile: Profile, point: LatLon, accuracy: Double, fixAt: Instant, at: Instant): Finding? {
+        val tier = profile.tierOf(RuleId.VEHICLE_SPEED_UNEXPLAINED) ?: return null
+        val market = dz.hirz.server.herds.HerdService.herdOf(c, s.assetId)?.let { dz.hirz.server.herds.HerdService.load(c, it) }
+            ?.marketWindow?.takeIf { it.isNotEmpty() }?.let { Geometry.isActive(it, fixAt) } ?: false
+        val st = PersonState.load(c, s.assetId, TRUCK, TruckState.serializer()) ?: TruckState()
+        val (next, fire) = HerdRules.truck(st, fixAt.toEpochMilli(), point, s.signal.speedKmh, accuracy, market, cfg)
+        PersonState.save(c, s.assetId, TRUCK, TruckState.serializer(), next)
+        if (!fire) return null
+        val nightOpen = openIncident(c, s.assetId, RuleId.NIGHT_EXIT) || openIncident(c, s.assetId, RuleId.HERD_NIGHT_MOVE) || herdAlarmOpen(c, s.assetId)
+        return Finding(s.assetId, s.circleId, RuleId.VEHICLE_SPEED_UNEXPLAINED, if (nightOpen) Tier.P0 else tier,
+            listOf(dz.hirz.shared.api.Reason("truck_speed", mapOf("speedKmh" to (s.signal.speedKmh ?: 0.0).toInt().toString()))), at)
+    }
+
+    /**
+     * A finding from a fix that arrived late says how late, and never rings as a P0: the moment it describes is past,
+     * and a P1 with the track is what the family can act on (P6).
+     */
+    private fun late(f: Finding, ageMs: Long): Finding {
+        if (ageMs <= cfg.boundaryMaxAgeMs) return f
+        val lateMin = (ageMs / 60_000).toString()
+        return f.copy(
+            // A collar that uploads every few minutes is live: only a report half an hour old loses its P0.
+            tier = if (f.tier == Tier.P0 && ageMs > cfg.lateDemoteMs) Tier.P1 else f.tier,
+            reasons = f.reasons.map { it.copy(args = it.args + ("lateMin" to lateMin)) },
+        )
     }
 
     /**
@@ -185,12 +284,28 @@ class RulesEngine(
         c: Connection, s: IngestedSignal, home: dz.hirz.shared.api.PlaceDto, places: List<dz.hirz.shared.api.PlaceDto>,
         profile: Profile, tier: Tier, left: dz.hirz.shared.api.Reason, fixAt: Instant, at: Instant,
     ): Finding? {
+        // A head leaving while its herd's night alarm is open is part of that alarm, not a new one.
+        if (herdAlarmOpen(c, s.assetId)) return null
         val exception = profile.nightExceptions.firstOrNull { e -> Geometry.isActive(listOf(e.window), fixAt) && places.any { it.id == e.placeId } }
             ?: return Finding(s.assetId, s.circleId, RuleId.NIGHT_EXIT, tier, listOf(dz.hirz.shared.api.Reason("night_exit", left.args)), at)
         val target = places.first { it.id == exception.placeId }
         val d = Geometry.distanceOutsideM(c, home.shape, centre(target.shape))
         PersonState.save(c, s.assetId, NIGHT_OUT, NightOut.serializer(), NightOut(home.id, target.id, d, exception.window, tier))
         return null
+    }
+
+    /** The head a herd's alarms are raised on: the leader, or the same head every time. */
+    private fun herdTarget(h: dz.hirz.shared.api.HerdDto): UUID = (h.leaderId ?: h.members.minOf { it }).let(UUID::fromString)
+
+    private fun openIncident(c: Connection, assetId: UUID, rule: RuleId): Boolean =
+        c.prepareStatement("SELECT EXISTS (SELECT 1 FROM incidents WHERE asset_id = ? AND state = 'open' AND rule = ?)")
+            .apply { setObject(1, assetId); setString(2, rule.name) }.executeQuery().use { it.next(); it.getBoolean(1) }
+
+    /** The herd's night alarm is open now: a head leaving is part of it, not a new incident. */
+    private fun herdAlarmOpen(c: Connection, assetId: UUID): Boolean {
+        val herd = dz.hirz.server.herds.HerdService.herdOf(c, assetId) ?: return false
+        val h = dz.hirz.server.herds.HerdService.load(c, herd)?.takeIf { it.members.isNotEmpty() } ?: return false
+        return openIncident(c, herdTarget(h), RuleId.HERD_NIGHT_MOVE)
     }
 
     /** The evening a night belongs to, as its local date: before noon it is still last night. */
@@ -229,6 +344,12 @@ class RulesEngine(
 private const val NIGHT_OUT = "NIGHT_OUT"
 private const val RUN_AWAY = "RUN_AWAY_SPEED"
 private const val PAST_ADDRESS = "PAST_ADDRESS_HEADING"
+private const val TRUCK = "TRUCK_SPEED"
+private const val KEYLESS = "KEYLESS"
+
+/** The ignition start a keyless alarm was raised for. */
+@kotlinx.serialization.Serializable
+private data class KeylessState(val startMs: Long)
 
 /** An excepted night outing in progress: from [homeId] toward [placeId] ([homeToTargetM] apart) during [window]. */
 @kotlinx.serialization.Serializable

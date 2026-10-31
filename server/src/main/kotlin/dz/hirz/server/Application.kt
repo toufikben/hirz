@@ -30,6 +30,11 @@ import kotlinx.coroutines.launch
 import dz.hirz.server.assets.AssetService
 import dz.hirz.server.assets.assetRoutes
 import dz.hirz.server.assets.profileRoutes
+import dz.hirz.server.herds.herdRoutes
+import dz.hirz.server.ble.bleMemberRoutes
+import dz.hirz.server.ble.bleGrantRoutes
+import dz.hirz.server.presence.outingRoutes
+import dz.hirz.server.ble.bleRelayRoutes
 import dz.hirz.server.assets.pairRoutes
 import dz.hirz.server.assets.sourcePushRoutes
 import dz.hirz.server.auth.FirebaseTokenVerifier
@@ -112,6 +117,7 @@ fun Application.module(deps: Deps) {
     // The rules judge a report against the mode as it was before it (an engine starting on an auto-armed car is theft);
     // only then does the tracker record the new ignition state.
     val ingest = IngestService(deps.db, deps.clock, deps.rules, listOf(engine, VehicleStateTracker(deps.db, vehicleModes), hub) + deps.extraIngestListeners)
+    val ble = dz.hirz.server.ble.BleService(deps.db, deps.clock, circles, ingest)
     val trackers = TrackerService(deps.db, deps.clock, circles, deps.traccar, deps.deviceHost, deps.claimProofS)
     if (deps.startJobs) dz.hirz.server.traccar.TraccarSync(deps.db, deps.clock, deps.traccar, ingest).start(this)
     if (deps.startJobs) {
@@ -119,6 +125,8 @@ fun Application.module(deps: Deps) {
         dz.hirz.server.rules.CheckInScanner(deps.db, deps.clock, recorder).start(this)
         dz.hirz.server.jobs.JammingScanner(deps.db, deps.clock, deps.rules, vehicleModes, recorder).start(this)
         dz.hirz.server.jobs.CurfewScanner(deps.db, deps.clock, deps.rules, recorder).start(this)
+        dz.hirz.server.jobs.HerdScanner(deps.db, deps.clock, deps.rules, recorder).start(this)
+        dz.hirz.server.jobs.LeashScanner(deps.db, deps.clock, deps.rules, recorder).start(this)
         dz.hirz.server.jobs.AgeTransitionJob(deps.db, deps.clock, deps.notifier).start(this)
         dz.hirz.server.sms.GatewaySilenceScanner(deps.db, deps.clock, deps.notifier).start(this)
         RetentionPurge(deps.db, deps.clock).start(this)
@@ -149,6 +157,10 @@ fun Application.module(deps: Deps) {
             circleRoutes(circles)
             assetRoutes(assets)
             profileRoutes(dz.hirz.server.assets.ProfileService(deps.db, circles))
+            herdRoutes(dz.hirz.server.herds.HerdService(deps.db, circles))
+            bleMemberRoutes(ble)
+            bleGrantRoutes(ble)
+            outingRoutes(dz.hirz.server.presence.Outings(deps.db, deps.clock, circles))
             placeRoutes(places)
             incidentRoutes(incidents)
             codeWordRoutes(codeWords)
@@ -167,6 +179,7 @@ fun Application.module(deps: Deps) {
             sourceSelfRoutes(deps)
             sourcePushRoutes(assets)
             ingestRoutes(ingest)
+            bleRelayRoutes(ble)
         }
     }
 }

@@ -45,6 +45,9 @@ interface CompanionPort {
     suspend fun consent(client: HirzClient): Boolean
     /** "I'm fine": a check-in reply sent now. */
     suspend fun imFine()
+    /** The shepherd relay (P6): whether this phone relays its circle's BLE collars; turning it on asks for Bluetooth scanning. */
+    fun relayEnabled(): Boolean
+    suspend fun setRelay(on: Boolean): Boolean
     /** Says [text] aloud in [lang] (ar or fr); silent when the phone has no voice for it. */
     fun speak(text: String, lang: String)
 }

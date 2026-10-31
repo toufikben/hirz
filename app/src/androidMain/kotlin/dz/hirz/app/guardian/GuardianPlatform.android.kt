@@ -46,6 +46,33 @@ actual suspend fun currentLocation(): Pair<LatLon, Double?>? {
     }.getOrNull()
 }
 
+@android.annotation.SuppressLint("MissingPermission")
+actual suspend fun nearbyTags(): List<String> {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+        ContextCompat.checkSelfPermission(app, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED
+    ) return emptyList()
+    val scanner = app.getSystemService(android.bluetooth.BluetoothManager::class.java)?.adapter?.bluetoothLeScanner ?: return emptyList()
+    val eddystone = android.os.ParcelUuid.fromString("0000FEAA-0000-1000-8000-00805F9B34FB")
+    val heard = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+    val callback = object : android.bluetooth.le.ScanCallback() {
+        override fun onScanResult(callbackType: Int, result: android.bluetooth.le.ScanResult) {
+            val r = result.scanRecord ?: return
+            (r.getServiceData(eddystone)?.let(dz.hirz.shared.ble.BleFrames::eddystone)
+                ?: r.getManufacturerSpecificData(0x004C)?.let(dz.hirz.shared.ble.BleFrames::iBeacon))?.let { heard += it }
+        }
+    }
+    val filters = listOf(
+        android.bluetooth.le.ScanFilter.Builder().setServiceUuid(eddystone).build(),
+        android.bluetooth.le.ScanFilter.Builder().setManufacturerData(0x004C, byteArrayOf(0x02, 0x15), byteArrayOf(-1, -1)).build(),
+    )
+    return runCatching {
+        scanner.startScan(filters, android.bluetooth.le.ScanSettings.Builder().setScanMode(android.bluetooth.le.ScanSettings.SCAN_MODE_LOW_LATENCY).build(), callback)
+        kotlinx.coroutines.delay(3_000)
+        scanner.stopScan(callback)
+        heard.toList()
+    }.getOrDefault(emptyList())
+}
+
 actual fun appInForeground(): Boolean {
     val info = ActivityManager.RunningAppProcessInfo()
     ActivityManager.getMyMemoryState(info)

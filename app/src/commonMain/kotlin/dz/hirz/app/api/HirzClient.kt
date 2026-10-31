@@ -190,6 +190,27 @@ class HirzClient(
         val r = http.post("$base/v1/sources/me/consent") { auth(sourceToken) }
         if (!r.status.isSuccess()) throw HirzApiException(r.status.value, "consent_failed")
     }
+    suspend fun relayTags(sourceToken: String): List<String> = http.get("$base/v1/relay/tags") { auth(sourceToken) }.ok()
+    suspend fun relaySightings(sourceToken: String, batch: dz.hirz.shared.api.RelayBatch): dz.hirz.shared.api.RelayResult =
+        http.post("$base/v1/relay/sightings") { auth(sourceToken); json(batch) }.ok()
+    suspend fun herds(circleId: String): List<dz.hirz.shared.api.HerdDto> = member { t -> http.get("$base/v1/circles/$circleId/herds") { auth(t) } }.ok()
+    suspend fun createHerd(circleId: String, name: String): dz.hirz.shared.api.HerdDto =
+        member { t -> http.post("$base/v1/circles/$circleId/herds") { auth(t); json(dz.hirz.shared.api.CreateHerdRequest(name)) } }.ok()
+    suspend fun addToHerd(herdId: String, assetId: String): dz.hirz.shared.api.HerdDto =
+        member { t -> http.post("$base/v1/herds/$herdId/members") { auth(t); json(dz.hirz.shared.api.HerdMemberRequest(assetId)) } }.ok()
+    suspend fun setLeader(herdId: String, assetId: String): dz.hirz.shared.api.HerdDto =
+        member { t -> http.put("$base/v1/herds/$herdId/leader") { auth(t); json(dz.hirz.shared.api.LeaderRequest(assetId)) } }.ok()
+    suspend fun setMarket(herdId: String, window: List<ActiveWindow>): dz.hirz.shared.api.HerdDto =
+        member { t -> http.put("$base/v1/herds/$herdId/market") { auth(t); json(dz.hirz.shared.api.MarketRequest(window)) } }.ok()
+    suspend fun setEid(herdId: String, date: String?): dz.hirz.shared.api.HerdDto =
+        member { t -> http.put("$base/v1/herds/$herdId/eid") { auth(t); json(dz.hirz.shared.api.EidRequest(date)) } }.ok()
+    suspend fun grantRelay(assetId: String, sourceId: String, enabled: Boolean) =
+        member { t -> http.put("$base/v1/assets/$assetId/sources/$sourceId/relay") { auth(t); json(dz.hirz.shared.api.RelayGrant(enabled)) } }.done()
+    suspend fun startOuting(assetId: String, hours: Int): dz.hirz.shared.api.OutingDto =
+        member { t -> http.post("$base/v1/assets/$assetId/outings") { auth(t); json(dz.hirz.shared.api.OutingRequest(hours)) } }.ok()
+    suspend fun pingOuting(outingId: String, ping: dz.hirz.shared.api.OutingPing) =
+        member { t -> http.post("$base/v1/outings/$outingId/ping") { auth(t); json(ping) } }.done()
+    suspend fun endOuting(outingId: String) = member { t -> http.delete("$base/v1/outings/$outingId") { auth(t) } }.done()
     suspend fun vehicle(assetId: String): VehicleStateDto = member { t -> http.get("$base/v1/assets/$assetId/vehicle") { auth(t) } }.ok()
     suspend fun setMode(assetId: String, mode: VehicleMode): VehicleStateDto =
         member { t -> http.post("$base/v1/assets/$assetId/mode") { auth(t); json(ModeRequest(mode)) } }.ok()

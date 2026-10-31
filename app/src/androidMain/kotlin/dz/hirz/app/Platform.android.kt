@@ -176,6 +176,24 @@ class AndroidCompanionPort(private val activity: ComponentActivity) : CompanionP
     override suspend fun consent(client: HirzClient): Boolean =
         vault.credentials()?.let { runCatching { client.sourceConsent(it.sourceToken) }.isSuccess } ?: false
 
+    private var pendingBt: CompletableDeferred<Boolean>? = null
+    private val btLauncher = activity.registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) {
+        pendingBt?.complete(it)
+    }
+
+    override fun relayEnabled(): Boolean = dz.hirz.app.companion.BleRelay.enabled(activity)
+
+    override suspend fun setRelay(on: Boolean): Boolean {
+        if (on && !dz.hirz.app.companion.BleRelay.permitted(activity) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val d = CompletableDeferred<Boolean>(); pendingBt = d
+            btLauncher.launch(android.Manifest.permission.BLUETOOTH_SCAN)
+            if (!d.await()) return false
+        }
+        dz.hirz.app.companion.BleRelay.setEnabled(activity, on)
+        if (!on) dz.hirz.app.companion.BleRelay.stop(activity)
+        return true
+    }
+
     override suspend fun imFine() {
         CompanionEngine.sendNow(activity.applicationContext, CompanionSignals.checkIn(dz.hirz.shared.api.CheckInReply.OK))
     }

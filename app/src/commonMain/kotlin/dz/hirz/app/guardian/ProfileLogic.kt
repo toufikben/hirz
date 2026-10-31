@@ -48,5 +48,12 @@ object ProfileLogic {
         RuleId.PAST_ADDRESS_HEADING -> t(lang, "التوجه نحو عنوان قديم", "Vers une ancienne adresse", "Heading to a past address")
         RuleId.CURFEW -> t(lang, "خارج البيت بعد الموعد", "Dehors après l'heure", "Out after curfew")
         RuleId.COASTAL_NIGHT -> t(lang, "الشاطئ ليلًا", "Le rivage la nuit", "The shore at night")
+        RuleId.HERD_NIGHT_MOVE -> t(lang, "تحرك القطيع ليلًا", "Troupeau en mouvement la nuit", "Herd moving at night")
+        RuleId.HERD_DISPERSION -> t(lang, "تشتت القطيع", "Troupeau dispersé", "Herd scattered")
+        RuleId.COLLAR_CUT -> t(lang, "نزع الطوق", "Collier retiré", "Collar removed")
+        RuleId.ANIMAL_STILL -> t(lang, "رأس ساكن طويلًا", "Animal immobile longtemps", "Animal still for hours")
+        RuleId.VEHICLE_SPEED_UNEXPLAINED -> t(lang, "سرعة مركبة بلا تفسير", "Vitesse de véhicule inexpliquée", "Unexplained vehicle speed")
+        RuleId.LEASH_BREAK -> t(lang, "الانفصال عن المرافق", "Séparé de l'accompagnant", "Separated from the guardian")
+        RuleId.KEYLESS_NO_OWNER -> t(lang, "تشغيل بلا هاتف المالك", "Démarrage sans le téléphone du propriétaire", "Started with no owner phone near")
     }
 }

@@ -17,6 +17,14 @@ data class Profile(
     /** Good readings inside a hazard place before it counts as entered. */
     val hazardEntryReadings: Int,
     val nightExceptions: List<dz.hirz.shared.api.NightException> = emptyList(),
+    /** Store-and-forward devices: fixes are judged at their own time even when they arrive hours late (P6). */
+    val lateTolerant: Boolean = false,
+    /** The place a night exit watches: home for people, the barn for livestock. */
+    val nightHome: dz.hirz.shared.api.PlaceKind = dz.hirz.shared.api.PlaceKind.HOME,
+    /** In the two weeks before Eid al-Adha (livestock only): tiers raised, a smaller share of the herd is a night move. */
+    val eidSeason: Boolean = false,
+    /** Silence threshold for this profile; null keeps the global one. */
+    val silenceAfterMs: Long? = null,
     /** Overrides naming a rule this profile does not have; validate() refuses them. */
     val unknownOverrides: Set<RuleId> = emptySet(),
 ) {
@@ -31,6 +39,9 @@ data class Profile(
 object Profiles {
     private val PEOPLE = setOf(AssetType.CHILD, AssetType.TEEN, AssetType.ELDER, AssetType.SPECIAL_NEEDS, AssetType.LONE_WORKER)
 
+    /** Herds leave for the pasture at dawn: their night ends at 04:30. */
+    val LIVESTOCK_NIGHT = listOf(ActiveWindow((1..7).toSet(), 22 * 60, 1440), ActiveWindow((1..7).toSet(), 0, 4 * 60 + 30))
+
     /** 22:00–06:00 every day, Africa/Algiers. */
     val DEFAULT_NIGHT = listOf(ActiveWindow((1..7).toSet(), 22 * 60, 1440), ActiveWindow((1..7).toSet(), 0, 6 * 60))
 
@@ -39,14 +50,27 @@ object Profiles {
         put(RuleId.FORBIDDEN_ENTRY, Tier.P1)
         // A pet or a herd at the water or the railway matters too (it was FORBIDDEN_ENTRY before P5).
         put(RuleId.HAZARD_PROXIMITY, Tier.P1)
+        if (type == AssetType.LIVESTOCK) {
+            // Leaving the pasture by day is grazing more often than theft; the barn at night is the other way round.
+            put(RuleId.PLACE_EXIT, Tier.P2)
+            put(RuleId.NIGHT_EXIT, Tier.P1)
+            put(RuleId.HERD_NIGHT_MOVE, Tier.P1)
+            put(RuleId.HERD_DISPERSION, Tier.P2)
+            put(RuleId.VEHICLE_SPEED_UNEXPLAINED, Tier.P1)
+            put(RuleId.COLLAR_CUT, Tier.P1)
+            put(RuleId.ANIMAL_STILL, Tier.P2)
+            return@buildMap
+        }
         if (type !in PEOPLE) return@buildMap
         // Only where the owner drew a shore place; for any person, not only teens.
         put(RuleId.COASTAL_NIGHT, Tier.P1)
+        // Only during an outing the guardian started.
+        put(RuleId.LEASH_BREAK, Tier.P1)
         if (type == AssetType.TEEN) put(RuleId.CURFEW, Tier.P2)
         if (type == AssetType.ELDER) put(RuleId.NIGHT_EXIT, Tier.P1)
         when (condition) {
             Condition.DEMENTIA -> { put(RuleId.PAST_ADDRESS_HEADING, Tier.P1); put(RuleId.NIGHT_EXIT, Tier.P1) }
-            Condition.AUTISM -> { put(RuleId.HAZARD_PROXIMITY, Tier.P0); put(RuleId.RUN_AWAY_SPEED, Tier.P0) }
+            Condition.AUTISM -> { put(RuleId.HAZARD_PROXIMITY, Tier.P0); put(RuleId.RUN_AWAY_SPEED, Tier.P0); put(RuleId.LEASH_BREAK, Tier.P0) }
             Condition.NONE -> {}
         }
     }
@@ -60,8 +84,12 @@ object Profiles {
             val o = byRule[rule]
             RuleSetting(enabled = o?.enabled ?: true, tier = o?.tier ?: def, defaultTier = def)
         }
-        return Profile(condition, rules, nightWindow?.takeIf { it.isNotEmpty() } ?: DEFAULT_NIGHT,
+        val night = nightWindow?.takeIf { it.isNotEmpty() } ?: if (type == AssetType.LIVESTOCK) LIVESTOCK_NIGHT else DEFAULT_NIGHT
+        return Profile(condition, rules, night,
             hazardEntryReadings = if (condition == Condition.AUTISM) 1 else 2, nightExceptions = nightExceptions,
+            lateTolerant = type == AssetType.LIVESTOCK,
+            nightHome = if (type == AssetType.LIVESTOCK) dz.hirz.shared.api.PlaceKind.BARN else dz.hirz.shared.api.PlaceKind.HOME,
+            silenceAfterMs = if (type == AssetType.LIVESTOCK) 6 * 3_600_000L else null,
             unknownOverrides = byRule.keys.filter { it !in rules }.toSet())
     }
 
@@ -80,5 +108,16 @@ object Profiles {
             if (wasTier != null && (nowTier == null || nowTier.ordinal > wasTier.ordinal)) return "owner_only"
         }
         return null
+    }
+
+    /**
+     * The calendar's effect (design §12): livestock in the two weeks before Eid al-Adha has every P2 rule raised to P1.
+     * The calendar never creates a P0, and people are never affected.
+     */
+    fun seasonal(p: Profile, type: AssetType, at: java.time.Instant, eidOverride: java.time.LocalDate?): Profile {
+        if (type != AssetType.LIVESTOCK) return p
+        val day = at.atZone(java.time.ZoneId.of("Africa/Algiers")).toLocalDate()
+        if (!dz.hirz.server.calendar.AlgerianCalendar.inEidSeason(day, eidOverride)) return p
+        return p.copy(eidSeason = true, rules = p.rules.mapValues { (_, s) -> if (s.tier == Tier.P2) s.copy(tier = Tier.P1) else s })
     }
 }

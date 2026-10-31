@@ -33,7 +33,15 @@ private val EDITORS = setOf(Role.OWNER, Role.GUARDIAN)
 private val windows = ListSerializer(ActiveWindow.serializer())
 
 /** The resolver's answer plus where the vehicle was when it was armed. */
-data class ModeState(val mode: VehicleMode, val reason: String, val since: Instant?, val armedPosition: LatLon?, val ignition: Boolean?)
+/** [ownerNearby]: a family phone heard the car's tag in the last ownerAwayMs; null when the car has no tag. */
+data class ModeState(
+    val mode: VehicleMode, val reason: String, val since: Instant?, val armedPosition: LatLon?, val ignition: Boolean?,
+    val ownerNearby: Boolean? = null,
+    /** A family phone relayed the car's tag in the last day: presence is being watched at all. */
+    val relayActive: Boolean = false,
+    /** Since when the ignition has been in its current state. */
+    val ignitionSince: Instant? = null,
+)
 
 /**
  * Vehicle modes (design §12.1). The effective mode is resolved on demand ([ModeResolver]); every change is recorded
@@ -74,15 +82,24 @@ class VehicleModes(private val db: DataSource, private val clock: Clock, private
                 else Saved(null, null, null, null, null, null, null)
             }
         val o = override?.let { ModeOverride(VehicleMode.valueOf(it.uppercase()), overrideAt ?: at) }
-        val latched = if (saved.mode == "armed" && saved.reason in setOf("auto_arm", "schedule") && saved.since != null) Latched(saved.reason!!, saved.since) else null
-        val r = ModeResolver.resolve(ModeInput(o, auths, schedule, saved.ignition, saved.ignitionSince, latched), at, cfg)
+        val latched = if (saved.mode == "armed" && saved.reason in setOf("auto_arm", "schedule", "owner_away") && saved.since != null) Latched(saved.reason!!, saved.since) else null
+        // Presence (P6): the car's tag heard by a phone of the car's own circle.
+        val tagged = c.prepareStatement("SELECT EXISTS (SELECT 1 FROM ble_tags WHERE asset_id = ?)").apply { setObject(1, assetId) }
+            .executeQuery().use { it.next(); it.getBoolean(1) }
+        val ownerSeenAt = if (!tagged) null else c.prepareStatement(
+            """SELECT max(s.seen_at) FROM ble_sightings s JOIN ble_tags t ON t.tag_id = s.tag_id
+               JOIN sources r ON r.id = s.relay_source_id JOIN assets ra ON ra.id = r.asset_id
+               JOIN assets car ON car.id = t.asset_id
+               WHERE t.asset_id = ? AND ra.circle_id = car.circle_id AND r.relay_enabled AND s.seen_at <= ?""",
+        ).apply { setObject(1, assetId); setTimestamp(2, at.ts()) }.executeQuery().use { it.next(); it.getTimestamp(1)?.toInstant() }
+        val r = ModeResolver.resolve(ModeInput(o, auths, schedule, saved.ignition, saved.ignitionSince, latched, ownerSeenAt), at, cfg)
         val wire = r.mode.name.lowercase()
         var armed = if (saved.lat != null && saved.lon != null) LatLon(saved.lat, saved.lon) else null
         if (saved.mode != wire) {
             // Arming is resolved lazily, on the next report or read. Auto-arm and the schedule take the position from
             // when they should have armed, never the report now being judged (which may already be the thief's).
             val upTo = when (r.reason) {
-                "auto_arm" -> r.since
+                "auto_arm", "owner_away" -> r.since
                 "schedule" -> saved.ignitionSince?.takeIf { saved.ignition == false } ?: at
                 else -> null
             }
@@ -105,7 +122,9 @@ class VehicleModes(private val db: DataSource, private val clock: Clock, private
                     .apply { setDouble(1, p.lat); setDouble(2, p.lon); setObject(3, assetId) }.executeUpdate()
             }
         }
-        return ModeState(r.mode, r.reason, r.since, armed, saved.ignition)
+        val nearby = if (!tagged) null else ownerSeenAt != null && !ownerSeenAt.isBefore(at.minusMillis(cfg.ownerAwayMs))
+        val relayActive = ownerSeenAt != null && !ownerSeenAt.isBefore(at.minusSeconds(24 * 3600))
+        return ModeState(r.mode, r.reason, r.since, armed, saved.ignition, nearby, relayActive, saved.ignitionSince)
     }
 
     private fun lastFix(c: Connection, assetId: UUID, upTo: Instant? = null): LatLon? =

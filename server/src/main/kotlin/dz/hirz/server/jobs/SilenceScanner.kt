@@ -49,7 +49,7 @@ class SilenceScanner(
             c.createStatement().executeQuery(
                 """SELECT s.id, s.asset_id, a.circle_id, s.last_heartbeat_at, s.last_fix_at, s.created_at
                    FROM sources s JOIN assets a ON a.id = s.asset_id
-                   WHERE s.revoked_at IS NULL AND s.paused_reason IS NULL AND a.lifecycle NOT IN ('paused', 'archived')""",
+                   WHERE s.revoked_at IS NULL AND s.paused_reason IS NULL AND s.kind <> 'ble' AND a.lifecycle NOT IN ('paused', 'archived')""",
             ).use { rs ->
                 buildList {
                     while (rs.next()) add(Row(rs.getObject(1, UUID::class.java), rs.getObject(2, UUID::class.java),
@@ -61,9 +61,11 @@ class SilenceScanner(
         for (r in rows) {
             val sinceHeartbeat = nowMs - (r.heartbeatMs ?: r.createdMs)
             val sinceFix = nowMs - (r.fixMs ?: r.createdMs)
+            // A profile may wait longer: livestock in pastures without coverage is quiet for hours (P6).
+            val wait = db.connection.use { c -> dz.hirz.server.assets.ProfileService.load(c, r.asset) }?.silenceAfterMs
             val kind = when {
-                sinceHeartbeat > cfg.silentDeadMs -> "dead"
-                sinceFix > cfg.silentAliveNoFixMs -> "alive"
+                sinceHeartbeat > (wait ?: cfg.silentDeadMs) -> "dead"
+                sinceFix > (wait ?: cfg.silentAliveNoFixMs) -> "alive"
                 else -> null
             }
             // The episode lives in the database, so a restart never raises the same silence twice (P1 minor #17).

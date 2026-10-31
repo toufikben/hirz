@@ -130,4 +130,17 @@ class RunAwayTest {
             assertEquals(Tier.P0, client.open(c).single { it.rule == RuleId.RUN_AWAY_SPEED }.tier, "10 km/h every 5 s, speed derived from the fixes")
         }
     }
+
+    @Test
+    fun aRunReportedThreeMinutesLateStaysP0() {
+        val env = TestEnv()
+        withApp(env) { client, _ ->
+            val c = client.child(Condition.AUTISM)
+            val late = env.clock.millis() - 180_000
+            listOf(0.0, 0.0, 40.0, 75.0).forEachIndexed { i, m ->
+                client.postJson("/v1/ingest", c.token, IngestBatch(listOf(IngestSignal("late$i", late + i * 10_000L, north(m), 8.0, speedKmh = 12.0))))
+            }
+            assertEquals(Tier.P0, client.open(c).single { it.rule == RuleId.RUN_AWAY_SPEED }.tier, "a weak network does not make a bolting child less urgent")
+        }
+    }
 }

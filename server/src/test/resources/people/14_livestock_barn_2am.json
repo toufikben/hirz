@@ -1,0 +1,43 @@
+{
+  "name": "livestock_barn_2am",
+  "start": "2026-11-02T01:00:00Z",
+  "type": "livestock",
+  "places": [
+    {
+      "name": "Zriba",
+      "kind": "barn",
+      "radius": 40
+    },
+    {
+      "name": "Mra",
+      "kind": "pasture",
+      "north": 3000,
+      "radius": 1000
+    }
+  ],
+  "steps": [
+    {
+      "t": 0,
+      "action": "fix",
+      "north": 0
+    },
+    {
+      "t": 10,
+      "action": "fix",
+      "north": 0
+    },
+    {
+      "t": 20,
+      "action": "fix",
+      "north": 200
+    },
+    {
+      "t": 30,
+      "action": "fix",
+      "north": 260
+    }
+  ],
+  "expect": [
+    "NIGHT_EXIT"
+  ]
+}

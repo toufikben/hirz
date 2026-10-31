@@ -6,6 +6,9 @@ import dz.hirz.shared.api.SheetDto
 /** This phone's position and accuracy, or null without permission or fix. Never asked in the background. */
 expect suspend fun currentLocation(): Pair<LatLon, Double?>?
 
+/** BLE tag ids this phone hears in a short scan (open beacons only); empty without Bluetooth scanning permission. */
+expect suspend fun nearbyTags(): List<String>
+
 /** True while the app is on screen; the incident location reporter runs only then. */
 expect fun appInForeground(): Boolean
 
